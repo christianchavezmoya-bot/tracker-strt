@@ -304,6 +304,82 @@ class AlertService:
             )]
         return []
 
+    # ── Alert broadcasting ──────────────────────────────────────────────────────
+
+    def set_sse_broadcaster(self, broadcast_fn):
+        """
+        Register a callback to broadcast SSE events.
+        Called by the ingestion loop during service wiring.
+        broadcast_fn(alert: Alert) — sends the alert to all SSE clients.
+        """
+        self._sse_broadcast = broadcast_fn
+
+    def _broadcast_alert(self, alert_record):
+        """Push alert to all SSE clients via registered broadcaster."""
+        broadcaster = getattr(self, '_sse_broadcast', None)
+        if callable(broadcaster):
+            try:
+                broadcaster(alert_record)
+            except Exception as e:
+                logger.error(f"SSE broadcast error: {e}")
+
+    def _fire_alert(self, event: AlertEvent):
+        """
+        Persist alert to DB and broadcast to SSE clients.
+        Called when an alert condition is first met (debounced).
+        """
+        if self._app is None:
+            logger.warning("AlertService: no Flask app context, skipping DB write")
+            return
+
+        with self._app.app_context():
+            from backend.models.alert import Alert
+            try:
+                record = Alert(
+                    tracker_id=event.tracker_id,
+                    alert_type=event.alert_type,
+                    state=1,   # ACTIVE
+                    message=event.message,
+                    pos_x=event.pos_x,
+                    pos_y=event.pos_y,
+                    pos_z=event.pos_z,
+                    section_name=event.section_name,
+                )
+                self._db.add(record)
+                self._db.commit()
+                logger.info(f"Alert fired: {event.message} tracker={event.tracker_id}")
+
+                # Broadcast via SSE
+                self._broadcast_alert(record)
+
+                # Queue notification delivery
+                self._deliver_notifications(record)
+
+            except Exception as e:
+                logger.error(f"Failed to fire alert: {e}")
+                self._db.rollback()
+
+    def _deliver_notifications(self, alert_record):
+        """Create in-app notifications for the alert."""
+        try:
+            from backend.models import User
+            users = self._db.query(User).filter(
+                User.role.in_([1, 2])  # ADMIN, OPERATOR
+            ).all()
+            for user in users:
+                from backend.models.alert import Notification, NotificationType
+                notif = Notification(
+                    user_id=user.id,
+                    type=NotificationType.ALERT,
+                    title=f"⚠️ {alert_record.to_dict()['alert_type']}",
+                    message=alert_record.message,
+                    link_url=f"/alerts?id={alert_record.id}",
+                )
+                self._db.add(notif)
+            self._db.commit()
+        except Exception as e:
+            logger.error(f"Failed to deliver notifications: {e}")
+
     # ── Periodic check thread ──────────────────────────────────────────────────
 
     def _periodic_check(self):
@@ -323,11 +399,11 @@ class AlertService:
         cutoff = now - timedelta(seconds=self._no_signal_timeout)
 
         with self._app.app_context():
-            from backend.models import Tracker, TrackerState
+            from backend.models import Tracker, AssetState
             try:
                 # Find trackers that haven't reported
                 trackers = self._db.query(Tracker).filter(
-                    Tracker.state == TrackerState.ACTIVE
+                    Tracker.asset_state == AssetState.ACTIVE
                 ).all()
 
                 for tracker in trackers:

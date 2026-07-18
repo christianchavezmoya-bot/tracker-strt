@@ -225,6 +225,7 @@ class MapSection(db.Model):
             "is_visible": self.is_visible,
             "color_hex": self.color_hex,
             "z_index": self.z_index,
+            "image_url": getattr(self, 'image_url', None) or None,
         }
 
 

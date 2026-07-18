@@ -231,6 +231,20 @@ class IngestionLoop(threading.Thread):
             for q in dead:
                 self._sse_queues.discard(q)
 
+    def _broadcast_sse_alert(self, alert_record):
+        """Push alert event to all SSE clients. Called by AlertService."""
+        alert_dict = alert_record.to_dict()
+        message = f"data: {json.dumps({'type': 'alert', 'alert': alert_dict})}\n\n"
+        with self._sse_lock:
+            dead = set()
+            for q in self._sse_queues:
+                try:
+                    q.put_nowait(message)
+                except Exception:
+                    dead.add(q)
+            for q in dead:
+                self._sse_queues.discard(q)
+
     def stop(self):
         self._stop.set()
         self.join(timeout=5)
@@ -266,5 +280,10 @@ def start_ingestion(app: Flask,
         mqtt_client=mqtt_client,
         alert_service=alert_service,
     )
+
+    # Wire alert service → SSE broadcaster
+    if alert_service and hasattr(_ingestion_loop, '_broadcast_sse_alert'):
+        alert_service.set_sse_broadcaster(_ingestion_loop._broadcast_sse_alert)
+
     _ingestion_loop.start()
     return _ingestion_loop
