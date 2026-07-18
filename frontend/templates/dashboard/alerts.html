@@ -7,39 +7,427 @@
   <link rel="stylesheet" href="/static/css/auth.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body { display: block; overflow: auto; padding: 20px; }
+    .alerts-page { max-width: 1100px; margin: 0 auto; }
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-family: var(--font-mono); font-size: 22px; color: var(--cyan); letter-spacing: 0.05em; }
+    .page-header p { color: var(--text-muted); font-size: 13px; margin-top: 6px; }
+
+    /* ── Summary cards ───────────────────────────────────────────────────── */
+    .summary-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px; }
+    .summary-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; cursor: pointer; transition: all 0.2s; }
+    .summary-card:hover { border-color: var(--border-bright); transform: translateY(-1px); }
+    .summary-card.active { border-color: var(--red); background: var(--red-dim); }
+    .summary-card .num { font-size: 28px; font-weight: 700; font-family: var(--font-mono); color: var(--text-primary); }
+    .summary-card.active .num { color: var(--red); }
+    .summary-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Filters ────────────────────────────────────────────────────────── */
+    .filters { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+    .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: none; color: var(--text-muted); font-size: 12px; cursor: pointer; transition: all 0.2s; font-family: var(--font-mono); }
+    .filter-btn:hover { color: var(--text-primary); border-color: var(--border-bright); }
+    .filter-btn.active { background: var(--cyan-dim); border-color: var(--cyan); color: var(--cyan); }
+    .filter-btn.red.active { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+    .filter-btn.green.active { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+    .select-filter { padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); font-size: 12px; outline: none; }
+    .bulk-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    /* ── Alert list ─────────────────────────────────────────────────────── */
+    .alert-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; transition: all 0.2s; }
+    .alert-row:hover { border-color: var(--border-bright); }
+    .alert-row.unacknowledged { border-left: 3px solid var(--red); }
+    .alert-row.acknowledged { border-left: 3px solid var(--yellow); }
+    .alert-row.resolved { border-left: 3px solid var(--green); opacity: 0.7; }
+    .alert-row.escalated { border-left: 3px solid #ff6b35; }
+
+    .alert-header { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+    .alert-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .alert-icon.no_signal { background: var(--red-dim); color: var(--red); }
+    .alert-icon.restricted_zone { background: var(--red-dim); color: var(--red); }
+    .alert-icon.low_battery { background: var(--yellow-dim); color: var(--yellow); }
+    .alert-icon.env_hazard { background: #ff6b35; color: white; }
+    .alert-icon.node_offline { background: var(--magenta-dim); color: var(--magenta); }
+    .alert-icon.manual { background: var(--cyan-dim); color: var(--cyan); }
+
+    .alert-body { flex: 1; }
+    .alert-type { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--red); }
+    .alert-message { font-size: 13px; color: var(--text-primary); margin-top: 2px; }
+    .alert-meta { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+    .alert-state-badge { padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+    .alert-state-badge.active { background: var(--red-dim); color: var(--red); }
+    .alert-state-badge.acknowledged { background: var(--yellow-dim); color: var(--yellow); }
+    .alert-state-badge.resolved { background: var(--green-dim); color: var(--green); }
+    .alert-state-badge.escalated { background: rgba(255,107,53,0.2); color: #ff6b35; }
+
+    .alert-actions { display: flex; gap: 6px; }
+
+    .alert-position { font-size: 11px; font-family: var(--font-mono); color: var(--cyan); margin-top: 4px; }
+
+    /* ── Real-time flash ─────────────────────────────────────────────────── */
+    @keyframes alertFlash {
+      0%, 100% { background: var(--bg-card); }
+      50% { background: var(--red-dim); }
+    }
+    .alert-row.flash-new { animation: alertFlash 0.6s ease-in-out 3; }
+
+    /* ── Empty state ───────────────────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .empty-state i { font-size: 48px; color: var(--green); margin-bottom: 16px; }
+    .empty-state h3 { font-size: 18px; color: var(--text-secondary); margin-bottom: 8px; }
+
+    /* ── Notification bell badge ─────────────────────────────────────────── */
+    .notif-badge { position: fixed; top: 14px; right: 140px; z-index: 100; }
+  </style>
 </head>
-<body class="auth-page">
-  <div class="auth-bg">
-    <div class="auth-grid-overlay"></div>
-    <div class="auth-glow auth-glow-1"></div>
+<body>
+
+<!-- Notification bell (floating) -->
+<div class="notif-badge" id="notifBell" title="Notifications">
+  <div style="position:relative;cursor:pointer" onclick="toggleNotifPanel()">
+    <i class="fa-solid fa-bell" style="font-size:20px;color:var(--text-muted);transition:color 0.2s" id="bellIcon"></i>
+    <span id="notifBadge" style="
+      display:none; position:absolute; top:-6px; right:-6px;
+      background:var(--red); color:white; font-size:10px; font-weight:700;
+      width:18px; height:18px; border-radius:50%; text-align:center; line-height:18px;
+    ">0</span>
   </div>
-  <div class="auth-container" style="max-width:700px">
-    <div class="auth-brand" style="margin-bottom:16px">
-      <div class="auth-logo">◈</div>
-      <h1 class="auth-title" style="font-size:18px">Alerts</h1>
-      <p class="auth-subtitle">Implementation in progress — Phase 2+</p>
+  <!-- Dropdown -->
+  <div id="notifDropdown" style="
+    display:none; position:absolute; top:36px; right:0; width:340px;
+    background:var(--bg-card); border:1px solid var(--border-bright);
+    border-radius:var(--radius); box-shadow:0 8px 32px rgba(0,0,0,0.4);
+    z-index:200; max-height:400px; overflow-y:auto;
+  ">
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">NOTIFICATIONS</span>
+      <button onclick="markAllRead()" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:11px">Mark all read</button>
     </div>
-    <div class="auth-card" style="text-align:center">
-      <div style="font-size:48px;color:var(--cyan);margin:20px 0">
-        <i class="fa-solid fa-hard-hat"></i>
+    <div id="notifList"></div>
+  </div>
+</div>
+
+<div class="alerts-page">
+  <!-- Header -->
+  <div class="page-header">
+    <h1><i class="fa-solid fa-triangle-exclamation"></i> Alert Center</h1>
+    <p>Live alert monitoring. Alerts fire automatically when zones are breached, tags go offline, or sensors detect hazards.</p>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="summary-grid" id="summaryGrid"></div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+    <button class="filter-btn red active" data-filter="ACTIVE" onclick="setFilter('ACTIVE')">Active</button>
+    <button class="filter-btn" data-filter="ACKNOWLEDGED" onclick="setFilter('ACKNOWLEDGED')">Acknowledged</button>
+    <button class="filter-btn green" data-filter="RESOLVED" onclick="setFilter('RESOLVED')">Resolved</button>
+    <select class="select-filter" id="typeFilter" onchange="loadAlerts()">
+      <option value="">All Types</option>
+      <option value="NO_SIGNAL">No Signal</option>
+      <option value="LOW_BATTERY">Low Battery</option>
+      <option value="RESTRICTED_ZONE">Restricted Zone</option>
+      <option value="ENV_HAZARD">Env. Hazard</option>
+      <option value="NODE_OFFLINE">Node Offline</option>
+      <option value="MANUAL">Manual</option>
+    </select>
+    <div class="bulk-actions">
+      <button class="btn btn-secondary" onclick="acknowledgeAll()" style="font-size:12px;padding:6px 14px">
+        <i class="fa-solid fa-check-double"></i> Ack All
+      </button>
+      <button class="btn btn-secondary" onclick="loadAlerts()" style="font-size:12px;padding:6px 14px">
+        <i class="fa-solid fa-rotate"></i> Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Alert list -->
+  <div id="alertList">
+    <div style="text-align:center;padding:40px;color:var(--text-muted)">
+      <i class="fa-solid fa-circle-notch fa-spin" style="font-size:20px;color:var(--cyan);margin-bottom:10px;display:block"></i>
+      Loading...
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let currentFilter = "ACTIVE";
+let currentType = "";
+let knownAlertIds = new Set();
+let unreadCount = 0;
+let es = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await Promise.all([loadAlerts(), loadNotifications(), loadSummary()]);
+  startSSE();
+});
+
+// ── SSE ────────────────────────────────────────────────────────────────────────
+function startSSE() {
+  const token = localStorage.getItem('access_token');
+  es = new EventSource(`/api/stream/positions?token=${token}`);
+
+  es.addEventListener('alert', e => {
+    const data = JSON.parse(e.data);
+    if (!knownAlertIds.has(data.alert.id)) {
+      knownAlertIds.add(data.alert.id);
+      showNewAlertToast(data.alert);
+      loadAlerts();
+      loadSummary();
+    }
+  });
+
+  es.addEventListener('alert_acknowledged', e => {
+    loadAlerts();
+    loadSummary();
+  });
+
+  es.addEventListener('alert_resolved', e => {
+    loadAlerts();
+    loadSummary();
+  });
+
+  es.addEventListener('position_update', () => {});
+  es.addEventListener('snapshot', () => {});
+  es.addEventListener('heartbeat', () => {});
+}
+
+function showNewAlertToast(alert) {
+  const toast = document.createElement('div');
+  toast.style = `
+    position: fixed; bottom: 20px; right: 20px; z-index: 999;
+    background: var(--red-dim); border: 1px solid var(--red);
+    border-radius: var(--radius); padding: 12px 16px; max-width: 320px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    animation: slideIn 0.3s ease;
+  `;
+  toast.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">
+      ⚠️ ${alert.alert_type}
+    </div>
+    <div style="font-size:13px;color:var(--text-primary)">${alert.message}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+      ${formatTime(alert.triggered_at)}
+    </div>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 8000);
+}
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+async function loadSummary() {
+  const res = await API.get('/alerts/stats');
+  const data = await API.json(res);
+  if (!res || !res.ok) return;
+  renderSummary(data);
+}
+
+function renderSummary(data) {
+  const grid = document.getElementById('summaryGrid');
+  const cards = [
+    { label: 'Total', num: data.total || 0, cls: '' },
+    { label: 'Active', num: data.active || 0, cls: 'active', color: 'var(--red)' },
+    { label: 'Today', num: data.today || 0, cls: '', color: 'var(--cyan)' },
+    { label: 'Fired', num: data.alert_service_stats?.fired || 0, cls: '', color: 'var(--yellow)' },
+    { label: 'Suppressed', num: data.alert_service_stats?.suppressed || 0, cls: '', color: 'var(--text-muted)' },
+    { label: 'Avg Res (s)', num: data.avg_resolution_seconds ? Math.round(data.avg_resolution_seconds) : 0, cls: '', color: 'var(--green)' },
+  ];
+  grid.innerHTML = cards.map(c => `
+    <div class="summary-card ${c.cls}" onclick="currentFilter='${c.label}';loadAlerts()">
+      <div class="num" style="${c.color ? `color:${c.color}` : ''}">${c.num}</div>
+      <div class="label">${c.label}</div>
+    </div>
+  `).join('');
+}
+
+async function loadAlerts() {
+  const params = new URLSearchParams();
+  if (currentFilter !== 'all') params.set('state', currentFilter);
+  if (currentType) params.set('alert_type', currentType);
+  params.set('per_page', '100');
+
+  const res = await API.get('/alerts?' + params);
+  const data = await API.json(res);
+  const list = document.getElementById('alertList');
+
+  if (!res || !res.ok || !data.items?.length) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-solid fa-check-circle"></i>
+        <h3>${currentFilter === 'ACTIVE' ? 'No active alerts' : 'No alerts found'}</h3>
+        <p style="font-size:13px">All clear. Alerts will appear here when triggered.</p>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = data.items.map(a => renderAlertRow(a)).join('');
+}
+
+function renderAlertRow(alert) {
+  const iconCls = alert.alert_type.toLowerCase().replace(/_/g, '_');
+  const timeAgo = formatTime(alert.triggered_at);
+  const stateCls = alert.state.toLowerCase();
+  const isNew = !knownAlertIds.has(alert.id);
+
+  return `
+    <div class="alert-row ${stateCls} ${isNew ? 'flash-new' : ''}" id="alert-${alert.id}">
+      <div class="alert-header">
+        <div class="alert-icon ${iconCls}">
+          <i class="${getAlertIcon(alert.alert_type)}"></i>
+        </div>
+        <div class="alert-body">
+          <div class="alert-type">${alert.alert_type.replace(/_/g, ' ')}</div>
+          <div class="alert-message">${alert.message || '—'}</div>
+          <div class="alert-meta">
+            ${alert.section_name ? `<i class="fa-solid fa-map-pin"></i> ${alert.section_name} · ` : ''}
+            <i class="fa-regular fa-clock"></i> ${timeAgo}
+            ${alert.acknowledged_by ? ` · Ack by ${alert.acknowledged_by}` : ''}
+          </div>
+          ${alert.position?.x ? `<div class="alert-position">
+            <i class="fa-solid fa-crosshairs"></i>
+            x=${alert.position.x} y=${alert.position.y} z=${alert.position.z || 0}
+          </div>` : ''}
+        </div>
+        <span class="alert-state-badge ${stateCls}">${alert.state}</span>
+        <div class="alert-actions">
+          ${alert.state === 'ACTIVE' ? `
+            <button class="btn btn-secondary" style="padding:5px 12px;font-size:11px" onclick="acknowledge(${alert.id})">
+              <i class="fa-solid fa-check"></i> Ack
+            </button>` : ''}
+          ${alert.state !== 'RESOLVED' ? `
+            <button class="btn btn-primary" style="padding:5px 12px;font-size:11px" onclick="resolveAlert(${alert.id})">
+              <i class="fa-solid fa-check-double"></i> Resolve
+            </button>` : ''}
+        </div>
       </div>
-      <p style="color:var(--text-muted);margin-bottom:20px">
-        This page is a placeholder.<br>
-        It will be implemented in <strong>Phase 2–5</strong> of the build plan.
-      </p>
-      <a href="/" class="btn btn-primary">← Back to Command Center</a>
-    </div>
-    <p class="auth-footer" style="margin-top:16px">
-      See <strong>BUILD_PLAN.md</strong> for the full roadmap.
-    </p>
-  </div>
-  <script src="/static/js/api.js"></script>
-  <script>
-    if (!API.isLoggedIn()) window.location.href = '/login';
-    document.addEventListener('DOMContentLoaded', () => {
-      const user = API.getUser();
-      if (user) document.title = user.display_name + ' — HOLO-RTLS';
-    });
-  </script>
+    </div>`;
+}
+
+function getAlertIcon(type) {
+  const map = {
+    NO_SIGNAL: 'fa-wifi-slash',
+    RESTRICTED_ZONE: 'fa-octagon-xmark',
+    LOW_BATTERY: 'fa-battery-quarter',
+    ENV_HAZARD: 'fa-biohazard',
+    NODE_OFFLINE: 'fa-server',
+    CRITICAL_VITALS: 'fa-heart-pulse',
+    NO_MOVEMENT: 'fa-person-walking',
+    MANUAL: 'fa-hand',
+  };
+  return map[type] || 'fa-triangle-exclamation';
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filter);
+  });
+  loadAlerts();
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────────
+async function acknowledge(id) {
+  const notes = prompt('Notes (optional):') || '';
+  const res = await API.post(`/alerts/${id}/acknowledge`, { notes });
+  if (res && res.ok) {
+    document.getElementById(`alert-${id}`)?.remove();
+    loadAlerts();
+    loadSummary();
+  }
+}
+
+async function resolveAlert(id) {
+  const res = await API.post(`/alerts/${id}/resolve`, {});
+  if (res && res.ok) {
+    document.getElementById(`alert-${id}`)?.remove();
+    loadAlerts();
+    loadSummary();
+  }
+}
+
+async function acknowledgeAll() {
+  if (!confirm('Acknowledge all active alerts?')) return;
+  const res = await API.post('/alerts/acknowledge-all', {});
+  if (res && res.ok) {
+    const data = await API.json(res);
+    loadAlerts();
+    loadSummary();
+  }
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+async function loadNotifications() {
+  const res = await API.get('/alerts/notifications');
+  const data = await API.json(res);
+  if (!res || !res.ok) return;
+
+  unreadCount = data.unread_count || 0;
+  renderNotifBadge();
+
+  const list = document.getElementById('notifList');
+  if (!data.items?.length) {
+    list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px">No notifications</div>`;
+    return;
+  }
+  list.innerHTML = data.items.map(n => `
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;opacity:${n.is_read ? 0.5 : 1}"
+         onclick="markRead(${n.id})">
+      <div style="font-size:12px;font-weight:600;color:var(--text-primary)">${n.title}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${n.message || ''}</div>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:3px">${formatTime(n.created_at)}</div>
+    </div>`).join('');
+}
+
+function toggleNotifPanel() {
+  const panel = document.getElementById('notifDropdown');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderNotifBadge() {
+  const badge = document.getElementById('notifBadge');
+  const icon = document.getElementById('bellIcon');
+  if (unreadCount > 0) {
+    badge.style.display = 'block';
+    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+    icon.style.color = 'var(--red)';
+  } else {
+    badge.style.display = 'none';
+    icon.style.color = 'var(--text-muted)';
+  }
+}
+
+async function markRead(id) {
+  await API.post(`/alerts/notifications/${id}/read`, {});
+  unreadCount = Math.max(0, unreadCount - 1);
+  renderNotifBadge();
+  loadNotifications();
+}
+
+async function markAllRead() {
+  await API.post('/alerts/notifications/read-all', {});
+  unreadCount = 0;
+  renderNotifBadge();
+  loadNotifications();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function formatTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = (now - d) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return d.toLocaleDateString();
+}
+</script>
 </body>
 </html>

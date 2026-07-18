@@ -245,6 +245,8 @@ def _init_positioning(app):
     from backend.services.hardware_bridge import HardwareBridgeManager
     from backend.services.ingestion_loop import start_ingestion
     from backend.api.stream import init_mqtt_publisher
+    from backend.services.notification_service import init_notification_service
+    from backend.services.alert_service import init_alert_service
     import backend.config as cfg
 
     pos_svc = PositioningService(db.session)
@@ -255,6 +257,16 @@ def _init_positioning(app):
 
     history_svc = init_history_service(db.session, retention_days=30, flush_interval=5)
     history_svc.start()
+
+    # Notification service (email/SMS dispatch)
+    notif_svc = init_notification_service(db.session, app)
+
+    # Alert service (zone evaluation, offline checks)
+    alert_svc = init_alert_service(
+        db.session, app,
+        no_signal_timeout=int(getattr(cfg, 'NO_SIGNAL_TIMEOUT', 120)),
+    )
+    alert_svc.start()
 
     try:
         mqtt_pub = init_mqtt_publisher(
@@ -275,10 +287,12 @@ def _init_positioning(app):
         app=app, bridge_manager=bridge_mgr,
         positioning_service=pos_svc, history_service=history_svc,
         floor_plan_mapper=mapper_svc, mqtt_client=mqtt_pub,
+        alert_service=alert_svc,
     )
 
     logger.info(
-        f"Positioning engine online — {anchors_loaded} anchors, "
+        f"HOLO-RTLS online — {anchors_loaded} anchors, "
         f"{len(bridge_mgr._bridges)} bridges, "
+        f"alerts: {'running' if alert_svc else 'disabled'}, "
         f"ingestion: {'running' if ingestion else 'FAILED'}"
     )

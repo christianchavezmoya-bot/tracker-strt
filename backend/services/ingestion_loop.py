@@ -22,8 +22,9 @@ class IngestionLoop(threading.Thread):
     Consumes from HardwareBridgeManager.event_queue and:
       1. Routes payload to PositioningService
       2. Writes position to HistoryService (DB)
-      3. Broadcasts via SSE (Flask response held by SSEClients)
-      4. Publishes to MQTT state_changes topic
+      3. Evaluates alert conditions (AlertService)
+      4. Broadcasts via SSE (Flask response held by SSEClients)
+      5. Publishes to MQTT state_changes topic
     """
 
     def __init__(self,
@@ -33,6 +34,7 @@ class IngestionLoop(threading.Thread):
                  history_service,
                  floor_plan_mapper,
                  mqtt_client=None,
+                 alert_service=None,
                  flush_interval: float = 0.1):
         super().__init__(daemon=True, name="IngestionLoop")
         self._app = app
@@ -41,6 +43,7 @@ class IngestionLoop(threading.Thread):
         self._history = history_service
         self._mapper = floor_plan_mapper
         self._mqtt = mqtt_client
+        self._alert = alert_service
         self._flush_interval = flush_interval
         self._stop = threading.Event()
 
@@ -160,7 +163,22 @@ class IngestionLoop(threading.Thread):
             timestamp=timestamp,
         )
 
-        # Step 4: Velocity from consecutive positions
+        # Step 4: Evaluate alert conditions
+        if self._alert:
+            battery = payload.get("battery")
+            env_data = payload.get("env") or payload.get("sensors")
+            try:
+                self._alert.evaluate_position(
+                    tracker_id=tracker_id,
+                    x=x, y=y, z=z,
+                    hardware_id=tracker_hardware_id,
+                    battery=battery,
+                    env_data=env_data,
+                )
+            except Exception as e:
+                logger.error(f"Alert evaluation error: {e}")
+
+        # Step 5: Velocity from consecutive positions
         vx, vy, speed = None, None, None
         key = f"{tracker_id}"
         if key in self._prev_positions:
@@ -173,7 +191,7 @@ class IngestionLoop(threading.Thread):
 
         self._prev_positions[key] = {"x": x, "y": y, "z": z, "timestamp": timestamp}
 
-        # Step 5: Build SSE payload
+        # Step 6: Build SSE payload
         sse_data = {
             "type": "position_update",
             "tracker_id": tracker_id,
@@ -190,10 +208,10 @@ class IngestionLoop(threading.Thread):
             "timestamp": timestamp.isoformat(),
         }
 
-        # Step 6: Broadcast to SSE clients
+        # Step 7: Broadcast to SSE clients
         self._broadcast_sse(sse_data)
 
-        # Step 7: Publish to MQTT
+        # Step 8: Publish to MQTT
         if self._mqtt and self._mqtt.is_connected():
             try:
                 self._mqtt.publish("rtls/state_changes", json.dumps(sse_data), qos=1)
@@ -232,7 +250,8 @@ def start_ingestion(app: Flask,
                      positioning_service,
                      history_service,
                      floor_plan_mapper,
-                     mqtt_client=None):
+                     mqtt_client=None,
+                     alert_service=None):
     global _ingestion_loop
     if _ingestion_loop is not None and _ingestion_loop.is_alive():
         logger.warning("IngestionLoop already running")
@@ -245,6 +264,7 @@ def start_ingestion(app: Flask,
         history_service=history_service,
         floor_plan_mapper=floor_plan_mapper,
         mqtt_client=mqtt_client,
+        alert_service=alert_service,
     )
     _ingestion_loop.start()
     return _ingestion_loop

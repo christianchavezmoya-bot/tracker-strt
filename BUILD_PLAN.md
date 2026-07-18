@@ -18,7 +18,7 @@ The system runs as a **Flask web application** backed by SQLite, with a modern h
 
 ## 2. Project Structure
 
-> **Status:** ✅ Phase 0 COMPLETE | ✅ Phase 1 COMPLETE | ✅ Phase 2 COMPLETE | ✅ Phase 3 COMPLETE | 🔄 Phase 4 STARTED
+> **Status:** ✅ Phase 0 COMPLETE | ✅ Phase 1 COMPLETE | ✅ Phase 2 COMPLETE | ✅ Phase 3 COMPLETE | ✅ Phase 4 COMPLETE | 🔄 Phase 5 STARTED
 
 ```
 HOLO-RTLS/
@@ -540,20 +540,20 @@ Step 3.8  →  ✅ Server-Sent Events (SSE) endpoint: /api/stream/positions
 Step 3.9  →  ✅ Tests: 18/18 positioning accuracy tests passing
 ```
 
-### Phase 4 — Alerts Engine (1 day)
+### Phase 4 — Alerts Engine ✅ DONE
 **Goal:** Alerts fire correctly and operators see them in real-time.
 
 ```
-Step 4.1  →  Alert service: evaluate all trigger conditions
-Step 4.2  →  Alert service: dispatch notifications (in-app, email, SMS)
-Step 4.3  →  Alert API: /api/alerts (GET list, POST acknowledge)
-Step 4.4  →  Alert notification model + in-app bell (polling SSE)
-Step 4.5  →  Alert history API
-Step 4.6  →  Alert panel page
-Step 4.7  →  Tests: alert triggers under mock conditions
+Step 4.1  →  ✅ Alert service: zone geometry (point-in-polygon, sphere) + evaluation
+Step 4.2  →  ✅ Notification dispatch: in-app (DB) + email (SMTP) + SMS (Twilio)
+Step 4.3  →  ✅ Alert API: full CRUD + acknowledge/resolve + bulk + counts/stats
+Step 4.4  →  ✅ Alert notifications via SSE stream (real-time push to browsers)
+Step 4.5  →  ✅ Alert history + stats API
+Step 4.6  →  ✅ Alert panel page: summary cards, filters, real-time updates, bell
+Step 4.7  →  ✅ Tests: 22/22 alert trigger tests passing
 ```
 
-### Phase 5 — Map & Visualization (2 days)
+### Phase 5 — Map & Visualization 🔄 IN PROGRESS
 **Goal:** The holographic command center UI is fully functional.
 
 ```
