@@ -13,6 +13,7 @@ from backend.models.audit import AuditLog
 from backend.models.settings import Setting, BusinessLogo, SettingScope
 from backend.models.backup import BackupJob, TrackingHistory, CheckInLog, ApiKey
 from backend.models.hardware import HardwareConfig, HardwareType, Protocol, ConnectionStatus
+from backend.models.positioning import TrackingHistory as PosHistory, PositionSnapshot
 
 __all__ = [
     # User

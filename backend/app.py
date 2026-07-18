@@ -101,6 +101,8 @@ def create_app(test_config: dict = None) -> Flask:
     from backend.api.backup import backup_bp
     from backend.api.uwb import uwb_bp
     from backend.api.hardware import hardware_bp
+    from backend.api.stream import stream_bp
+    from backend.api.positioning import positioning_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trackers_bp)
@@ -116,6 +118,8 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(backup_bp)
     app.register_blueprint(uwb_bp)
     app.register_blueprint(hardware_bp)
+    app.register_blueprint(positioning_bp)
+    app.register_blueprint(stream_bp)
 
     # ── Frontend routes ───────────────────────────────────────────────────────
     from flask import render_template
@@ -203,7 +207,10 @@ def create_app(test_config: dict = None) -> Flask:
     # ── Shell context (flask shell) ───────────────────────────────────────────
     @app.shell_context_processor
     def make_shell_context():
-        from backend.models import *
+        from backend.models import (
+            User, Tracker, WifiNode, MapSection, Zone,
+            Alert, Notification, AuditLog, Setting,
+        )
         return {
             "db": db,
             "User": User,
@@ -217,4 +224,61 @@ def create_app(test_config: dict = None) -> Flask:
             "Setting": Setting,
         }
 
+    # ── Phase 3: Positioning Engine ────────────────────────────────────────────
+    if not test_config:
+        with app.app_context():
+            _init_positioning(app)
+
     return app
+
+
+def _init_positioning(app):
+    import logging
+    logger = logging.getLogger(__name__)
+
+    from backend.models.positioning import TrackingHistory, PositionSnapshot
+    db.create_all()
+
+    from backend.services.positioning_service import PositioningService
+    from backend.services.floor_plan_mapper import FloorPlanMapperService
+    from backend.services.history_service import init_history_service
+    from backend.services.hardware_bridge import HardwareBridgeManager
+    from backend.services.ingestion_loop import start_ingestion
+    from backend.api.stream import init_mqtt_publisher
+    import backend.config as cfg
+
+    pos_svc = PositioningService(db.session)
+    anchors_loaded = pos_svc.load_anchors_from_db()
+    anchors = dict(pos_svc._anchors)
+
+    mapper_svc = FloorPlanMapperService(db.session)
+
+    history_svc = init_history_service(db.session, retention_days=30, flush_interval=5)
+    history_svc.start()
+
+    try:
+        mqtt_pub = init_mqtt_publisher(
+            getattr(cfg, 'MQTT_BROKER_HOST', 'localhost'),
+            int(getattr(cfg, 'MQTT_BROKER_PORT', 1883)),
+            getattr(cfg, 'MQTT_USERNAME', None),
+            getattr(cfg, 'MQTT_PASSWORD', None),
+        )
+        logger.info(f"MQTT publisher: {getattr(cfg, 'MQTT_BROKER_HOST', 'localhost')}")
+    except Exception as e:
+        logger.warning(f"MQTT not configured: {e}")
+        mqtt_pub = None
+
+    bridge_mgr = HardwareBridgeManager(db.session, app)
+    bridge_mgr.start_all(anchors=anchors)
+
+    ingestion = start_ingestion(
+        app=app, bridge_manager=bridge_mgr,
+        positioning_service=pos_svc, history_service=history_svc,
+        floor_plan_mapper=mapper_svc, mqtt_client=mqtt_pub,
+    )
+
+    logger.info(
+        f"Positioning engine online — {anchors_loaded} anchors, "
+        f"{len(bridge_mgr._bridges)} bridges, "
+        f"ingestion: {'running' if ingestion else 'FAILED'}"
+    )
