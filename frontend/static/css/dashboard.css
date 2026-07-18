@@ -1,0 +1,107 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   HOLO-RTLS — Dashboard CSS (supplementary)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Filter count badge */
+.filter-count {
+  background: var(--cyan-dim); color: var(--cyan); font-size: 11px;
+  font-weight: 700; padding: 1px 7px; border-radius: 10px;
+}
+
+/* Map dot states */
+.tracker-dot {
+  position: absolute; border-radius: 50%;
+  width: 12px; height: 12px; transform: translate(-50%, -50%);
+  cursor: pointer; transition: transform 0.1s;
+  box-shadow: 0 0 8px currentColor;
+}
+.tracker-dot:hover { transform: translate(-50%, -50%) scale(1.4); }
+.tracker-dot.normal  { background: var(--cyan); color: var(--cyan); }
+.tracker-dot.warning { background: var(--yellow); color: var(--yellow); animation: pulse-glow 1.5s infinite; }
+.tracker-dot.critical { background: var(--red); color: var(--red); animation: pulse-glow-red 0.8s infinite; }
+.tracker-dot.offline { background: var(--text-muted); color: var(--text-muted); opacity: 0.4; }
+
+.tracker-dot.selected {
+  width: 16px; height: 16px;
+  box-shadow: 0 0 0 3px var(--cyan), 0 0 12px var(--cyan);
+}
+
+/* Proximity lines */
+.proximity-line {
+  position: absolute; height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05));
+  transform-origin: left center; pointer-events: none;
+}
+
+/* Zone rings */
+.zone-ring {
+  position: absolute; border-radius: 50%;
+  border: 2px solid; opacity: 0.3;
+  transform: translate(-50%, -50%); pointer-events: none;
+  transition: opacity 0.2s;
+}
+.zone-ring.restricted { border-color: var(--red); }
+.zone-ring.normal { border-color: var(--cyan); }
+
+/* Section polygon */
+.section-polygon {
+  position: absolute; pointer-events: none;
+  border: 1px solid; opacity: 0.15; transition: opacity 0.2s;
+}
+.section-polygon.flashing { animation: section-flash 0.5s ease-in-out 3; }
+@keyframes section-flash { 0%,100%{opacity:0.15} 50%{opacity:0.6} }
+
+/* Heatmap layer */
+.heatmap-canvas {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; opacity: 0.4;
+}
+
+/* Node markers on map */
+.node-marker {
+  position: absolute; transform: translate(-50%, -50%);
+  cursor: pointer; z-index: 5;
+}
+.node-marker-inner {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--magenta); border: 2px solid rgba(224,64,251,0.4);
+  box-shadow: 0 0 10px var(--magenta);
+  display: flex; align-items: center; justify-content: center;
+}
+.node-marker.dragging .node-marker-inner {
+  transform: scale(1.3);
+  box-shadow: 0 0 20px var(--magenta);
+}
+
+/* History trail */
+.history-trail {
+  position: absolute; pointer-events: none; z-index: 3;
+}
+
+/* Loading spinner */
+.map-loading {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  color: var(--text-muted);
+}
+.map-loading i { font-size: 28px; color: var(--cyan); animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Layers panel */
+.layers-panel {
+  position: absolute; top: 60px; right: 16px;
+  background: var(--bg-card); border: 1px solid var(--border-bright);
+  border-radius: var(--radius); padding: 12px; width: 180px; z-index: 30;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.layers-panel h4 {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--text-muted); margin-bottom: 10px;
+}
+.layer-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; font-size: 12px; color: var(--text-secondary);
+  cursor: pointer;
+}
+.layer-item input[type=checkbox] { accent-color: var(--cyan); }
+.layer-item:hover { color: var(--text-primary); }

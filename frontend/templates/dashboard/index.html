@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOLO-RTLS — Command Center</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <!-- Leaflet for 2D map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+
+<!-- ── Top Navigation Bar ─────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="brand">
+      <div class="brand-icon">◈</div>
+      <span class="brand-name">HOLO-RTLS</span>
+    </div>
+    <div class="view-toggle">
+      <button class="view-btn active" data-view="2d" onclick="setView('2d')">
+        <i class="fa-solid fa-map"></i> 2D
+      </button>
+      <button class="view-btn" data-view="3d" onclick="setView('3d')">
+        <i class="fa-solid fa-cube"></i> 3D
+      </button>
+    </div>
+  </div>
+
+  <div class="topbar-center">
+    <div class="search-bar" onclick="openSearch()">
+      <i class="fa-solid fa-search"></i>
+      <span>Search assets, people, zones...</span>
+      <kbd>Ctrl K</kbd>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="status-indicator" id="connectionStatus">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+
+    <!-- Notification Bell -->
+    <div class="icon-btn" id="notifBtn" onclick="toggleNotifications()">
+      <i class="fa-regular fa-bell"></i>
+      <span class="badge" id="alertBadge" style="display:none">0</span>
+    </div>
+
+    <!-- Settings -->
+    <a href="/settings" class="icon-btn" title="Settings">
+      <i class="fa-solid fa-gear"></i>
+    </a>
+
+    <!-- User Menu -->
+    <div class="user-menu" id="userMenu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <span class="user-name" id="userName">Admin</span>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <a href="/hardware"><i class="fa-solid fa-microchip"></i> Hardware Setup</a>
+        <a href="/users" id="menuUsers" style="display:none"><i class="fa-solid fa-users"></i> Users</a>
+        <a href="/audit" id="menuAudit" style="display:none"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main Layout ─────────────────────────────────────────────────────── -->
+<div class="main-layout">
+
+  <!-- Left Panel: Asset / Tag List -->
+  <aside class="left-panel" id="leftPanel">
+    <div class="panel-header">
+      <h3>ASSETS</h3>
+      <div class="filter-count" id="filterCount">0</div>
+    </div>
+
+    <div class="filter-section">
+      <div class="filter-group">
+        <label class="filter-label">TYPE</label>
+        <label class="filter-check">
+          <input type="checkbox" id="filterAll" checked onchange="toggleFilter('all')">
+          <span class="checkmark"></span> All
+        </label>
+        <label class="filter-check">
+          <input type="checkbox" id="filterPeople" checked onchange="toggleFilter('people')">
+          <span class="checkmark"></span> <i class="fa-solid fa-user"></i> People
+        </label>
+        <label class="filter-check">
+          <input type="checkbox" id="filterMachines" checked onchange="toggleFilter('machines')">
+          <span class="checkmark"></span> <i class="fa-solid fa-gear"></i> Machines
+        </label>
+        <label class="filter-check">
+          <input type="checkbox" id="filterSensors" checked onchange="toggleFilter('sensors')">
+          <span class="checkmark"></span> <i class="fa-solid fa-temperature-quarter"></i> Sensors
+        </label>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">STATUS</label>
+        <label class="filter-check">
+          <input type="checkbox" id="filterOffline" checked onchange="toggleFilter('offline')">
+          <span class="checkmark"></span> <span class="dot dot-gray"></span> Offline
+        </label>
+        <label class="filter-check">
+          <input type="checkbox" id="filterAlerts" checked onchange="toggleFilter('alerts')">
+          <span class="checkmark"></span> <span class="dot dot-red"></span> Alerts
+        </label>
+      </div>
+    </div>
+
+    <div class="tag-list" id="tagList">
+      <div class="tag-loading">
+        <i class="fa-solid fa-circle-notch fa-spin"></i> Loading assets...
+      </div>
+    </div>
+  </aside>
+
+  <!-- Map Container -->
+  <main class="map-container">
+    <!-- 2D Map -->
+    <div id="map2d" class="map-view active"></div>
+    <!-- 3D Map -->
+    <div id="map3d" class="map-view" style="display:none">
+      <canvas id="threeCanvas"></canvas>
+    </div>
+
+    <!-- Map Toolbar -->
+    <div class="map-toolbar">
+      <button class="tool-btn" onclick="toggleFullscreen()" title="Fullscreen">
+        <i class="fa-regular fa-expand"></i>
+      </button>
+      <button class="tool-btn" onclick="toggleLayers()" title="Layers">
+        <i class="fa-solid fa-layer-group"></i>
+      </button>
+      <button class="tool-btn" onclick="resetCamera()" title="Reset View">
+        <i class="fa-solid fa-crosshairs"></i>
+      </button>
+      <button class="tool-btn" onclick="toggleHeatmap()" title="Heatmap">
+        <i class="fa-solid fa-fire"></i>
+      </button>
+    </div>
+
+    <!-- Tag Detail Floating Card -->
+    <div class="tag-card" id="tagCard" style="display:none">
+      <div class="tag-card-header">
+        <div class="tag-card-dot" id="tagCardDot"></div>
+        <div class="tag-card-title">
+          <h4 id="tagCardName">—</h4>
+          <span class="tag-card-type" id="tagCardType">—</span>
+        </div>
+        <button class="tag-card-close" onclick="closeTagCard()">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="tag-card-body">
+        <div class="tag-card-row">
+          <i class="fa-solid fa-barcode"></i>
+          <span class="label">Hardware ID</span>
+          <span class="value" id="tagCardHardwareId">—</span>
+        </div>
+        <div class="tag-card-row">
+          <i class="fa-solid fa-map-pin"></i>
+          <span class="label">Section</span>
+          <span class="value" id="tagCardSection">—</span>
+        </div>
+        <div class="tag-card-row">
+          <i class="fa-solid fa-battery-full"></i>
+          <span class="label">Battery</span>
+          <span class="value" id="tagCardBattery">—</span>
+        </div>
+        <div class="tag-card-row" id="tagCardHRRow" style="display:none">
+          <i class="fa-solid fa-heart-pulse"></i>
+          <span class="label">Heart Rate</span>
+          <span class="value" id="tagCardHR">—</span>
+        </div>
+        <div class="tag-card-row" id="tagCardSpO2Row" style="display:none">
+          <i class="fa-solid fa-lungs"></i>
+          <span class="label">SpO2</span>
+          <span class="value" id="tagCardSpO2">—</span>
+        </div>
+        <div class="tag-card-row">
+          <i class="fa-regular fa-clock"></i>
+          <span class="label">Last Seen</span>
+          <span class="value" id="tagCardLastSeen">—</span>
+        </div>
+      </div>
+      <div class="tag-card-actions" id="tagCardActions">
+        <button class="btn btn-danger" onclick="triggerAlarm()" id="btnAlarm">
+          <i class="fa-solid fa-bell"></i> Alert
+        </button>
+        <button class="btn btn-secondary" onclick="viewHistory()">
+          <i class="fa-regular fa-clock-rotate-left"></i> History
+        </button>
+        <button class="btn btn-secondary" onclick="editTag()">
+          <i class="fa-solid fa-pen"></i> Edit
+        </button>
+      </div>
+    </div>
+
+    <!-- History Playback Bar -->
+    <div class="history-bar" id="historyBar" style="display:none">
+      <div class="history-header">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>History Playback</span>
+        <button onclick="closeHistory()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="history-slider-row">
+        <span class="time-label" id="historyStartTime">—</span>
+        <input type="range" class="history-slider" id="historySlider" min="0" max="100" value="100">
+        <span class="time-label" id="historyEndTime">Now</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel: Alert Feed -->
+  <aside class="right-panel" id="rightPanel">
+    <div class="panel-header">
+      <h3>ALERTS</h3>
+      <span class="alert-count-badge" id="alertCountBadge">0</span>
+    </div>
+    <div class="alert-list" id="alertList">
+      <div class="alert-empty" id="alertEmpty">
+        <i class="fa-regular fa-check-circle"></i>
+        <p>No active alerts</p>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a href="/alerts" class="view-all-link">View all alerts <i class="fa-solid fa-arrow-right"></i></a>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ── Status Strip ────────────────────────────────────────────────────── -->
+<div class="status-strip">
+  <div class="stat-item">
+    <span class="dot dot-green"></span>
+    <span id="statActive">0</span> Active
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="dot dot-red"></span>
+    <span id="statAlerts">0</span> Alerts
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="dot dot-blue"></span>
+    <span id="statCheckedIn">0</span> Checked In
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <i class="fa-solid fa-wifi"></i>
+    <span id="statNodes">0</span> Nodes
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <i class="fa-solid fa-clock"></i>
+    <span id="statUptime">—</span>
+  </div>
+  <div class="stat-spacer"></div>
+  <div class="stat-item live-indicator">
+    <div class="live-dot"></div>
+    LIVE
+  </div>
+</div>
+
+<!-- ── Notifications Dropdown ──────────────────────────────────────────── -->
+<div class="notifications-dropdown" id="notifDropdown" style="display:none">
+  <div class="notif-header">
+    <span>Notifications</span>
+    <button onclick="markAllRead()">Mark all read</button>
+  </div>
+  <div class="notif-list" id="notifList">
+    <div class="notif-empty">No new notifications</div>
+  </div>
+</div>
+
+<!-- ── Search Modal ────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="searchModal" style="display:none" onclick="closeSearch()">
+  <div class="search-modal" onclick="event.stopPropagation()">
+    <div class="search-input-row">
+      <i class="fa-solid fa-search"></i>
+      <input type="text" id="searchInput" placeholder="Search assets, people, zones..."
+             oninput="doSearch()" autocomplete="off">
+      <kbd onclick="closeSearch()">ESC</kbd>
+    </div>
+    <div class="search-results" id="searchResults">
+      <div class="search-hint">Type to search...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Scripts ─────────────────────────────────────────────────────────── -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/auth.js"></script>
+<script src="/static/js/dashboard.js"></script>
+<script src="/static/js/visualization/map2d.js"></script>
+<script src="/static/js/visualization/map3d.js"></script>
+
+</body>
+</html>

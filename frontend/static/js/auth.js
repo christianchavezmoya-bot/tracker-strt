@@ -1,0 +1,149 @@
+/**
+ * HOLO-RTLS — Auth JS
+ * Login, 2FA, password reset logic.
+ */
+
+let pendingUserId = null;   // For 2FA flow
+let pendingSetup2FA = false;
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  if (API.isLoggedIn()) {
+    // Redirect to dashboard if already logged in
+    window.location.href = '/';
+  }
+});
+
+// ── Login ────────────────────────────────────────────────────────────────────
+async function handleLogin(event) {
+  event.preventDefault();
+  const form = document.getElementById('loginForm');
+  const btn = document.getElementById('loginBtn');
+  const btnText = document.getElementById('loginBtnText');
+  const spinner = document.getElementById('loginSpinner');
+  const errorEl = document.getElementById('loginError');
+  const errorMsg = document.getElementById('loginErrorMsg');
+
+  btn.disabled = true;
+  btnText.textContent = 'Signing in...';
+  spinner.style.display = 'inline';
+  errorEl.style.display = 'none';
+
+  const email = document.getElementById('emailInput').value.trim();
+  const password = document.getElementById('passwordInput').value;
+  const totpCode = document.getElementById('totpInput')?.value?.trim() || null;
+
+  try {
+    const res = await API.post('/auth/login', { email_or_username: email, password, totp_code: totpCode || undefined });
+    const data = await API.json(res);
+
+    if (res && res.ok) {
+      if (data.requires_2fa) {
+        // 2FA required — show code input
+        pendingUserId = data.user_id;
+        document.getElementById('totpGroup').style.display = 'block';
+        document.getElementById('totpInput').focus();
+        btn.disabled = false; btnText.textContent = 'Verify & Sign In'; spinner.style.display = 'none';
+        return;
+      }
+      onLoginSuccess(data);
+    } else {
+      showError(data.error || 'Login failed');
+    }
+  } catch (err) {
+    showError('Connection error. Please try again.');
+  } finally {
+    btn.disabled = false; btnText.textContent = 'Sign In'; spinner.style.display = 'none';
+  }
+}
+
+function onLoginSuccess(data) {
+  API.setTokens(data.access_token, data.refresh_token, data.user);
+  // Check if user needs to set up 2FA
+  if (!data.user.is_2fa_enabled) {
+    // Offer 2FA setup (skip for now)
+    window.location.href = '/';
+  } else {
+    window.location.href = '/';
+  }
+}
+
+function showError(msg) {
+  const errorEl = document.getElementById('loginError');
+  const errorMsg = document.getElementById('loginErrorMsg');
+  errorMsg.textContent = msg;
+  errorEl.style.display = 'flex';
+}
+
+function togglePassword() {
+  const input = document.getElementById('passwordInput');
+  const eye = document.getElementById('toggleEye');
+  if (input.type === 'password') {
+    input.type = 'text'; eye.className = 'fa-regular fa-eye-slash';
+  } else {
+    input.type = 'password'; eye.className = 'fa-regular fa-eye';
+  }
+}
+
+// ── 2FA Setup ─────────────────────────────────────────────────────────────────
+async function setup2FA() {
+  const res = await API.post('/auth/2fa/setup');
+  const data = await API.json(res);
+  if (res && res.ok) {
+    document.getElementById('qrCodeImg').src = data.qr_code;
+    showCard('setup2faCard');
+  }
+}
+
+async function confirmSetup2FA() {
+  const code = document.getElementById('setupTotpInput').value.trim();
+  const res = await API.post('/auth/2fa/confirm', { totp_code: code });
+  const data = await API.json(res);
+  if (res && res.ok) {
+    showCard('loginCard');
+    showLogin();
+    alert('2FA enabled successfully!');
+  } else {
+    alert(data.error || 'Invalid code');
+  }
+}
+
+function skipSetup2FA() {
+  showCard('loginCard');
+  showLogin();
+}
+
+// ── Password Reset ────────────────────────────────────────────────────────────
+function showPasswordReset() {
+  showCard('resetCard');
+}
+
+function showLogin() {
+  showCard('loginCard');
+}
+
+function showCard(id) {
+  ['loginCard','setup2faCard','resetCard'].forEach(cid => {
+    document.getElementById(cid).style.display = cid === id ? 'block' : 'none';
+  });
+}
+
+async function handlePasswordReset(event) {
+  event.preventDefault();
+  const email = document.getElementById('resetEmailInput').value.trim();
+  const res = await API.post('/auth/password/reset-request', { email });
+  const data = await API.json(res);
+  if (res && res.ok) {
+    alert('If that email is registered, a reset link has been sent.');
+    showLogin();
+  } else {
+    alert(data.error || 'Request failed');
+  }
+}
+
+// ── Logout ────────────────────────────────────────────────────────────────────
+async function logout() {
+  await API.post('/auth/logout');
+  API.clearTokens();
+  window.location.href = '/login';
+}

@@ -1,0 +1,65 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Backups
+data/backups/
+backups/
+
+# Uploads
+uploads/
+frontend/static/assets/logos/*
+!frontend/static/assets/logos/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+
+# Distribution / build
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gunicorn
+gunicorn.conf.py
+
+# Migrations
+migrations/versions/*.py
+!migrations/versions/.gitkeep
+
+# Reference folder (after verified integration)
+# reference/

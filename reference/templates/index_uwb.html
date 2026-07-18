@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>UWB Tunnel Tracking: 3D/2D Visualization</title>
+
+<!-- =======================
+     STYLES
+======================= -->
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #0a0e27;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    color: #00ff88;
+}
+
+#globeContainer,
+#map2d,
+#tunnel3d {
+    width: 100vw;
+    height: 100vh;
+}
+
+/* View buttons */
+#view-buttons {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 9999;
+    display: flex;
+    gap: 8px;
+}
+
+#view-buttons button {
+    background: #1f6feb;
+    color: white;
+    border: 2px solid #00ff88;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+    transition: all 0.3s;
+}
+
+#view-buttons button:hover {
+    background: #00ff88;
+    color: #0a0e27;
+    transform: scale(1.05);
+}
+
+#view-buttons button.active {
+    background: #00ff88;
+    color: #0a0e27;
+}
+
+/* UWB Panel */
+#uwb-panel {
+    position: fixed;
+    top: 15px;
+    right: 15px;
+    width: 300px;
+    background: rgba(10, 14, 39, 0.95);
+    border: 2px solid #00ff88;
+    color: #00ff88;
+    padding: 16px;
+    border-radius: 8px;
+    z-index: 9999;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+#uwb-panel h3 {
+    margin: 0 0 10px 0;
+    text-align: center;
+    color: #ff00ff;
+    text-shadow: 0 0 10px #ff00ff;
+}
+
+#uwb-panel .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+#uwb-panel .label {
+    font-weight: bold;
+    color: #00ff88;
+}
+
+#uwb-panel .value {
+    color: #ffff00;
+    text-align: right;
+}
+
+#uwb-panel .good {
+    color: #00ff88;
+}
+
+#uwb-panel .warning {
+    color: #ffaa00;
+}
+
+#uwb-panel .error {
+    color: #ff0000;
+}
+
+/* Tunnel map (2D view) */
+#map2d {
+    display: none;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+/* Config panel */
+#config-panel {
+    position: fixed;
+    bottom: 15px;
+    left: 15px;
+    width: 350px;
+    background: rgba(10, 14, 39, 0.95);
+    border: 2px solid #00ff88;
+    color: #00ff88;
+    padding: 12px;
+    border-radius: 8px;
+    z-index: 9999;
+    font-size: 11px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#config-panel input {
+    width: 100%;
+    padding: 6px;
+    margin: 4px 0;
+    background: rgba(0, 255, 136, 0.1);
+    border: 1px solid #00ff88;
+    color: #00ff88;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+#config-panel button {
+    background: #ff00ff;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 6px;
+    width: 100%;
+    font-weight: bold;
+}
+
+/* Canvas for 3D tunnel */
+canvas {
+    display: block;
+}
+
+/* Loading indicator */
+.loading {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5000;
+    background: rgba(10, 14, 39, 0.9);
+    padding: 30px 50px;
+    border-radius: 8px;
+    border: 2px solid #00ff88;
+    text-align: center;
+    color: #00ff88;
+}
+
+.loading.hidden {
+    display: none;
+}
+</style>
+
+<!-- =======================
+     2D MAP LIB (Leaflet)
+======================= -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+</head>
+<body>
+
+<div class="loading" id="loading">
+    ⏳ Initializing UWB Tunnel Tracker...
+</div>
+
+<!-- =======================
+     VIEW TOGGLE BUTTONS
+======================= -->
+<div id="view-buttons">
+    <button id="btn3d" class="active">3D Tunnel</button>
+    <button id="btn2d">2D Map</button>
+    <button id="btn-config">⚙️ Config</button>
+</div>
+
+<!-- =======================
+     UWB DATA PANEL
+======================= -->
+<div id="uwb-panel">
+    <h3>📡 UWB TUNNEL TRACKER</h3>
+    <div class="row">
+        <span class="label">Status:</span>
+        <span class="value" id="status">--</span>
+    </div>
+    <div class="row">
+        <span class="label">X (m):</span>
+        <span class="value" id="pos-x">--</span>
+    </div>
+    <div class="row">
+        <span class="label">Y (m):</span>
+        <span class="value" id="pos-y">--</span>
+    </div>
+    <div class="row">
+        <span class="label">Accuracy:</span>
+        <span class="value" id="accuracy">--</span>
+    </div>
+    <div class="row">
+        <span class="label">Anchors:</span>
+        <span class="value" id="anchors-count">--</span>
+    </div>
+    <div class="row">
+        <span class="label">Updated:</span>
+        <span class="value" id="timestamp">--</span>
+    </div>
+</div>
+
+<!-- =======================
+     CONFIG PANEL
+======================= -->
+<div id="config-panel" style="display: none;">
+    <h4>Anchor Configuration</h4>
+    <div>
+        <label>Anchor 0 X (m):</label>
+        <input type="number" id="anchor0-x" value="0" step="0.1">
+    </div>
+    <div>
+        <label>Anchor 1 X (m):</label>
+        <input type="number" id="anchor1-x" value="50" step="0.1">
+    </div>
+    <div>
+        <label>Anchor 2 X (m):</label>
+        <input type="number" id="anchor2-x" value="100" step="0.1">
+    </div>
+    <div>
+        <label>Anchor 3 Y (m):</label>
+        <input type="number" id="anchor3-y" value="10" step="0.1">
+    </div>
+    <button onclick="updateAnchors()">Apply Config</button>
+    <button onclick="simulateTest()">Test Simulation</button>
+</div>
+
+<!-- =======================
+     3D & 2D CONTAINERS
+======================= -->
+<div id="tunnel3d"></div>
+<div id="map2d" style="display:none;"></div>
+
+<!-- =======================
+     THREE.JS FOR 3D TUNNEL
+======================= -->
+<script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+
+<!-- =======================
+     MAIN UWB TRACKING SCRIPT
+======================= -->
+<script>
+// ===========================
+// 3D TUNNEL VISUALIZATION
+// ===========================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e27);
+
+const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+);
+camera.position.set(50, 15, -30);
+camera.lookAt(50, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById("tunnel3d").appendChild(renderer.domElement);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0x4488bb, 0.8));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+dirLight.position.set(50, 30, 50);
+scene.add(dirLight);
+
+// Draw tunnel
+function drawTunnel() {
+    // Tunnel walls
+    const tunnelLength = 150;
+    const tunnelRadius = 5;
+    
+    const tunnelGeom = new THREE.CylinderGeometry(tunnelRadius, tunnelRadius, tunnelLength, 32, 1);
+    const tunnelMat = new THREE.MeshStandardMaterial({
+        color: 0x332211,
+        roughness: 0.8,
+        metalness: 0.1
+    });
+    const tunnel = new THREE.Mesh(tunnelGeom, tunnelMat);
+    tunnel.castShadow = true;
+    tunnel.receiveShadow = true;
+    tunnel.rotation.z = Math.PI / 2;
+    tunnel.position.x = tunnelLength / 2;
+    scene.add(tunnel);
+    
+    // Anchors visualization
+    const anchorPositions = [
+        {id: 'A0', pos: [0, 0, 0], color: 0x00ff00},
+        {id: 'A1', pos: [50, 0, 0], color: 0x00ff00},
+        {id: 'A2', pos: [100, 0, 0], color: 0x00ff00},
+        {id: 'A3', pos: [50, 10, 0], color: 0x00ff00}
+    ];
+    
+    anchorPositions.forEach(anchor => {
+        const geom = new THREE.SphereGeometry(0.5, 16, 16);
+        const mat = new THREE.MeshStandardMaterial({ color: anchor.color, emissive: anchor.color });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(...anchor.pos);
+        mesh.userData.anchorId = anchor.id;
+        scene.add(mesh);
+    });
+}
+
+drawTunnel();
+
+// Tag marker (will move as UWB updates)
+const tagGeom = new THREE.SphereGeometry(0.3, 16, 16);
+const tagMat = new THREE.MeshStandardMaterial({ 
+    color: 0xff0000, 
+    emissive: 0xff0000,
+    emissiveIntensity: 0.8
+});
+const tagMarker = new THREE.Mesh(tagGeom, tagMat);
+tagMarker.position.set(25, 0, 0);
+scene.add(tagMarker);
+
+// Track history (line)
+const trackGeom = new THREE.BufferGeometry();
+const trackMat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
+const trackLine = new THREE.Line(trackGeom, trackMat);
+scene.add(trackLine);
+let trackPoints = [];
+
+// Animation loop
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+animate();
+
+// Handle window resize
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ===========================
+// 2D MAP SETUP (Leaflet)
+// ===========================
+const map = L.map('map2d').setView([0, 0], 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+}).addTo(map);
+
+const tunnelPath2D = L.polyline([], { color: 'gray', weight: 3 }).addTo(map);
+const tagMarker2D = L.circleMarker([0, 0], {
+    radius: 8,
+    color: 'red',
+    fillColor: '#ff0000'
+}).addTo(map);
+
+// ===========================
+// UWB DATA POLLING
+// ===========================
+function updateUWBPosition() {
+    fetch("/uwb_position")
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById("pos-x").textContent = data.x.toFixed(2);
+            document.getElementById("pos-y").textContent = data.y.toFixed(2);
+            document.getElementById("accuracy").textContent = data.accuracy.toFixed(3) + ' m';
+            document.getElementById("anchors-count").textContent = data.num_anchors;
+            document.getElementById("timestamp").textContent = new Date(data.timestamp).toLocaleTimeString();
+            document.getElementById("status").innerHTML = '<span class="good">✓ TRACKING</span>';
+            
+            // Update 3D tag position
+            tagMarker.position.set(data.x, data.y, 0);
+            
+            // Update 3D track
+            trackPoints.push(new THREE.Vector3(data.x, data.y, 0));
+            if (trackPoints.length > 50) trackPoints.shift();
+            trackGeom.setFromPoints(trackPoints);
+            
+            // Update 2D map
+            const latLng = [data.y / 1000, data.x / 1000];
+            tunnelPath2D.addLatLng(latLng);
+            tagMarker2D.setLatLng(latLng);
+        })
+        .catch(() => {
+            document.getElementById("status").innerHTML = '<span class="error">✗ OFFLINE</span>';
+        });
+}
+
+// Poll every 100ms
+setInterval(updateUWBPosition, 100);
+
+// ===========================
+// VIEW TOGGLE
+// ===========================
+document.getElementById("btn3d").onclick = () => {
+    document.getElementById("tunnel3d").style.display = "block";
+    document.getElementById("map2d").style.display = "none";
+    document.querySelectorAll("#view-buttons button").forEach(b => b.classList.remove("active"));
+    document.getElementById("btn3d").classList.add("active");
+    renderer.setSize(window.innerWidth, window.innerHeight);
+};
+
+document.getElementById("btn2d").onclick = () => {
+    document.getElementById("tunnel3d").style.display = "none";
+    document.getElementById("map2d").style.display = "block";
+    document.querySelectorAll("#view-buttons button").forEach(b => b.classList.remove("active"));
+    document.getElementById("btn2d").classList.add("active");
+    map.invalidateSize();
+};
+
+document.getElementById("btn-config").onclick = () => {
+    const panel = document.getElementById("config-panel");
+    panel.style.display = panel.style.display === "none" ? "block" : "none";
+};
+
+// ===========================
+// CONFIG FUNCTIONS
+// ===========================
+function updateAnchors() {
+    const anchors = [
+        {id: 'anchor_0', x: 0, y: 0, z: 0},
+        {id: 'anchor_1', x: parseFloat(document.getElementById('anchor1-x').value), y: 0, z: 0},
+        {id: 'anchor_2', x: parseFloat(document.getElementById('anchor2-x').value), y: 0, z: 0},
+        {id: 'anchor_3', x: 50, y: parseFloat(document.getElementById('anchor3-y').value), z: 0}
+    ];
+    
+    fetch('/uwb_config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({anchors: anchors})
+    })
+    .then(res => res.json())
+    .then(data => alert('Anchors configured: ' + data.anchors_configured))
+    .catch(err => alert('Error: ' + err));
+}
+
+function simulateTest() {
+    fetch('/uwb_simulate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tag_x: 25, tag_y: 5, noise_std: 0.15})
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert(`Simulation Test:\nTrue: (${data.simulated_tag_position.x}, ${data.simulated_tag_position.y})\nEstimated: (${data.estimated_position.x.toFixed(2)}, ${data.estimated_position.y.toFixed(2)})\nAccuracy: ${data.accuracy}m`);
+    })
+    .catch(err => alert('Error: ' + err));
+}
+
+// Hide loading indicator when ready
+window.addEventListener('load', () => {
+    document.getElementById('loading').classList.add('hidden');
+});
+</script>
+
+</body>
+</html>
