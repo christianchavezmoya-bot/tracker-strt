@@ -70,6 +70,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     const tid = params.get('tracker');
     if (tid && window.selectTracker) setTimeout(() => window.selectTracker(Number(tid)), 900);
+    const alertId = params.get('alert');
+    if (alertId) {
+      setTimeout(() => {
+        if (window.showToast) window.showToast('Alert #' + alertId + ' — location highlighted', 'info');
+        // Open alerts panel if present
+        const btn = document.getElementById('btnAlerts') || document.querySelector('[onclick*="toggleAlert"]');
+        if (btn && typeof btn.click === 'function') btn.click();
+      }, 600);
+    }
   } catch (e) {}
   // Viewer: hide setup / manage tools
   try {
@@ -214,7 +223,23 @@ function renderTagList() {
   document.getElementById('filterCount').textContent = filtered.length;
 
   if (filtered.length === 0) {
-    list.innerHTML = '<div class="tag-loading">No assets match filters</div>';
+    const total = trackerList.length;
+    if (total === 0) {
+      list.innerHTML = `<div class="tag-empty" style="padding:24px 16px;text-align:center;color:var(--text-muted)">
+        <div style="font-size:28px;margin-bottom:10px;opacity:.5"><i class="fa-solid fa-tags"></i></div>
+        <div style="font-weight:600;color:var(--text-secondary);margin-bottom:6px">No trackers yet</div>
+        <p style="font-size:12px;line-height:1.5;margin-bottom:14px">Register tags or place anchors to see live assets on the map.</p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <a href="/trackers" class="btn btn-primary btn-sm" style="text-decoration:none;justify-content:center"><i class="fa-solid fa-plus"></i> Add trackers</a>
+          <a href="/?mode=setup" class="btn btn-secondary btn-sm" style="text-decoration:none;justify-content:center"><i class="fa-solid fa-wrench"></i> Map Setup</a>
+        </div>
+      </div>`;
+    } else {
+      list.innerHTML = `<div class="tag-loading" style="padding:20px;text-align:center">
+        No assets match filters<br>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="document.getElementById('filterAll')?.click()">Show all</button>
+      </div>`;
+    }
     return;
   }
   list.innerHTML = filtered.map(t => {
@@ -985,23 +1010,29 @@ async function updateDashboardKPIs() {
   const offlineCount = trackerList.filter(t => t.asset_state === 'OFFLINE' || t.asset_state === 'DECOMMISSIONED').length;
   if (kpiOffline) kpiOffline.textContent = offlineCount;
 
-  // System status
+  // System status — prefer stream/ingestion health
   try {
-    const [statusRes, countsRes] = await Promise.all([
+    const [statusRes, streamRes, countsRes] = await Promise.all([
       API.get('/settings/status'),
+      API.get('/stream/status'),
       API.get('/alerts/counts'),
     ]);
     const statusData = await API.json(statusRes);
+    const streamData = await API.json(streamRes);
     const countsData = await API.json(countsRes);
 
-    // Bridge status
-    const bridgeUp = statusData && statusData.bridge_online === true;
+    const ingestionUp = streamData && streamData.ingestion_running === true;
+    const systemOk = statusData && statusData.ok === true;
+    const bridgeUp = ingestionUp || systemOk;
     if (kpiSystemDot) {
-      kpiSystemDot.className = `kpi-dot ${bridgeUp ? 'dot-green' : 'dot-red'}`;
+      kpiSystemDot.className = `kpi-dot ${ingestionUp ? 'dot-green' : (systemOk ? 'dot-yellow' : 'dot-red')}`;
     }
     if (kpiSystemStatus) {
-      kpiSystemStatus.textContent = bridgeUp ? 'ONLINE' : 'OFFLINE';
-      kpiSystemStatus.style.color = bridgeUp ? 'var(--green)' : 'var(--red)';
+      kpiSystemStatus.textContent = ingestionUp ? 'ONLINE' : (systemOk ? 'IDLE' : 'OFFLINE');
+      kpiSystemStatus.style.color = ingestionUp ? 'var(--green)' : (systemOk ? 'var(--yellow)' : 'var(--red)');
+      kpiSystemStatus.title = streamData
+        ? `SSE clients: ${streamData.sse_clients ?? '—'} · queue: ${streamData.queue_depth ?? '—'}`
+        : '';
     }
 
     // Average response from counts

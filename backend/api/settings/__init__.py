@@ -369,8 +369,18 @@ def system_status():
     total_history = TrackingHistory.query.count()
     total_snapshots = PositionSnapshot.query.count()
 
+    ingestion_running = False
+    try:
+        from backend.services.ingestion_loop import get_ingestion_loop
+        loop = get_ingestion_loop()
+        ingestion_running = bool(loop and loop.is_alive())
+    except Exception:
+        pass
+
     return jsonify({
         "ok": True,
+        "bridge_online": ingestion_running,
+        "ingestion_running": ingestion_running,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "trackers": {
             "total": total_trackers,

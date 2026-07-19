@@ -117,3 +117,20 @@ def test_nodes_include_metadata_field(client, auth_headers, app):
     hit = next((i for i in items if i.get("mac_address") == "AA:BB:CC:DD:EE:99"), None)
     assert hit is not None
     assert hit.get("metadata", {}).get("coverage_radius_m") == 15
+
+
+def test_health_endpoint(client):
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert (res.get_json() or {}).get("ok") is True
+    res2 = client.get("/api/health")
+    assert res2.status_code == 200
+
+
+def test_settings_status_has_bridge_flag(client, auth_headers):
+    res = client.get("/api/settings/status", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.get_json() or {}
+    assert "bridge_online" in data
+    assert "ingestion_running" in data
+    assert data.get("ok") is True

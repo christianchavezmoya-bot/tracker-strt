@@ -466,6 +466,7 @@ function renderAlertSection() {
   const container = document.getElementById('alertFields');
   const fields = [
     'no_signal_timeout', 'low_battery_threshold', 'max_speed',
+    'proximity_meters', 'no_movement_timeout',
     'voc_threshold', 'temp_high_threshold', 'gas_threshold',
     'heart_rate_min', 'heart_rate_max', 'offline_check_interval',
   ];
@@ -506,12 +507,20 @@ const DEFAULT_SETTINGS = {
   no_signal_timeout: { label: 'No Signal Timeout (s)', scope: 'ALERT', type: 'number', description: 'Seconds before a tracker is marked offline', default: '120' },
   low_battery_threshold: { label: 'Low Battery (%)', scope: 'ALERT', type: 'number', description: 'Battery level that triggers low-battery alert', default: '20' },
   max_speed: { label: 'Max Speed (m/s)', scope: 'ALERT', type: 'number', description: 'Speed above which a HIGH_SPEED alert fires', default: '5.0' },
+  proximity_meters: { label: 'Proximity Alert (m)', scope: 'ALERT', type: 'number', description: 'Warn when two tags are closer than this distance', default: '2.0' },
   no_movement_timeout: { label: 'No Movement Timeout (min)', scope: 'ALERT', type: 'number', description: 'Minutes of no movement before alert fires', default: '30' },
+  voc_threshold: { label: 'VOC Threshold', scope: 'ALERT', type: 'number', description: 'VOC ppm threshold for environmental alert', default: '500' },
+  temp_high_threshold: { label: 'Temp High (°C)', scope: 'ALERT', type: 'number', description: 'Temperature high alert threshold', default: '45' },
+  gas_threshold: { label: 'Gas Threshold', scope: 'ALERT', type: 'number', description: 'Gas sensor alert threshold', default: '50' },
+  heart_rate_min: { label: 'Heart Rate Min', scope: 'ALERT', type: 'number', description: 'Minimum heart rate (bpm)', default: '40' },
+  heart_rate_max: { label: 'Heart Rate Max', scope: 'ALERT', type: 'number', description: 'Maximum heart rate (bpm)', default: '180' },
+  offline_check_interval: { label: 'Offline Check (s)', scope: 'ALERT', type: 'number', description: 'How often to evaluate offline trackers', default: '30' },
   data_retention_days: { label: 'Data Retention (days)', scope: 'SYSTEM', type: 'number', description: 'How long to keep tracking history', default: '30' },
   sse_heartbeat_interval: { label: 'SSE Heartbeat (s)', scope: 'SYSTEM', type: 'number', description: 'Interval between SSE keepalive heartbeats', default: '15' },
   mqtt_broker_host: { label: 'MQTT Broker Host', scope: 'SYSTEM', type: 'text', description: 'Hostname of the MQTT broker', default: 'localhost' },
   log_level: { label: 'Log Level', scope: 'SYSTEM', type: 'select', options: ['DEBUG', 'INFO', 'WARNING', 'ERROR'], description: 'Backend log verbosity', default: 'INFO' },
   calibration_required: { label: 'Require Map Calibration', scope: 'SYSTEM', type: 'bool', description: 'Require floor plan calibration before tracking starts', default: 'true' },
+  position_smoothing: { label: 'Position Smoothing', scope: 'SYSTEM', type: 'bool', description: 'Smooth live position updates', default: 'true' },
 };
 
 function renderInput(key, s) {

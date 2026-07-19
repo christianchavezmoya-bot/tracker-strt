@@ -70,6 +70,7 @@ ROLE_PERMISSIONS: dict[UserRole, Set[str]] = {
         Permission.VIEW_ZONE,
         Permission.CREATE_ZONE,
         Permission.EDIT_ZONE,
+        Permission.DELETE_ZONE,
         Permission.VIEW_ALERT,
         Permission.ACKNOWLEDGE_ALERT,
         Permission.TRIGGER_ALARM,

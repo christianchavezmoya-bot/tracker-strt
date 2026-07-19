@@ -283,12 +283,11 @@ def create_app(test_config: dict = None) -> Flask:
     def search_page():
         return render_template("dashboard/search.html")
 
-    # ── Error handlers ────────────────────────────────────────────────────────
-    @app.errorhandler(404)
-    def not_found(e):
-        if request.path.startswith("/api/"):
-            return jsonify({"error": "Not found"}), 404
-        return render_template("dashboard/index.html"), 200   # SPA fallback
+    # ── Lightweight health (no auth) for probes ───────────────────────────────
+    @app.route("/health")
+    @app.route("/api/health")
+    def health():
+        return jsonify({"ok": True, "service": "holo-rtls"}), 200
 
     @app.errorhandler(500)
     def server_error(e):

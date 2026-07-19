@@ -780,7 +780,13 @@ async function renderZones() {
         const latlng = L.CRS.Simple.unproject(L.point(pos.x, pos.y));
         const c = { RESTRICTED: { color: '#ff4444', fill: '#ff4444' }, DANGER: { color: '#ff6b35', fill: '#ff6b35' } }[zone.zone_type] || { color: '#00e5ff', fill: '#00e5ff' };
         const layer = L.circle(latlng, { radius: zone.radius || 5, color: c.color, fillColor: c.fill, fillOpacity: 0.06, weight: zone.zone_type === 'RESTRICTED' ? 2 : 1, opacity: zone.zone_type === 'RESTRICTED' ? 0.7 : 0.3, dashArray: zone.zone_type === 'DANGER' ? '6,4' : null }).addTo(window._map2d);
-        layer.bindTooltip(zone.name, { permanent: false, direction: 'top', className: 'holo-tooltip' });
+        layer.bindTooltip(zone.name + ' · click to edit', { permanent: false, direction: 'top', className: 'holo-tooltip' });
+        layer._zoneData = zone;
+        layer.on('click', (e) => {
+          if (_zoneDrawMode || _sectionDrawMode) return;
+          L.DomEvent.stopPropagation(e);
+          _editZoneOnMap(zone);
+        });
         _zoneLayers.push(layer);
       });
     }
@@ -793,7 +799,13 @@ async function renderZones() {
         const ring = Array.isArray(coords[0]) ? (Array.isArray(coords[0][0]) ? coords[0] : coords) : coords;
         const latlngs = ring.map(([x, y]) => L.CRS.Simple.unproject(L.point(typeof x === 'number' ? x : parseFloat(x), typeof y === 'number' ? y : parseFloat(y))));
         const layer = L.polygon(latlngs, { color: section.color_hex || '#00e5ff', fillColor: section.color_hex || '#00e5ff', fillOpacity: section.is_restricted ? 0.08 : 0.03, weight: 1.5, opacity: 0.35 }).addTo(window._map2d);
-        layer.bindTooltip(section.name, { sticky: true, className: 'holo-tooltip' });
+        layer.bindTooltip(section.name + ' · click to edit', { sticky: true, className: 'holo-tooltip' });
+        layer._sectionData = section;
+        layer.on('click', (e) => {
+          if (_zoneDrawMode || _sectionDrawMode) return;
+          L.DomEvent.stopPropagation(e);
+          _editSectionOnMap(section);
+        });
         _sectionLayers.push(layer);
       });
     }
@@ -1056,13 +1068,89 @@ function _showSectionForm(polygon) {
 
 async function _placeZoneAt(latlng) {
   const pt = L.CRS.Simple.project(latlng);
-  _showZoneForm(pt.x, pt.y);
+  _showZoneForm(pt.x, pt.y, null);
 }
 
-function _showZoneForm(x, y) {
+function _editZoneOnMap(zone) {
+  const pos = zone.position || { x: zone.pos_x || 0, y: zone.pos_y || 0 };
+  _showZoneForm(Number(pos.x) || 0, Number(pos.y) || 0, zone);
+}
+
+function _editSectionOnMap(section) {
+  // Lightweight section edit form (name / restricted / color)
+  document.getElementById('sectionDrawForm')?.remove();
   document.getElementById('zoneDrawForm')?.remove();
   const mapEl = document.getElementById('map2d');
   if (!mapEl) return;
+  const panel = document.createElement('div');
+  panel.id = 'sectionDrawForm';
+  Object.assign(panel.style, {
+    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+    zIndex: '1002', background: 'rgba(8,15,30,0.97)',
+    border: '1px solid rgba(0,229,255,0.3)', borderRadius: '14px', padding: '20px 24px',
+    width: '360px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(12px)', fontFamily: 'var(--font-body, system-ui)',
+  });
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:700;color:var(--cyan,#00e5ff)">
+        <i class="fa-solid fa-draw-polygon"></i> Edit Section
+      </div>
+      <button id="secFormClose" style="background:none;border:none;color:#888;cursor:pointer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">NAME *</label>
+    <input id="secNameInput" type="text" value="${(section.name || '').replace(/"/g, '&quot;')}"
+      style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:12px">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c8d6e5;margin-bottom:12px;cursor:pointer">
+      <input type="checkbox" id="secRestrictedInput" ${section.is_restricted ? 'checked' : ''}> Restricted (alerts on enter)
+    </label>
+    <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">COLOR</label>
+    <input id="secColorInput" type="color" value="${section.color_hex || '#00e5ff'}" style="margin-bottom:16px;width:48px;height:32px;border:none;background:transparent">
+    <div style="display:flex;gap:8px">
+      <button id="secSaveBtn" style="flex:1;padding:9px;background:var(--cyan,#00e5ff);border:none;border-radius:8px;color:#081f3e;font-weight:700;font-size:13px;cursor:pointer">
+        <i class="fa-solid fa-floppy-disk"></i> Save
+      </button>
+      <a href="/zones" style="padding:9px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#aaa;font-size:12px;text-decoration:none;display:inline-flex;align-items:center">List</a>
+      <button id="secFormCancel" style="padding:9px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#888;cursor:pointer">Cancel</button>
+    </div>
+  `;
+  mapEl.appendChild(panel);
+  const close = () => panel.remove();
+  panel.querySelector('#secFormClose').onclick = close;
+  panel.querySelector('#secFormCancel').onclick = close;
+  panel.querySelector('#secSaveBtn').onclick = async () => {
+    const name = (panel.querySelector('#secNameInput').value || '').trim();
+    if (!name) { panel.querySelector('#secNameInput').focus(); return; }
+    const btn = panel.querySelector('#secSaveBtn');
+    btn.disabled = true;
+    try {
+      const res = await API.patch('/zones/sections/' + section.id, {
+        name,
+        is_restricted: !!panel.querySelector('#secRestrictedInput').checked,
+        color_hex: panel.querySelector('#secColorInput').value || '#00e5ff',
+      });
+      const data = await API.json(res);
+      if (res && res.ok) {
+        if (window.showToast) window.showToast('Section updated', 'success');
+        renderZones();
+        close();
+      } else {
+        if (window.showToast) window.showToast((data && data.error) || 'Failed', 'error');
+        btn.disabled = false;
+      }
+    } catch (e) {
+      if (window.showToast) window.showToast('Network error', 'error');
+      btn.disabled = false;
+    }
+  };
+}
+
+function _showZoneForm(x, y, existing) {
+  document.getElementById('zoneDrawForm')?.remove();
+  const mapEl = document.getElementById('map2d');
+  if (!mapEl) return;
+  const isEdit = !!(existing && existing.id);
+  const rules = (existing && existing.rules) || {};
   const panel = document.createElement('div');
   panel.id = 'zoneDrawForm';
   Object.assign(panel.style, {
@@ -1072,92 +1160,109 @@ function _showZoneForm(x, y) {
     width: '380px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
     backdropFilter: 'blur(12px)', fontFamily: 'var(--font-body, system-ui)',
   });
+  const nameVal = isEdit ? (existing.name || '') : 'New zone';
+  const typeVal = isEdit ? (existing.zone_type || 'RESTRICTED') : 'RESTRICTED';
+  const radiusVal = isEdit ? (existing.radius || _zoneDrawRadius) : _zoneDrawRadius;
+  const dwellVal = rules.dwell_max_seconds != null ? rules.dwell_max_seconds : '';
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div style="font-size:14px;font-weight:700;color:var(--cyan,#00e5ff)">
-        <i class="fa-solid fa-circle"></i> New Zone
+        <i class="fa-solid fa-circle"></i> ${isEdit ? 'Edit Zone' : 'New Zone'}
       </div>
       <button id="zoneFormClose" style="background:none;border:none;color:#888;cursor:pointer"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div style="font-size:12px;color:#aaa;margin-bottom:14px;padding:8px 10px;background:rgba(0,229,255,0.06);border-radius:6px">
-      Center X=${x.toFixed(2)} · Y=${y.toFixed(2)} m
+      Center X=${Number(x).toFixed(2)} · Y=${Number(y).toFixed(2)} m
     </div>
     <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">NAME *</label>
-    <input id="zoneNameInput" type="text" value="New zone"
+    <input id="zoneNameInput" type="text" value="${String(nameVal).replace(/"/g, '&quot;')}"
       style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:12px">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">TYPE</label>
         <select id="zoneTypeInput" style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none">
-          <option value="RESTRICTED">RESTRICTED</option>
-          <option value="DANGER">DANGER</option>
-          <option value="CHECK_IN">CHECK_IN</option>
-          <option value="CHECK_OUT">CHECK_OUT</option>
-          <option value="NORMAL">NORMAL</option>
+          ${['RESTRICTED','DANGER','CHECK_IN','CHECK_OUT','NORMAL'].map(t =>
+            `<option value="${t}" ${t === typeVal ? 'selected' : ''}>${t}</option>`).join('')}
         </select>
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">RADIUS (m)</label>
-        <input id="zoneRadiusInput" type="number" min="0.5" step="0.5" value="${_zoneDrawRadius}"
+        <input id="zoneRadiusInput" type="number" min="0.5" step="0.5" value="${radiusVal}"
           style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;box-sizing:border-box">
       </div>
     </div>
     <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:700;color:#888;margin-bottom:8px;letter-spacing:0.06em">RULES</div>
       <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">DWELL MAX (seconds, blank = none)</label>
-      <input id="zoneDwellInput" type="number" min="1" step="1" placeholder="e.g. 120"
+      <input id="zoneDwellInput" type="number" min="1" step="1" placeholder="e.g. 120" value="${dwellVal}"
         style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:10px">
       <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c8d6e5;margin-bottom:6px;cursor:pointer">
-        <input type="checkbox" id="zoneOnEnterInput" checked> Alert on enter
+        <input type="checkbox" id="zoneOnEnterInput" ${rules.on_enter !== false ? 'checked' : ''}> Alert on enter
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c8d6e5;cursor:pointer">
-        <input type="checkbox" id="zoneOnExitInput"> Alert on exit
+        <input type="checkbox" id="zoneOnExitInput" ${rules.on_exit ? 'checked' : ''}> Alert on exit
       </label>
     </div>
     <div style="display:flex;gap:8px">
       <button id="zoneSaveBtn" style="flex:1;padding:9px;background:var(--cyan,#00e5ff);border:none;border-radius:8px;color:#081f3e;font-weight:700;font-size:13px;cursor:pointer">
-        <i class="fa-solid fa-floppy-disk"></i> Save Zone
+        <i class="fa-solid fa-floppy-disk"></i> ${isEdit ? 'Save Changes' : 'Save Zone'}
       </button>
+      ${isEdit ? `<button id="zoneDeleteBtn" style="padding:9px 12px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);border-radius:8px;color:#fca5a5;cursor:pointer" title="Delete"><i class="fa-solid fa-trash"></i></button>` : ''}
       <button id="zoneFormCancel" style="padding:9px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#888;cursor:pointer">Cancel</button>
     </div>
   `;
   mapEl.appendChild(panel);
-  const close = () => exitZoneDrawMode();
+  const close = () => { panel.remove(); exitZoneDrawMode(); };
   panel.querySelector('#zoneFormClose').onclick = close;
   panel.querySelector('#zoneFormCancel').onclick = close;
+  const delBtn = panel.querySelector('#zoneDeleteBtn');
+  if (delBtn) {
+    delBtn.onclick = async () => {
+      if (!confirm('Delete this zone?')) return;
+      const res = await API.del('/zones/' + existing.id);
+      if (res && res.ok) {
+        if (window.showToast) window.showToast('Zone deleted', 'success');
+        renderZones();
+        close();
+      } else if (window.showToast) window.showToast('Delete failed', 'error');
+    };
+  }
   panel.querySelector('#zoneSaveBtn').onclick = async () => {
     const name = (panel.querySelector('#zoneNameInput').value || '').trim();
     if (!name) { panel.querySelector('#zoneNameInput').focus(); return; }
     const radius = parseFloat(panel.querySelector('#zoneRadiusInput').value) || _zoneDrawRadius;
     const dwellRaw = panel.querySelector('#zoneDwellInput').value;
-    const rules = {
+    const rulesOut = {
       on_enter: !!panel.querySelector('#zoneOnEnterInput').checked,
       on_exit: !!panel.querySelector('#zoneOnExitInput').checked,
       dwell_max_seconds: dwellRaw ? parseFloat(dwellRaw) : null,
     };
     const btn = panel.querySelector('#zoneSaveBtn');
     btn.disabled = true;
+    const body = {
+      name,
+      zone_type: panel.querySelector('#zoneTypeInput').value,
+      pos_x: x,
+      pos_y: y,
+      pos_z: (existing && existing.position && existing.position.z) || 0,
+      radius,
+      rules: rulesOut,
+    };
     try {
-      const res = await API.post('/zones', {
-        name,
-        zone_type: panel.querySelector('#zoneTypeInput').value,
-        pos_x: x,
-        pos_y: y,
-        pos_z: 0,
-        radius,
-        rules,
-      });
+      const res = isEdit
+        ? await API.patch('/zones/' + existing.id, body)
+        : await API.post('/zones', body);
       const data = await API.json(res);
       if (res && res.ok) {
-        if (window.showToast) window.showToast('Zone created', 'success');
+        if (window.showToast) window.showToast(isEdit ? 'Zone updated' : 'Zone created', 'success');
         renderZones();
-        exitZoneDrawMode();
+        close();
       } else {
-        if (window.showToast) window.showToast((data && data.error) || 'Failed to create zone', 'error');
+        if (window.showToast) window.showToast((data && data.error) || 'Failed to save zone', 'error');
         btn.disabled = false;
       }
     } catch (e) {
-      if (window.showToast) window.showToast('Network error creating zone', 'error');
+      if (window.showToast) window.showToast('Network error saving zone', 'error');
       btn.disabled = false;
     }
   };

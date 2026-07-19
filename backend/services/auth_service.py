@@ -334,10 +334,23 @@ class AuthService:
                 from backend.services.notification_service import get_notification_service
                 notif = get_notification_service()
                 if notif:
+                    from flask import request as flask_request
+                    base = ""
+                    try:
+                        base = flask_request.host_url.rstrip("/")
+                    except Exception:
+                        base = ""
+                    reset_path = f"/reset-password?token={token}"
+                    reset_url = f"{base}{reset_path}" if base else reset_path
                     mailed = bool(notif.send_email(
                         to=user.email,
                         subject="HOLO-RTLS password reset",
-                        body=f"Use this token on the reset form (valid ~1 hour):\n\n{token}\n\nOr open /login and paste it into Reset Password.",
+                        body=(
+                            "Reset your HOLO-RTLS password using this link (valid ~1 hour):\n\n"
+                            f"{reset_url}\n\n"
+                            "If the link does not open, go to Reset Password and paste this token:\n\n"
+                            f"{token}\n"
+                        ),
                     ))
             except Exception:
                 mailed = False
