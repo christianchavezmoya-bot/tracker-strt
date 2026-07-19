@@ -12,6 +12,7 @@ nodes_bp = Blueprint("nodes", __name__, url_prefix="/api/nodes")
 @nodes_bp.route("", methods=["GET"])
 @jwt_required()
 def list_nodes():
+    """
     === A
     tags:
       - Nodes
@@ -42,6 +43,7 @@ def list_nodes():
                 type: object
             total: { type: integer }
     ===
+    """
     q = WifiNode.query
     if request.args.get("status"):
         q = q.filter_by(status=int(request.args["status"]))
@@ -55,6 +57,7 @@ def list_nodes():
 @jwt_required()
 @require_permission(Permission.MANAGE_NODE)
 def create_node():
+    """
     === A
     tags:
       - Nodes
@@ -101,6 +104,7 @@ def create_node():
       409:
         description: MAC address already exists
     ===
+    """
     body = request.get_json() or {}
     mac = body.get("mac_address", "").strip()
     if not mac:
@@ -120,6 +124,7 @@ def create_node():
 @nodes_bp.route("/<int:node_id>", methods=["GET"])
 @jwt_required()
 def get_node(node_id):
+    """
     === A
     tags:
       - Nodes
@@ -144,6 +149,7 @@ def get_node(node_id):
       404:
         description: Node not found
     ===
+    """
     node = WifiNode.query.get_or_404(node_id)
     return jsonify({"node": node.to_dict()})
 
@@ -152,6 +158,7 @@ def get_node(node_id):
 @jwt_required()
 @require_permission(Permission.MANAGE_NODE)
 def update_node(node_id):
+    """
     === A
     tags:
       - Nodes
@@ -188,6 +195,7 @@ def update_node(node_id):
       404:
         description: Node not found
     ===
+    """
     node = WifiNode.query.get_or_404(node_id)
     body = request.get_json() or {}
     for field in ["assigned_name", "pos_x", "pos_y", "pos_z", "node_type",
@@ -204,6 +212,7 @@ def update_node(node_id):
 @jwt_required()
 @require_permission(Permission.MANAGE_NODE)
 def delete_node(node_id):
+    """
     === A
     tags:
       - Nodes
@@ -228,6 +237,7 @@ def delete_node(node_id):
       404:
         description: Node not found
     ===
+    """
     node = WifiNode.query.get_or_404(node_id)
     AuditLog.log(action="node.delete", user_id=int(get_jwt_identity()),
                  entity_type="WifiNode", entity_id=node.id)

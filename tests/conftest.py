@@ -9,13 +9,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only-32chars")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-for-testing-only-32chars")
+os.environ.setdefault("FLASK_DEBUG", "1")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def app():
     from backend.app import create_app
     test_config = {
         "TESTING": True,
+        "DEBUG": True,
         "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
         "WTF_CSRF_ENABLED": False,
         "JWT_SECRET_KEY": "test-jwt-secret-key-for-testing-only-32chars",
@@ -101,6 +103,35 @@ def admin_headers(client, admin_user):
     resp = client.post("/api/auth/login", json={
         "email_or_username": "admin@example.com",
         "password": "AdminPass123!",
+    })
+    data = resp.get_json()
+    return {"Authorization": f"Bearer {data['access_token']}"}
+
+
+@pytest.fixture
+def viewer_user(app):
+    """Create a VIEWER-role user."""
+    from backend.extensions import db
+    from backend.models import User, UserRole
+    with app.app_context():
+        user = User(
+            email="viewer@example.com",
+            username="viewer",
+            display_name="Viewer User",
+            role=UserRole.VIEWER,
+        )
+        user.set_password("ViewerPass123!")
+        db.session.add(user)
+        db.session.commit()
+        yield user
+
+
+@pytest.fixture
+def viewer_headers(client, viewer_user):
+    """Get JWT access token for viewer_user."""
+    resp = client.post("/api/auth/login", json={
+        "email_or_username": "viewer@example.com",
+        "password": "ViewerPass123!",
     })
     data = resp.get_json()
     return {"Authorization": f"Bearer {data['access_token']}"}

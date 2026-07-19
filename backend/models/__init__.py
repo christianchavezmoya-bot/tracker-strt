@@ -11,9 +11,9 @@ from backend.models.tracker import (
 from backend.models.alert import Alert, Notification, AlertType, AlertState, NotificationType
 from backend.models.audit import AuditLog
 from backend.models.settings import Setting, BusinessLogo, SettingScope
-from backend.models.backup import BackupJob, TrackingHistory, CheckInLog, ApiKey
+from backend.models.backup import BackupJob, CheckInLog, ApiKey
 from backend.models.hardware import HardwareConfig, HardwareType, Protocol, ConnectionStatus
-from backend.models.positioning import TrackingHistory as PosHistory, PositionSnapshot
+from backend.models.positioning import TrackingHistory, PositionSnapshot
 
 __all__ = [
     # User
@@ -29,7 +29,9 @@ __all__ = [
     # Settings
     "Setting", "BusinessLogo", "SettingScope",
     # Backup / History / API
-    "BackupJob", "TrackingHistory", "CheckInLog", "ApiKey",
+    "BackupJob", "CheckInLog", "ApiKey",
+    # Positioning
+    "TrackingHistory", "PositionSnapshot",
     # Hardware
     "HardwareConfig",
 ]

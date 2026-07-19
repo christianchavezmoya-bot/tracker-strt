@@ -13,7 +13,7 @@ class TrackingHistory(db.Model):
     __tablename__ = "tracking_history"
 
     id = db.Column(db.Integer, primary_key=True)
-    tracker_id = db.Column(db.Integer, db.ForeignKey("tracker.id"), nullable=False, index=True)
+    tracker_id = db.Column(db.Integer, db.ForeignKey("trackers.id"), nullable=False, index=True)
     x = db.Column(db.Float, nullable=False)          # real-world X in meters
     y = db.Column(db.Float, nullable=False)          # real-world Y in meters
     z = db.Column(db.Float, default=0.0)              # real-world Z in meters (floor height)
@@ -29,6 +29,8 @@ class TrackingHistory(db.Model):
     __table_args__ = (
         db.Index("ix_tracking_history_tracker_timestamp", "tracker_id", "timestamp"),
     )
+
+    tracker = db.relationship("Tracker", back_populates="history")
 
     def to_dict(self):
         return {
@@ -53,7 +55,7 @@ class PositionSnapshot(db.Model):
     """
     __tablename__ = "position_snapshot"
 
-    tracker_id = db.Column(db.Integer, db.ForeignKey("tracker.id"), primary_key=True)
+    tracker_id = db.Column(db.Integer, db.ForeignKey("trackers.id"), primary_key=True)
     x = db.Column(db.Float, nullable=False)
     y = db.Column(db.Float, nullable=False)
     z = db.Column(db.Float, default=0.0)

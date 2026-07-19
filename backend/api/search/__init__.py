@@ -18,6 +18,7 @@ def _safe_enum(enum_cls, value, fallback="UNKNOWN"):
 @search_bp.route("", methods=["GET"])
 @jwt_required()
 def global_search():
+    """
     === A
     tags:
       - Search

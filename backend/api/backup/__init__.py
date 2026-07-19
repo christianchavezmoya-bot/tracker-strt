@@ -16,6 +16,7 @@ backup_bp = Blueprint("backup", __name__, url_prefix="/api/backup")
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)
 def list_backups():
+    """
     === A
     tags:
       - Backup
@@ -34,6 +35,7 @@ def list_backups():
               items:
                 type: object
     ===
+    """
     jobs = BackupJob.query.order_by(BackupJob.created_at.desc()).limit(50).all()
     return jsonify({"items": [j.to_dict() for j in jobs]})
 
@@ -42,6 +44,7 @@ def list_backups():
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)
 def trigger_backup():
+    """
     === A
     tags:
       - Backup
@@ -64,6 +67,7 @@ def trigger_backup():
             error: { type: string }
             job: { type: object }
     ===
+    """
     user_id = int(get_jwt_identity())
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"holo_rtls_backup_{ts}.db"
@@ -98,6 +102,7 @@ def trigger_backup():
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)
 def download_backup(job_id):
+    """
     === A
     tags:
       - Backup
@@ -123,6 +128,7 @@ def download_backup(job_id):
       404:
         description: Backup file not found
     ===
+    """
     job = BackupJob.query.get_or_404(job_id)
     filepath = config.BACKUP_DIR / job.filename
     if not filepath.exists():
@@ -139,6 +145,7 @@ def download_backup(job_id):
 @jwt_required()
 @require_permission(Permission.RESTORE_BACKUP)
 def restore_backup(job_id):
+    """
     === A
     tags:
       - Backup
@@ -176,6 +183,7 @@ def restore_backup(job_id):
       404:
         description: Backup file not found
     ===
+    """
     job = BackupJob.query.get_or_404(job_id)
     filepath = config.BACKUP_DIR / job.filename
     if not filepath.exists():

@@ -10,6 +10,21 @@ let selectedTrackerId = null;
 let currentView = '2d';
 let filters = { people: true, machines: true, sensors: true, offline: true, alerts: true };
 
+// ── Historical Playback ─────────────────────────────────────────────────────
+let isPlayback = false;
+let playbackInterval = null;
+let playbackSpeed = 1;
+let playbackStart = null;  // datetime of playback window start
+let playbackEnd = null;    // datetime of playback window end
+let playbackCursor = null;  // current playback position (Date)
+let playbackData = {};     // tracker_id → [{x, y, z, timestamp}]
+let playbackIsPlaying = false;
+let heatmapVisible = false;
+let heatmapCanvas = null;
+let heatmapCtx = null;
+let zoneOccupancyOpen = false;
+let zoneOccupancyTimer = null;
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   if (!API.isLoggedIn()) {
@@ -19,6 +34,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadUserInfo();
   await Promise.all([loadTrackers(), loadAlerts(), loadNodes(), loadZones()]);
   updateStats();
+  updateDashboardKPIs();
+  initHeatmapCanvas();
+  renderZoneOccupancy();
+  zoneOccupancyTimer = setInterval(() => {
+    if (!isPlayback) renderZoneOccupancy();
+  }, 10000);
   initMap2D();
   initMap3D();
   startSSE();
@@ -303,15 +324,67 @@ function resetCamera() {
   }
 }
 function toggleHeatmap() {
-  // Toggle heatmap layer visibility
-  if (window._heatmapLayer) {
-    const m = window._map2d;
-    if (m.hasLayer(window._heatmapLayer)) {
-      m.removeLayer(window._heatmapLayer);
-    } else {
-      window._heatmapLayer.addTo(m);
+  if (!heatmapCanvas) initHeatmapCanvas();
+  heatmapVisible = !heatmapVisible;
+  if (heatmapVisible) {
+    heatmapCanvas.style.display = 'block';
+    renderHeatmapFrame();
+  } else {
+    heatmapCanvas.style.display = 'none';
+    if (heatmapCtx) {
+      heatmapCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
     }
   }
+}
+
+function initHeatmapCanvas() {
+  heatmapCanvas = document.getElementById('heatmapCanvas');
+  if (!heatmapCanvas) return;
+  heatmapCtx = heatmapCanvas.getContext('2d');
+  // Size canvas to parent
+  const container = heatmapCanvas.parentElement;
+  const ro = new ResizeObserver(() => {
+    heatmapCanvas.width = container.offsetWidth;
+    heatmapCanvas.height = container.offsetHeight;
+    if (heatmapVisible) renderHeatmapFrame();
+  });
+  ro.observe(container);
+}
+
+function renderHeatmapFrame() {
+  if (!heatmapCtx || !heatmapVisible) return;
+  const canvas = heatmapCanvas;
+  const ctx = heatmapCtx;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const map2d = window._map2d;
+  const bounds = map2d ? map2d.getBounds() : null;
+  const zoom = map2d ? map2d.getZoom() : 16;
+
+  Object.values(trackers).forEach(t => {
+    if (t.pos_x === undefined || t.pos_y === undefined) return;
+    let px, py;
+    if (bounds) {
+      // Convert world coords to screen pixels using Leaflet latLng
+      const latlng = map2d.unproject([t.pos_x, t.pos_y], zoom);
+      px = map2d.latLngToContainerPoint(latlng).x;
+      py = map2d.latLngToContainerPoint(latlng).y;
+    } else {
+      // Fallback: scale world coords to canvas size
+      px = ((t.pos_x % 1000) / 1000) * canvas.width;
+      py = ((t.pos_y % 1000) / 1000) * canvas.height;
+    }
+
+    const radius = 80;
+    const grad = ctx.createRadialGradient(px, py, 0, px, py, radius);
+    grad.addColorStop(0, 'rgba(0, 229, 255, 0.7)');
+    grad.addColorStop(0.4, 'rgba(0, 229, 255, 0.25)');
+    grad.addColorStop(1, 'rgba(0, 229, 255, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 function toggleLayers() {
   // Show layer control
@@ -407,6 +480,9 @@ function startSSE() {
 }
 
 function handlePositionUpdate(data) {
+  // Ignore SSE updates during playback — playback uses history data only
+  if (isPlayback) return;
+
   const tid = data.tracker_id;
   if (!trackers[tid]) return;  // Unknown tracker
   trackers[tid].pos_x = data.x;
@@ -479,6 +555,344 @@ function updateStatusIndicator(connected) {
     dot.style.boxShadow = '0 0 6px var(--yellow)';
     text.textContent = 'Reconnecting...';
   }
+}
+
+// ── Phase 10: Full Historical Playback ───────────────────────────────────────
+async function startPlayback() {
+  if (isPlayback) return;
+  isPlayback = true;
+  playbackIsPlaying = false;
+  playbackSpeed = 1;
+  playbackData = {};
+
+  // Window: last 1 hour
+  playbackEnd = new Date();
+  playbackStart = new Date(playbackEnd.getTime() - 60 * 60 * 1000);
+  playbackCursor = new Date(playbackEnd.getTime() - 60 * 60 * 1000);
+
+  // Show playback bar
+  document.getElementById('playbackBar').style.display = 'flex';
+  document.getElementById('playbackBadgeLive').style.display = 'none';
+  document.getElementById('playbackBadgePlayback').style.display = 'inline-block';
+  document.getElementById('playbackPlayIcon').className = 'fa-solid fa-play';
+  document.getElementById('playbackPlayBtn').classList.remove('playing');
+  updatePlaybackSpeedUI(1);
+
+  // Update range labels
+  document.getElementById('playbackRangeStart').textContent = fmtTime(playbackStart);
+
+  // Fetch history for all trackers in parallel
+  const trackerIds = Object.keys(trackers);
+  await Promise.all(trackerIds.map(async tid => {
+    try {
+      const res = await API.get(`/positioning/history/${tid}?limit=2000`);
+      const data = await API.json(res);
+      if (data && data.history) {
+        // Filter to window
+        playbackData[tid] = data.history
+          .filter(p => {
+            const ts = new Date(p.timestamp);
+            return ts >= playbackStart && ts <= playbackEnd;
+          })
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      }
+    } catch (e) {
+      playbackData[tid] = [];
+    }
+  }));
+
+  // Configure slider
+  const slider = document.getElementById('playbackSlider');
+  slider.min = 0;
+  slider.max = 3600; // 1 hour in seconds
+  slider.value = 0;
+
+  renderPlaybackFrame();
+  startPlaybackInterval();
+}
+
+function stopPlayback() {
+  if (!isPlayback) return;
+  isPlayback = false;
+  playbackIsPlaying = false;
+  if (playbackInterval) {
+    clearInterval(playbackInterval);
+    playbackInterval = null;
+  }
+  document.getElementById('playbackBar').style.display = 'none';
+  // Restore live badge
+  document.getElementById('playbackBadgeLive').style.display = 'inline-block';
+  document.getElementById('playbackBadgePlayback').style.display = 'none';
+  // Clear playback cursor
+  playbackCursor = null;
+  playbackData = {};
+  // Force re-render from live data
+  if (window.renderTrackerDots) window.renderTrackerDots();
+  renderTagList();
+  updateStats();
+}
+
+function startPlaybackInterval() {
+  if (playbackInterval) clearInterval(playbackInterval);
+  playbackInterval = setInterval(advancePlayback, 1000); // tick every second
+}
+
+function advancePlayback() {
+  if (!isPlayback || !playbackIsPlaying) return;
+  const msToAdd = playbackSpeed * 1000;
+  playbackCursor = new Date(playbackCursor.getTime() + msToAdd);
+  if (playbackCursor >= playbackEnd) {
+    playbackCursor = new Date(playbackEnd);
+    playbackIsPlaying = false;
+    if (playbackInterval) {
+      clearInterval(playbackInterval);
+      playbackInterval = null;
+    }
+    document.getElementById('playbackPlayIcon').className = 'fa-solid fa-play';
+    document.getElementById('playbackPlayBtn').classList.remove('playing');
+  }
+  renderPlaybackFrame();
+  // Sync slider
+  const elapsed = Math.floor((playbackCursor.getTime() - playbackStart.getTime()) / 1000);
+  document.getElementById('playbackSlider').value = Math.min(elapsed, 3600);
+}
+
+function renderPlaybackFrame() {
+  if (!playbackCursor) return;
+  // Update timestamp display
+  document.getElementById('playbackTimestamp').textContent = fmtDateTime(playbackCursor);
+
+  // For each tracker, find the most recent history point <= cursor
+  Object.keys(playbackData).forEach(tid => {
+    const points = playbackData[tid];
+    if (!points || points.length === 0) return;
+    let frame = null;
+    for (let i = points.length - 1; i >= 0; i--) {
+      if (new Date(points[i].timestamp) <= playbackCursor) {
+        frame = points[i];
+        break;
+      }
+    }
+    if (!frame) return;
+    // Update tracker object
+    if (trackers[tid]) {
+      trackers[tid].pos_x = frame.x;
+      trackers[tid].pos_y = frame.y;
+      trackers[tid].pos_z = frame.z || 0;
+      trackers[tid].last_seen = frame.timestamp;
+    }
+    // Update map
+    if (window.updateTrackerDot) window.updateTrackerDot(tid, frame);
+    if (window.updateTrackerDot3D) window.updateTrackerDot3D(tid, frame);
+    // Update tag card if selected
+    if (selectedTrackerId === tid) {
+      showTagCard(trackers[tid]);
+    }
+  });
+
+  // Update tag list time display
+  const row = selectedTrackerId
+    ? document.querySelector(`.tag-item[data-id="${selectedTrackerId}"]`)
+    : null;
+  if (row) {
+    const timeEl = row.querySelector('.tag-item-time');
+    if (timeEl) timeEl.textContent = timeAgo(playbackCursor.toISOString());
+  }
+}
+
+function seekPlayback(timestamp) {
+  if (!isPlayback) return;
+  playbackCursor = new Date(timestamp);
+  if (playbackCursor < playbackStart) playbackCursor = new Date(playbackStart);
+  if (playbackCursor > playbackEnd) playbackCursor = new Date(playbackEnd);
+  renderPlaybackFrame();
+}
+
+function stepPlayback(deltaSeconds) {
+  if (!isPlayback) return;
+  playbackIsPlaying = false;
+  if (playbackInterval) {
+    clearInterval(playbackInterval);
+    playbackInterval = null;
+  }
+  document.getElementById('playbackPlayIcon').className = 'fa-solid fa-play';
+  document.getElementById('playbackPlayBtn').classList.remove('playing');
+  playbackCursor = new Date(playbackCursor.getTime() + deltaSeconds * 1000);
+  if (playbackCursor < playbackStart) playbackCursor = new Date(playbackStart);
+  if (playbackCursor > playbackEnd) playbackCursor = new Date(playbackEnd);
+  // Sync slider
+  const elapsed = Math.floor((playbackCursor.getTime() - playbackStart.getTime()) / 1000);
+  document.getElementById('playbackSlider').value = Math.min(Math.max(elapsed, 0), 3600);
+  renderPlaybackFrame();
+}
+
+function setPlaybackSpeed(speed) {
+  if (!isPlayback) return;
+  playbackSpeed = speed;
+  updatePlaybackSpeedUI(speed);
+  // Restart interval with new speed
+  startPlaybackInterval();
+}
+
+function updatePlaybackSpeedUI(speed) {
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.speed) === speed);
+  });
+}
+
+function togglePlaybackPlay() {
+  if (!isPlayback) return;
+  playbackIsPlaying = !playbackIsPlaying;
+  const icon = document.getElementById('playbackPlayIcon');
+  const btn = document.getElementById('playbackPlayBtn');
+  if (playbackIsPlaying) {
+    icon.className = 'fa-solid fa-pause';
+    btn.classList.add('playing');
+    startPlaybackInterval();
+  } else {
+    icon.className = 'fa-solid fa-play';
+    btn.classList.remove('playing');
+    if (playbackInterval) {
+      clearInterval(playbackInterval);
+      playbackInterval = null;
+    }
+  }
+}
+
+function onPlaybackSliderInput(value) {
+  if (!isPlayback) return;
+  playbackIsPlaying = false;
+  if (playbackInterval) {
+    clearInterval(playbackInterval);
+    playbackInterval = null;
+  }
+  document.getElementById('playbackPlayIcon').className = 'fa-solid fa-play';
+  document.getElementById('playbackPlayBtn').classList.remove('playing');
+  playbackCursor = new Date(playbackStart.getTime() + parseInt(value) * 1000);
+  renderPlaybackFrame();
+}
+
+// ── Dashboard KPIs ───────────────────────────────────────────────────────────
+async function updateDashboardKPIs() {
+  const kpiTrackers = document.getElementById('kpiTrackers');
+  const kpiAlerts = document.getElementById('kpiAlerts');
+  const kpiOffline = document.getElementById('kpiOffline');
+  const kpiAvgResponse = document.getElementById('kpiAvgResponse');
+  const kpiSystemDot = document.getElementById('kpiSystemDot');
+  const kpiSystemStatus = document.getElementById('kpiSystemStatus');
+
+  // Active trackers count
+  const activeCount = trackerList.filter(t => t.asset_state === 'ACTIVE').length;
+  if (kpiTrackers) kpiTrackers.textContent = activeCount;
+
+  // Alerts count
+  const alertCount = alerts.filter(a => a.state === 'ACTIVE').length;
+  if (kpiAlerts) kpiAlerts.textContent = alertCount;
+
+  // Offline count
+  const offlineCount = trackerList.filter(t => t.asset_state === 'OFFLINE' || t.asset_state === 'DECOMMISSIONED').length;
+  if (kpiOffline) kpiOffline.textContent = offlineCount;
+
+  // System status
+  try {
+    const [statusRes, countsRes] = await Promise.all([
+      API.get('/settings/status'),
+      API.get('/alerts/counts'),
+    ]);
+    const statusData = await API.json(statusRes);
+    const countsData = await API.json(countsRes);
+
+    // Bridge status
+    const bridgeUp = statusData && statusData.bridge_online === true;
+    if (kpiSystemDot) {
+      kpiSystemDot.className = `kpi-dot ${bridgeUp ? 'dot-green' : 'dot-red'}`;
+    }
+    if (kpiSystemStatus) {
+      kpiSystemStatus.textContent = bridgeUp ? 'ONLINE' : 'OFFLINE';
+      kpiSystemStatus.style.color = bridgeUp ? 'var(--green)' : 'var(--red)';
+    }
+
+    // Average response from counts
+    if (countsData && countsData.avg_response_minutes !== undefined) {
+      if (kpiAvgResponse) kpiAvgResponse.textContent = countsData.avg_response_minutes.toFixed(1) + 'm';
+    }
+  } catch (e) {
+    // Fallback: use computed values
+    if (kpiSystemDot) kpiSystemDot.className = 'kpi-dot dot-gray';
+    if (kpiSystemStatus) { kpiSystemStatus.textContent = '—'; kpiSystemStatus.style.color = ''; }
+  }
+}
+
+// ── Zone Occupancy ───────────────────────────────────────────────────────────
+function toggleZoneOccupancy() {
+  const section = document.getElementById('zoneOccupancySection');
+  zoneOccupancyOpen = !zoneOccupancyOpen;
+  section.classList.toggle('open', zoneOccupancyOpen);
+  if (zoneOccupancyOpen && !isPlayback) renderZoneOccupancy();
+}
+
+async function renderZoneOccupancy() {
+  const body = document.getElementById('zoneOccBody');
+  const loading = document.getElementById('zoneOccLoading');
+  if (!body) return;
+
+  // Show loading
+  if (loading) loading.style.display = 'block';
+
+  try {
+    const res = await API.get('/positioning/live');
+    const data = await API.json(res);
+    if (!data || !data.positions) {
+      body.innerHTML = '<div class="zone-occ-loading">No data</div>';
+      return;
+    }
+
+    // Count trackers per section
+    const sectionCounts = {};
+    data.positions.forEach(p => {
+      const section = p.section_name || p.section || 'Unknown';
+      if (!sectionCounts[section]) sectionCounts[section] = 0;
+      sectionCounts[section]++;
+    });
+
+    const entries = Object.entries(sectionCounts).sort((a, b) => b[1] - a[1]);
+    const maxCount = entries.length > 0 ? entries[0][1] : 1;
+
+    if (entries.length === 0) {
+      body.innerHTML = '<div class="zone-occ-loading">No zone data</div>';
+      return;
+    }
+
+    body.innerHTML = entries.map(([section, count]) => {
+      const pct = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+      return `
+      <div class="zone-bar-wrap">
+        <div class="zone-bar-label" title="${section}">${section}</div>
+        <div class="zone-bar-track">
+          <div class="zone-bar" style="width:${pct}%"></div>
+        </div>
+        <div class="zone-bar-count">${count}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    body.innerHTML = '<div class="zone-occ-loading">Failed to load</div>';
+  }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function fmtTime(d) {
+  if (!d) return '—';
+  const date = d instanceof Date ? d : new Date(d);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function fmtDateTime(d) {
+  if (!d) return '—';
+  const date = d instanceof Date ? d : new Date(d);
+  return date.toLocaleString([], {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
 }
 
 // ── History Playback ─────────────────────────────────────────────────────────

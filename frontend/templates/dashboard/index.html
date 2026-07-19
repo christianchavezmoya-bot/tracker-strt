@@ -11,6 +11,386 @@
   <link rel="apple-touch-icon" href="/static/assets/icon-192.png">
   <link rel="stylesheet" href="/static/css/main.css">
   <link rel="stylesheet" href="/static/css/dashboard.css">
+  <style>
+    /* ══ Analytics Row ═══════════════════════════════════════════════════════ */
+    .analytics-row {
+      display: flex;
+      flex-direction: row;
+      gap: 12px;
+      padding: 10px 20px;
+      background: rgba(8, 15, 30, 0.6);
+      border-bottom: 1px solid var(--border-dim);
+      flex-shrink: 0;
+    }
+
+    .kpi-mini-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius);
+      padding: 8px 16px;
+      min-width: 100px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi-dot {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .kpi-number {
+      font-size: 26px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+      line-height: 1;
+    }
+
+    .kpi-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* ══ Playback Bar ════════════════════════════════════════════════════════ */
+    .playback-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: rgba(8, 15, 30, 0.96);
+      border-top: 1px solid var(--cyan);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 16px;
+      z-index: 40;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+    }
+
+    .playback-mode-badge {
+      display: flex;
+      align-items: center;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      font-family: var(--font-mono);
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid;
+      height: 22px;
+    }
+
+    .badge-live {
+      display: inline-block;
+      padding: 3px 8px;
+      background: rgba(0, 255, 100, 0.15);
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    .badge-playback {
+      display: inline-block;
+      padding: 3px 8px;
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--cyan);
+      border-color: var(--cyan);
+    }
+
+    .playback-timestamp {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cyan);
+      min-width: 140px;
+      text-align: center;
+    }
+
+    .playback-slider-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .playback-slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
+      outline: none;
+      cursor: pointer;
+    }
+
+    .playback-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+      cursor: pointer;
+      border: 2px solid rgba(0, 0, 0, 0.4);
+    }
+
+    .playback-slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+      cursor: pointer;
+      border: 2px solid rgba(0, 0, 0, 0.4);
+    }
+
+    .playback-range-labels {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      min-width: 40px;
+    }
+
+    .playback-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .playback-step-btn {
+      width: 28px;
+      height: 28px;
+      background: rgba(0, 229, 255, 0.08);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      border-radius: var(--radius);
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      transition: all 0.15s;
+    }
+
+    .playback-step-btn:hover {
+      background: rgba(0, 229, 255, 0.2);
+      color: var(--cyan);
+      border-color: var(--cyan);
+    }
+
+    .playback-play-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(0, 229, 255, 0.15);
+      border: 2px solid var(--cyan);
+      color: var(--cyan);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.15s;
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+    }
+
+    .playback-play-btn:hover {
+      background: var(--cyan);
+      color: #000;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
+    }
+
+    .playback-play-btn.playing {
+      background: var(--cyan);
+      color: #000;
+      box-shadow: 0 0 16px var(--cyan);
+    }
+
+    .playback-speed-group {
+      display: flex;
+      gap: 4px;
+    }
+
+    .speed-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-dim);
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .speed-btn:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    .speed-btn.active {
+      background: rgba(0, 229, 255, 0.2);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    .playback-exit-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 68, 68, 0.12);
+      border: 1px solid rgba(255, 68, 68, 0.4);
+      color: var(--red);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .playback-exit-btn:hover {
+      background: rgba(255, 68, 68, 0.25);
+      box-shadow: 0 0 12px rgba(255, 68, 68, 0.3);
+    }
+
+    /* ══ Zone Occupancy ═════════════════════════════════════════════════════ */
+    .zone-occupancy-section {
+      border-bottom: 1px solid var(--border-dim);
+      padding-bottom: 8px;
+      margin-bottom: 4px;
+    }
+
+    .zone-occ-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 8px 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: color 0.15s;
+    }
+
+    .zone-occ-toggle:hover {
+      color: var(--text-primary);
+    }
+
+    .zone-occ-toggle i:first-child {
+      color: var(--cyan);
+      font-size: 11px;
+    }
+
+    .zone-chevron {
+      margin-left: auto;
+      font-size: 9px;
+      transition: transform 0.2s;
+    }
+
+    .zone-occupancy-section.open .zone-chevron {
+      transform: rotate(180deg);
+    }
+
+    .zone-occ-body {
+      display: none;
+      padding: 4px 12px 8px;
+    }
+
+    .zone-occupancy-section.open .zone-occ-body {
+      display: block;
+    }
+
+    .zone-occ-loading {
+      text-align: center;
+      padding: 8px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .zone-occ-loading i {
+      color: var(--cyan);
+    }
+
+    .zone-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+
+    .zone-bar-label {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      min-width: 80px;
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .zone-bar-track {
+      flex: 1;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .zone-bar {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--cyan), rgba(0, 229, 255, 0.4));
+      transition: width 0.4s ease;
+      min-width: 2px;
+    }
+
+    .zone-bar-count {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--cyan);
+      min-width: 16px;
+      text-align: right;
+    }
+
+    /* ══ Heatmap Canvas ══════════════════════════════════════════════════════ */
+    .heatmap-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2;
+      opacity: 0.5;
+    }
+
+    .heatmap-canvas.hidden {
+      display: none;
+    }
+  </style>
   <!-- Leaflet for 2D map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <!-- Fonts -->
@@ -81,6 +461,35 @@
   </div>
 </header>
 
+<!-- ── Analytics Row ─────────────────────────────────────────────────── -->
+<div class="analytics-row" id="analyticsRow">
+  <div class="kpi-mini-card">
+    <div class="kpi-dot dot-green"></div>
+    <div class="kpi-number" id="kpiTrackers">—</div>
+    <div class="kpi-label">Active Trackers</div>
+  </div>
+  <div class="kpi-mini-card">
+    <div class="kpi-dot dot-red"></div>
+    <div class="kpi-number" id="kpiAlerts">—</div>
+    <div class="kpi-label">Active Alerts</div>
+  </div>
+  <div class="kpi-mini-card">
+    <div class="kpi-dot dot-gray"></div>
+    <div class="kpi-number" id="kpiOffline">—</div>
+    <div class="kpi-label">Offline</div>
+  </div>
+  <div class="kpi-mini-card">
+    <div class="kpi-dot dot-yellow"></div>
+    <div class="kpi-number" id="kpiAvgResponse">—</div>
+    <div class="kpi-label">Avg Response</div>
+  </div>
+  <div class="kpi-mini-card">
+    <div class="kpi-dot dot-green" id="kpiSystemDot"></div>
+    <div class="kpi-number" id="kpiSystemStatus">—</div>
+    <div class="kpi-label">System Status</div>
+  </div>
+</div>
+
 <!-- ── Main Layout ─────────────────────────────────────────────────────── -->
 <div class="main-layout">
 
@@ -124,6 +533,19 @@
       </div>
     </div>
 
+    <!-- Zone Occupancy -->
+    <div class="zone-occupancy-section" id="zoneOccupancySection">
+      <button class="zone-occ-toggle" onclick="toggleZoneOccupancy()">
+        <i class="fa-solid fa-chart-bar"></i> ZONE OCCUPANCY
+        <i class="fa-solid fa-chevron-down zone-chevron" id="zoneOccChevron"></i>
+      </button>
+      <div class="zone-occ-body" id="zoneOccBody">
+        <div class="zone-occ-loading" id="zoneOccLoading">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+        </div>
+      </div>
+    </div>
+
     <div class="tag-list" id="tagList">
       <div class="tag-loading">
         <i class="fa-solid fa-circle-notch fa-spin"></i> Loading assets...
@@ -133,10 +555,25 @@
 
   <!-- Map Container -->
   <main class="map-container">
+    <!-- Heatmap Canvas Overlay -->
+    <canvas id="heatmapCanvas" class="heatmap-canvas" style="display:none"></canvas>
+
     <!-- 2D Map -->
     <div id="map2d" class="map-view active"></div>
     <!-- 3D Map -->
     <div id="map3d" class="map-view" style="display:none">
+      <!-- 3D Floor Switcher -->
+      <div id="floorSwitcher" style="
+        position:absolute;top:12px;left:12px;z-index:10;
+        display:flex;flex-direction:column;gap:4px;
+        background:rgba(8,15,30,0.9);border:1px solid rgba(0,229,255,0.2);
+        border-radius:10px;padding:8px;
+      ">
+        <div style="font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:0.1em;padding:2px 6px">FLOOR</div>
+        <button class="floor-btn active" data-floor="0" onclick="window.set3DFloor(0)">Level 0</button>
+        <button class="floor-btn" data-floor="1" onclick="window.set3DFloor(1)">Level 1</button>
+        <button class="floor-btn" data-floor="2" onclick="window.set3DFloor(2)">Level 2</button>
+      </div>
       <canvas id="threeCanvas" style="width:100%;height:100%"></canvas>
     </div>
 
@@ -153,6 +590,9 @@
       </button>
       <button class="tool-btn" onclick="toggleHeatmap()" title="Heatmap">
         <i class="fa-solid fa-fire"></i>
+      </button>
+      <button class="tool-btn" onclick="focusSelectedTracker3D()" title="Focus Selected">
+        <i class="fa-solid fa-bullseye"></i>
       </button>
     </div>
 
@@ -220,6 +660,56 @@
           <i class="fa-solid fa-pen"></i> Edit
         </button>
       </div>
+    </div>
+
+    <!-- Timeline Playback Bar (Phase 10) -->
+    <div class="playback-bar" id="playbackBar" style="display:none">
+      <!-- Mode badge -->
+      <div class="playback-mode-badge" id="playbackModeBadge">
+        <span class="badge-live" id="playbackBadgeLive">LIVE</span>
+        <span class="badge-playback" id="playbackBadgePlayback" style="display:none">PLAYBACK</span>
+      </div>
+
+      <!-- Timestamp display -->
+      <div class="playback-timestamp" id="playbackTimestamp">—</div>
+
+      <!-- Range slider -->
+      <div class="playback-slider-wrap">
+        <input type="range" class="playback-slider"
+               id="playbackSlider" min="0" max="100" value="100"
+               oninput="onPlaybackSliderInput(this.value)">
+      </div>
+
+      <!-- Time range labels -->
+      <div class="playback-range-labels">
+        <span id="playbackRangeStart">—</span>
+      </div>
+
+      <!-- Controls -->
+      <div class="playback-controls">
+        <button class="playback-step-btn" onclick="stepPlayback(-60)" title="Step back 1 min">
+          <i class="fa-solid fa-backward-step"></i>
+        </button>
+        <button class="playback-play-btn" id="playbackPlayBtn" onclick="togglePlaybackPlay()" title="Play/Pause">
+          <i class="fa-solid fa-play" id="playbackPlayIcon"></i>
+        </button>
+        <button class="playback-step-btn" onclick="stepPlayback(60)" title="Step forward 1 min">
+          <i class="fa-solid fa-forward-step"></i>
+        </button>
+      </div>
+
+      <!-- Speed selector -->
+      <div class="playback-speed-group">
+        <button class="speed-btn active" data-speed="1" onclick="setPlaybackSpeed(1)">1×</button>
+        <button class="speed-btn" data-speed="2" onclick="setPlaybackSpeed(2)">2×</button>
+        <button class="speed-btn" data-speed="5" onclick="setPlaybackSpeed(5)">5×</button>
+        <button class="speed-btn" data-speed="10" onclick="setPlaybackSpeed(10)">10×</button>
+      </div>
+
+      <!-- Exit playback -->
+      <button class="playback-exit-btn" onclick="stopPlayback()">
+        <i class="fa-solid fa-arrow-left"></i> EXIT PLAYBACK
+      </button>
     </div>
 
     <!-- History Playback Bar -->

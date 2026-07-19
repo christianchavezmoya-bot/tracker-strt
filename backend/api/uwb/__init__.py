@@ -9,7 +9,7 @@ from backend.services.rbac_service import Permission
 
 # Import reference modules directly (they are part of this repo now)
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "reference"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "reference"))
 from uwb_positioning import UWBPositioning, simulate_uwb_ranges
 from uwb_serial_reader import create_mock_reader
 

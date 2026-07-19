@@ -21,6 +21,7 @@ class Protocol(IntEnum):
     WEBSOCKET  = 4
     BLE_GATT   = 5
     HTTP_POLL  = 6
+    I2C        = 7
 
 
 class ConnectionStatus(IntEnum):

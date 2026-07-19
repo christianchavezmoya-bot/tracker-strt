@@ -27,6 +27,7 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 # ── Register ──────────────────────────────────────────────────────────────────
 @auth_bp.route("/register", methods=["POST"])
 def register():
+    """
     === A
     tags:
       - Auth
@@ -123,12 +124,13 @@ def register():
     if err:
         return jsonify({"error": err}), 400
 
-    return jsonify({"message": "User created", "user": user.to_dict()}), 201
+    return jsonify({"message": "User created", "user": user.to_dict(include_email=True)}), 201
 
 
 # ── Login ────────────────────────────────────────────────────────────────────
 @auth_bp.route("/login", methods=["POST"])
 def login():
+    """
     === A
     tags:
       - Auth
@@ -211,6 +213,7 @@ def login():
 @auth_bp.route("/logout", methods=["POST"])
 @jwt_required()
 def logout():
+    """
     === A
     tags:
       - Auth
@@ -226,6 +229,7 @@ def logout():
           properties:
             message: { type: string }
     ===
+    """
     user_id = int(get_jwt_identity())
     AUTH_SERVICE.logout(user_id, ip_address=request.remote_addr)
     return jsonify({"message": "Logged out"}), 200
@@ -235,6 +239,7 @@ def logout():
 @auth_bp.route("/refresh", methods=["POST"])
 @jwt_required(refresh=True)
 def refresh():
+    """
     === A
     tags:
       - Auth
@@ -250,6 +255,7 @@ def refresh():
           properties:
             access_token: { type: string }
     ===
+    """
     user_id = get_jwt_identity()
     new_token = AUTH_SERVICE.refresh_access_token(user_id)
     return jsonify({"access_token": new_token}), 200
@@ -259,6 +265,7 @@ def refresh():
 @auth_bp.route("/2fa/setup", methods=["POST"])
 @jwt_required()
 def setup_2fa():
+    """
     === A
     tags:
       - Auth
@@ -277,6 +284,7 @@ def setup_2fa():
       400:
         description: 2FA setup failed
     ===
+    """
     user_id = int(get_jwt_identity())
     qr_b64, err = AUTH_SERVICE.setup_2fa(user_id)
     if err:
@@ -290,6 +298,7 @@ def setup_2fa():
 @auth_bp.route("/2fa/confirm", methods=["POST"])
 @jwt_required()
 def confirm_2fa():
+    """
     === A
     tags:
       - Auth
@@ -319,6 +328,7 @@ def confirm_2fa():
       400:
         description: Invalid TOTP code
     ===
+    """
     user_id = int(get_jwt_identity())
     body = request.get_json() or {}
     totp_code = body.get("totp_code", "").strip()
@@ -336,6 +346,7 @@ def confirm_2fa():
 @auth_bp.route("/2fa/disable", methods=["POST"])
 @jwt_required()
 def disable_2fa():
+    """
     === A
     tags:
       - Auth
@@ -369,6 +380,7 @@ def disable_2fa():
       400:
         description: Verification failed
     ===
+    """
     user_id = int(get_jwt_identity())
     body = request.get_json() or {}
     password = body.get("password", "")
@@ -384,6 +396,7 @@ def disable_2fa():
 # ── Password Reset ────────────────────────────────────────────────────────────
 @auth_bp.route("/password/reset-request", methods=["POST"])
 def reset_request():
+    """
     === A
     tags:
       - Auth
@@ -410,6 +423,7 @@ def reset_request():
           properties:
             message: { type: string }
     ===
+    """
     body = request.get_json() or {}
     email = body.get("email", "").strip()
     if not email:
@@ -422,6 +436,7 @@ def reset_request():
 
 @auth_bp.route("/password/reset", methods=["POST"])
 def reset_password():
+    """
     === A
     tags:
       - Auth
@@ -454,6 +469,7 @@ def reset_password():
       400:
         description: Invalid or expired token
     ===
+    """
     body = request.get_json() or {}
     token = body.get("token", "")
     new_password = body.get("new_password", "")
@@ -472,6 +488,7 @@ def reset_password():
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()
 def me():
+    """
     === A
     tags:
       - Auth
@@ -497,6 +514,7 @@ def me():
       404:
         description: User not found
     ===
+    """
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
     if not user:
@@ -507,6 +525,7 @@ def me():
 @auth_bp.route("/permissions", methods=["GET"])
 @jwt_required()
 def permissions():
+    """
     === A
     tags:
       - Auth
@@ -528,6 +547,7 @@ def permissions():
       404:
         description: User not found
     ===
+    """
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
     if not user:

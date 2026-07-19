@@ -110,3 +110,24 @@ MAX_PAGE_SIZE = 500
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")   # Restrict in production
+
+# ── Security / Rate Limiting ────────────────────────────────────────────────
+RATE_LIMIT_STORAGE = os.getenv("RATE_LIMIT_STORAGE", "memory://")  # Use Redis URI for production
+RATE_LIMIT_DEFAULT = os.getenv("RATE_LIMIT_DEFAULT", "200/minute")
+RATE_LIMIT_AUTH = os.getenv("RATE_LIMIT_AUTH", "10/minute")
+RATE_LIMIT_LOGIN = os.getenv("RATE_LIMIT_LOGIN", "5/minute")
+RATE_LIMIT_STRICT = os.getenv("RATE_LIMIT_STRICT", "1/minute")
+
+# ── Database Pool ────────────────────────────────────────────────────────────
+# Defined here for reference; applied in app.py after URI is resolved
+# (pool options are invalid for SQLite :memory: used in tests)
+SQLALCHEMY_ENGINE_OPTIONS = {
+    "pool_size": int(os.getenv("DB_POOL_SIZE", 10)),
+    "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 20)),
+    "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", 3600)),
+    "pool_pre_ping": True,
+    "echo": os.getenv("SQLALCHEMY_ECHO", "0") == "1",
+}
+
+# ── Compression ──────────────────────────────────────────────────────────────
+COMPRESS_ENABLED = os.getenv("COMPRESS_ENABLED", "1") == "1"

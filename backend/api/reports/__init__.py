@@ -41,6 +41,7 @@ def _date_range(days=7):
 @reports_bp.route("/summary", methods=["GET"])
 @jwt_required()
 def summary():
+    """
     === A
     tags:
       - Reports
@@ -171,6 +172,7 @@ def summary():
 @reports_bp.route("/tracker-activity", methods=["GET"])
 @jwt_required()
 def tracker_activity():
+    """
     === A
     tags:
       - Reports
@@ -264,6 +266,7 @@ def tracker_activity():
 @reports_bp.route("/alert-breakdown", methods=["GET"])
 @jwt_required()
 def alert_breakdown():
+    """
     === A
     tags:
       - Reports
@@ -322,6 +325,7 @@ def alert_breakdown():
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)
 def daily_summary():
+    """
     === A
     tags:
       - Reports
@@ -347,6 +351,7 @@ def daily_summary():
       400:
         description: Invalid date format
     ===
+    """
     date_str = request.args.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     try:
         day = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -373,6 +378,7 @@ def daily_summary():
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)
 def battery_report():
+    """
     === A
     tags:
       - Reports
@@ -389,6 +395,7 @@ def battery_report():
               type: string
               format: binary
     ===
+    """
     trackers = Tracker.query.filter(Tracker.battery_level < 100).order_by(Tracker.battery_level).all()
     rows = [{
         "hardware_id": t.hardware_id,
@@ -403,6 +410,7 @@ def battery_report():
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)
 def distance_report():
+    """
     === A
     tags:
       - Reports
@@ -425,6 +433,7 @@ def distance_report():
               type: string
               format: binary
     ===
+    """
     tracker_id = request.args.get("tracker_id", type=int)
     since = datetime.now(timezone.utc) - timedelta(days=1)
     q = TrackingHistory.query.filter(TrackingHistory.timestamp >= since)
@@ -447,6 +456,7 @@ def distance_report():
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)
 def full_export():
+    """
     === A
     tags:
       - Reports

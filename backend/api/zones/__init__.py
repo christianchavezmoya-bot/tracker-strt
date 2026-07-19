@@ -12,6 +12,7 @@ zones_bp = Blueprint("zones", __name__, url_prefix="/api/zones")
 @zones_bp.route("/sections", methods=["GET"])
 @jwt_required()
 def list_sections():
+    """
     === A
     tags:
       - Zones
@@ -30,6 +31,7 @@ def list_sections():
               items:
                 type: object
     ===
+    """
     items = MapSection.query.order_by(MapSection.z_index).all()
     return jsonify({"items": [s.to_dict() for s in items]})
 
@@ -38,6 +40,7 @@ def list_sections():
 @jwt_required()
 @require_permission(Permission.CREATE_ZONE)
 def create_section():
+    """
     === A
     tags:
       - Zones
@@ -85,6 +88,7 @@ def create_section():
       400:
         description: Name is required
     ===
+    """
     body = request.get_json() or {}
     name = body.get("name", "").strip()
     if not name:
@@ -109,6 +113,7 @@ def create_section():
 @jwt_required()
 @require_permission(Permission.EDIT_ZONE)
 def update_section(section_id):
+    """
     === A
     tags:
       - Zones
@@ -144,6 +149,7 @@ def update_section(section_id):
       404:
         description: Section not found
     ===
+    """
     section = MapSection.query.get_or_404(section_id)
     body = request.get_json() or {}
     for field in ["name", "polygon_json", "is_restricted", "is_visible", "color_hex", "z_index"]:
@@ -159,6 +165,7 @@ def update_section(section_id):
 @jwt_required()
 @require_permission(Permission.DELETE_ZONE)
 def delete_section(section_id):
+    """
     === A
     tags:
       - Zones
@@ -183,6 +190,7 @@ def delete_section(section_id):
       404:
         description: Section not found
     ===
+    """
     section = MapSection.query.get_or_404(section_id)
     AuditLog.log(action="section.delete", user_id=int(get_jwt_identity()),
                  entity_type="MapSection", entity_id=section.id)
@@ -195,6 +203,7 @@ def delete_section(section_id):
 @zones_bp.route("", methods=["GET"])
 @jwt_required()
 def list_zones():
+    """
     === A
     tags:
       - Zones
@@ -213,6 +222,7 @@ def list_zones():
               items:
                 type: object
     ===
+    """
     items = Zone.query.all()
     return jsonify({"items": [z.to_dict() for z in items]})
 
@@ -221,6 +231,7 @@ def list_zones():
 @jwt_required()
 @require_permission(Permission.CREATE_ZONE)
 def create_zone():
+    """
     === A
     tags:
       - Zones
@@ -275,6 +286,7 @@ def create_zone():
           properties:
             zone: { type: object }
     ===
+    """
     body = request.get_json() or {}
     zone = Zone(
         name=body.get("name", "").strip() or "Unnamed Zone",
@@ -298,6 +310,7 @@ def create_zone():
 @jwt_required()
 @require_permission(Permission.EDIT_ZONE)
 def update_zone(zone_id):
+    """
     === A
     tags:
       - Zones
@@ -336,6 +349,7 @@ def update_zone(zone_id):
       404:
         description: Zone not found
     ===
+    """
     zone = Zone.query.get_or_404(zone_id)
     body = request.get_json() or {}
     for field in ["name", "zone_type", "pos_x", "pos_y", "pos_z",
@@ -352,6 +366,7 @@ def update_zone(zone_id):
 @jwt_required()
 @require_permission(Permission.DELETE_ZONE)
 def delete_zone(zone_id):
+    """
     === A
     tags:
       - Zones
@@ -376,6 +391,7 @@ def delete_zone(zone_id):
       404:
         description: Zone not found
     ===
+    """
     zone = Zone.query.get_or_404(zone_id)
     AuditLog.log(action="zone.delete", user_id=int(get_jwt_identity()),
                  entity_type="Zone", entity_id=zone.id)

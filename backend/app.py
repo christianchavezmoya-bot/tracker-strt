@@ -2,13 +2,14 @@
 HOLO-RTLS — Flask Application Factory
 """
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flasgger import Swagger
 
 from backend import config
 from backend.extensions import db, migrate, jwt, mail
+from backend.security import init_talisman, init_compress, limiter, ValidationError
 
 
 def create_app(test_config: dict = None) -> Flask:
@@ -44,6 +45,20 @@ def create_app(test_config: dict = None) -> Flask:
     if test_config:
         app.config.update(test_config)
 
+    # Set engine options AFTER URI is resolved (handles test :memory: overrides)
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    is_sqlite = db_uri.startswith(("sqlite:", "sqlite3:"))
+    if not is_sqlite:
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "pool_size": int(os.getenv("DB_POOL_SIZE", 10)),
+            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", 20)),
+            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", 3600)),
+            "pool_pre_ping": True,
+            "echo": app.config.get("SQLALCHEMY_ECHO", False),
+        }
+    else:
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {}
+
     # ── Initialize extensions ──────────────────────────────────────────────────
     db.init_app(app)
     migrate.init_app(app, db)
@@ -51,7 +66,33 @@ def create_app(test_config: dict = None) -> Flask:
     mail.init_app(app)
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    CORS(app, resources={r"/api/*": {"origins": config.CORS_ORIGINS}})
+    CORS(app, resources={r"/api/*": {"origins": config.CORS_ORIGINS}},
+         expose_headers=["X-Request-Id", "X-RateLimit-Limit", "X-RateLimit-Remaining"])
+
+    # ── Security headers (CSP, HSTS, etc.) ────────────────────────────────────
+    init_talisman(app)
+
+    # ── Rate limiting ────────────────────────────────────────────────────────
+    if not test_config:
+        limiter.storage_uri = config.RATE_LIMIT_STORAGE
+        limiter._default_limits = [config.RATE_LIMIT_DEFAULT]
+    limiter.init_app(app)
+
+    # ── Compression ───────────────────────────────────────────────────────────
+    if not test_config and config.COMPRESS_ENABLED:
+        init_compress(app)
+
+    # ── Global error handlers ────────────────────────────────────────────────
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(e):
+        return jsonify({"error": e.message, "field": e.field}), 400
+
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        return jsonify({
+            "error": "Rate limit exceeded",
+            "retry_after": e.description,
+        }), 429
 
     # ── Swagger / OpenAPI ─────────────────────────────────────────────────────
     if not test_config:

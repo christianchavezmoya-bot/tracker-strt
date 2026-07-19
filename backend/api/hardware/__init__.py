@@ -19,6 +19,7 @@ hardware_bp = Blueprint("hardware", __name__, url_prefix="/api/hardware")
 @hardware_bp.route("/profiles", methods=["GET"])
 @jwt_required()
 def list_profiles():
+    """
     === A
     tags:
       - Hardware
@@ -70,6 +71,7 @@ def list_profiles():
 @hardware_bp.route("/profiles/type/<hardware_type>", methods=["GET"])
 @jwt_required()
 def profiles_by_type(hardware_type):
+    """
     === A
     tags:
       - Hardware
@@ -120,6 +122,7 @@ def profiles_by_type(hardware_type):
 @hardware_bp.route("", methods=["GET"])
 @jwt_required()
 def list_configs():
+    """
     === A
     tags:
       - Hardware
@@ -139,6 +142,7 @@ def list_configs():
                 type: object
             total: { type: integer }
     ===
+    """
     configs = HardwareConfig.query.order_by(HardwareConfig.hardware_type, HardwareConfig.name).all()
     return jsonify({"items": [c.to_dict() for c in configs], "total": len(configs)})
 
@@ -146,6 +150,7 @@ def list_configs():
 @hardware_bp.route("/<int:config_id>", methods=["GET"])
 @jwt_required()
 def get_config(config_id):
+    """
     === A
     tags:
       - Hardware
@@ -170,6 +175,7 @@ def get_config(config_id):
       404:
         description: Configuration not found
     ===
+    """
     config = HardwareConfig.query.get_or_404(config_id)
     return jsonify({"config": config.to_dict(include_sensitive=False)})
 
@@ -178,6 +184,7 @@ def get_config(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def create_config():
+    """
     === A
     tags:
       - Hardware
@@ -257,6 +264,7 @@ def create_config():
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def update_config(config_id):
+    """
     === A
     tags:
       - Hardware
@@ -290,6 +298,7 @@ def update_config(config_id):
       404:
         description: Configuration not found
     ===
+    """
     config = HardwareConfig.query.get_or_404(config_id)
     body = request.get_json() or {}
 
@@ -318,6 +327,7 @@ def update_config(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def delete_config(config_id):
+    """
     === A
     tags:
       - Hardware
@@ -342,6 +352,7 @@ def delete_config(config_id):
       404:
         description: Configuration not found
     ===
+    """
     config = HardwareConfig.query.get_or_404(config_id)
     AuditLog.log(
         action="hardware.config_delete",
@@ -360,6 +371,7 @@ def delete_config(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def test_connection(config_id):
+    """
     === A
     tags:
       - Hardware
@@ -386,6 +398,7 @@ def test_connection(config_id):
       404:
         description: Configuration not found
     ===
+    """
     config = HardwareConfig.query.get_or_404(config_id)
     profile = get_profile(config.profile_id)
 
@@ -397,6 +410,7 @@ def test_connection(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def connect(config_id):
+    """
     === A
     tags:
       - Hardware
@@ -430,6 +444,7 @@ def connect(config_id):
       404:
         description: Configuration not found
     ===
+    """
     config = HardwareConfig.query.get_or_404(config_id)
     profile = get_config(config.profile_id)
 
@@ -456,6 +471,7 @@ def connect(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def disconnect(config_id):
+    """
     === A
     tags:
       - Hardware
@@ -480,6 +496,7 @@ def disconnect(config_id):
       404:
         description: Configuration not found
     ===
+    """
     config = HardwareConfig.query.get_or_404(config_id)
     config.status = ConnectionStatus.DISCONNECTED
     config.last_seen = None
@@ -490,6 +507,7 @@ def disconnect(config_id):
 @hardware_bp.route("/status", methods=["GET"])
 @jwt_required()
 def hardware_status():
+    """
     === A
     tags:
       - Hardware
@@ -517,6 +535,7 @@ def hardware_status():
                 items:
                   type: object
     ===
+    """
     configs = HardwareConfig.query.all()
     by_type = {}
     for c in configs:

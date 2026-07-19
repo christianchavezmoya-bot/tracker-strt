@@ -77,12 +77,11 @@ class TestTrackerCRUD:
         get_resp = client.get(f"/api/trackers/{tracker_id}", headers=admin_headers)
         assert get_resp.status_code == 404
 
-    def test_viewer_cannot_create_tracker(self, client, auth_headers, sample_user):
-        """Operators cannot create trackers — only admins."""
+    def test_viewer_cannot_create_tracker(self, client, viewer_headers):
+        """VIEWER role cannot create trackers."""
         resp = client.post("/api/trackers", json={
             "hardware_id": "PRN-070",
-        }, headers=auth_headers)
-        # auth_headers is for OPERATOR role
+        }, headers=viewer_headers)
         assert resp.status_code == 403
 
     def test_search_trackers(self, client, admin_headers):

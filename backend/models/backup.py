@@ -37,47 +37,6 @@ class BackupJob(db.Model):
         }
 
 
-# ── Tracking History ─────────────────────────────────────────────────────────
-class TrackingHistory(db.Model):
-    """
-    Position history for all trackers.
-    Written by the positioning engine; queried for playback and reports.
-    Indexed by (tracker_id, timestamp) for fast range queries.
-    """
-    __tablename__ = "tracking_history"
-
-    id          = db.Column(db.Integer, primary_key=True)
-    tracker_id  = db.Column(db.Integer, db.ForeignKey("trackers.id"), nullable=False, index=True)
-    timestamp   = db.Column(db.Float, nullable=False, index=True)   # Unix timestamp
-    pos_x       = db.Column(db.Float, nullable=False)
-    pos_y       = db.Column(db.Float, nullable=False)
-    pos_z       = db.Column(db.Float, nullable=False)
-    section_name = db.Column(db.String(200), nullable=True)
-    alert_status = db.Column(db.Integer, nullable=True)
-    battery_level = db.Column(db.Float, nullable=True)
-    created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Compound index for fast time-range queries per tracker
-    __table_args__ = (
-        db.Index("ix_tracking_history_tracker_timestamp", "tracker_id", "timestamp"),
-    )
-
-    tracker = db.relationship("Tracker", back_populates="history")
-
-    def __repr__(self):
-        return f"<TrackingHistory tracker={self.tracker_id} t={self.timestamp}>"
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "tracker_id": self.tracker_id,
-            "timestamp": self.timestamp,
-            "position": {"x": self.pos_x, "y": self.pos_y, "z": self.pos_z},
-            "section_name": self.section_name,
-            "alert_status": self.alert_status,
-            "battery_level": self.battery_level,
-        }
-
 
 # ── Check-In / Check-Out Log ─────────────────────────────────────────────────
 class CheckInLog(db.Model):

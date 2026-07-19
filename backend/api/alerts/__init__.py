@@ -18,6 +18,7 @@ alerts_bp = Blueprint("alerts", __name__, url_prefix="/api/alerts")
 @alerts_bp.route("", methods=["GET"])
 @jwt_required()
 def list_alerts():
+    """
     === A
     tags:
       - Alerts
@@ -132,6 +133,7 @@ def list_alerts():
 @alerts_bp.route("/active", methods=["GET"])
 @jwt_required()
 def active_alerts():
+    """
     === A
     tags:
       - Alerts
@@ -166,6 +168,7 @@ def active_alerts():
 @alerts_bp.route("/counts", methods=["GET"])
 @jwt_required()
 def alert_counts():
+    """
     === A
     tags:
       - Alerts
@@ -215,6 +218,7 @@ def alert_counts():
 @alerts_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def alert_stats():
+    """
     === A
     tags:
       - Alerts
@@ -282,6 +286,7 @@ def _get_alert_service_stats():
 @alerts_bp.route("/<int:alert_id>", methods=["GET"])
 @jwt_required()
 def get_alert(alert_id):
+    """
     === A
     tags:
       - Alerts
@@ -307,6 +312,7 @@ def get_alert(alert_id):
       404:
         description: Alert not found
     ===
+    """
     alert = Alert.query.get_or_404(alert_id)
     return jsonify({"alert": alert.to_dict()})
 
@@ -317,6 +323,7 @@ def get_alert(alert_id):
 @jwt_required()
 @require_permission(Permission.ACKNOWLEDGE_ALERT)
 def acknowledge_alert(alert_id):
+    """
     === A
     tags:
       - Alerts
@@ -383,6 +390,7 @@ def acknowledge_alert(alert_id):
 @jwt_required()
 @require_permission(Permission.ACKNOWLEDGE_ALERT)
 def resolve_alert(alert_id):
+    """
     === A
     tags:
       - Alerts
@@ -447,6 +455,7 @@ def resolve_alert(alert_id):
 @jwt_required()
 @require_permission(Permission.ACKNOWLEDGE_ALERT)
 def acknowledge_all():
+    """
     === A
     tags:
       - Alerts
@@ -481,6 +490,7 @@ def acknowledge_all():
 @alerts_bp.route("/notifications", methods=["GET"])
 @jwt_required()
 def list_notifications():
+    """
     === A
     tags:
       - Alerts
@@ -550,6 +560,7 @@ def list_notifications():
 @alerts_bp.route("/notifications/<int:notif_id>/read", methods=["POST"])
 @jwt_required()
 def mark_notification_read(notif_id):
+    """
     === A
     tags:
       - Alerts
@@ -588,6 +599,7 @@ def mark_notification_read(notif_id):
 @alerts_bp.route("/notifications/read-all", methods=["POST"])
 @jwt_required()
 def mark_all_read():
+    """
     === A
     tags:
       - Alerts

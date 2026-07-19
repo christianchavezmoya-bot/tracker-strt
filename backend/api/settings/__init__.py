@@ -6,7 +6,7 @@ import os, imghdr, json, uuid
 
 from backend.extensions import db
 from backend.models import Setting, BusinessLogo, AuditLog, SettingScope
-from backend.models.positioning import MapSection
+from backend.models.tracker import MapSection
 from backend.utils.decorators import require_permission, admin_only
 from backend.services.rbac_service import Permission
 from backend import config
@@ -27,6 +27,7 @@ def allowed_ext(filename, allowed_set):
 @settings_bp.route("", methods=["GET"])
 @jwt_required()
 def list_settings():
+    """
     === A
     tags:
       - Settings
@@ -51,6 +52,7 @@ def list_settings():
               items:
                 type: object
     ===
+    """
     scope = request.args.get("scope")
     q = Setting.query
     if scope:
@@ -62,6 +64,7 @@ def list_settings():
 @settings_bp.route("/<key>", methods=["GET"])
 @jwt_required()
 def get_setting(key):
+    """
     === A
     tags:
       - Settings
@@ -86,6 +89,7 @@ def get_setting(key):
       404:
         description: Setting not found
     ===
+    """
     setting = Setting.query.filter_by(key=key).first()
     if not setting:
         return jsonify({"error": "Not found"}), 404
@@ -96,6 +100,7 @@ def get_setting(key):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def update_setting(key):
+    """
     === A
     tags:
       - Settings
@@ -131,6 +136,7 @@ def update_setting(key):
       404:
         description: Not found or no permission
     ===
+    """
     setting = Setting.query.filter_by(key=key).first()
     if not setting:
         user_id = int(get_jwt_identity())
@@ -155,6 +161,7 @@ def update_setting(key):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def upload_logo():
+    """
     === A
     tags:
       - Settings
@@ -179,6 +186,7 @@ def upload_logo():
       400:
         description: No file provided or invalid file type
     ===
+    """
     file = request.files.get("logo")
     if not file:
         return jsonify({"error": "No file provided"}), 400
@@ -221,6 +229,7 @@ def upload_logo():
 
 @settings_bp.route("/logo", methods=["GET"])
 def get_logo():
+    """
     === A
     tags:
       - Settings
@@ -235,6 +244,7 @@ def get_logo():
             logo: { type: object, nullable: true }
             url: { type: string }
     ===
+    """
     logo = BusinessLogo.query.first()
     if not logo:
         return jsonify({"logo": None})

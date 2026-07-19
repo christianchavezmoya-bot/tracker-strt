@@ -13,6 +13,7 @@ users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 @jwt_required()
 @admin_only
 def create_user():
+    """
     === A
     tags:
       - Users
@@ -99,6 +100,7 @@ def create_user():
 @jwt_required()
 @admin_only
 def list_users():
+    """
     === A
     tags:
       - Users
@@ -130,6 +132,7 @@ def list_users():
                 type: object
             total: { type: integer }
     ===
+    """
     q = User.query
     if request.args.get("role"):
         q = q.filter_by(role=int(request.args["role"]))
@@ -144,6 +147,7 @@ def list_users():
 @jwt_required()
 @admin_only
 def update_user(user_id):
+    """
     === A
     tags:
       - Users
@@ -177,6 +181,7 @@ def update_user(user_id):
       404:
         description: User not found
     ===
+    """
     user = User.query.get_or_404(user_id)
     body = request.get_json() or {}
     for field in ["username", "display_name", "role", "is_active"]:
@@ -192,6 +197,7 @@ def update_user(user_id):
 @jwt_required()
 @admin_only
 def deactivate_user(user_id):
+    """
     === A
     tags:
       - Users
@@ -218,6 +224,7 @@ def deactivate_user(user_id):
       404:
         description: User not found
     ===
+    """
     user = User.query.get_or_404(user_id)
     if user.id == int(get_jwt_identity()):
         return jsonify({"error": "Cannot deactivate yourself"}), 400

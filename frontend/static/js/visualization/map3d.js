@@ -18,6 +18,11 @@ window._trackerMeshes = {};
 window._zoneMeshes = {};
 window._sectionMeshes = {};
 window._floorTexture = null;
+window._trailLines = {};
+window._trailBuffers = {};
+window._selectedTrackerId = null;
+window._selectedTrackerRing = null;
+window._currentFloor = 0;
 
 let _camTheta = 0.6;
 let _camPhi = 0.45;
@@ -188,18 +193,38 @@ async function render3DZones() {
       };
       const color = colorMap[zone.zone_type] || 0x00e5ff;
       const radius = zone.radius || 5;
-      const height = 0.3;  // Thin ring
+      const zoneHeight = 8;  // 3D box height
+      const zoneZ = zone.pos_z || 0;  // Zone height from zone.position.z
 
-      // Cylinder ring
-      const geo = new THREE.CylinderGeometry(radius, radius, height, 32, 1, true);
+      // 3D Box geometry for zone visualization
+      const geo = new THREE.BoxGeometry(radius * 2, zoneHeight, radius * 2);
       const mat = new THREE.MeshStandardMaterial({
-        color, transparent: true, opacity: 0.3,
-        side: THREE.DoubleSide, wireframe: zone.zone_type !== 'RESTRICTED',
+        color,
+        transparent: true,
+        opacity: 0.15,
+        side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(zone.pos_x, height / 2, zone.pos_y);
+      // Position box so its bottom is at zoneZ, center vertically
+      mesh.position.set(zone.pos_x, zoneZ + zoneHeight / 2, zone.pos_y);
+      mesh._zoneZ = zoneZ;
+      mesh._zoneHeight = zoneHeight;
       window._scene.add(mesh);
-      window._zoneMeshes[zone.id] = mesh;
+
+      // Wireframe overlay for visibility
+      const wireGeo = new THREE.BoxGeometry(radius * 2, zoneHeight, radius * 2);
+      const wireMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.4,
+        wireframe: true,
+      });
+      const wireMesh = new THREE.Mesh(wireGeo, wireMat);
+      wireMesh.position.copy(mesh.position);
+      window._scene.add(wireMesh);
+
+      // Store both meshes for floor visibility toggling
+      window._zoneMeshes[zone.id] = { mesh, wireMesh, zoneZ, zoneHeight };
     });
   } catch {}
 }
@@ -259,7 +284,62 @@ function updateTrackerDot3D(tid, pos) {
   if (mesh._ring) {
     mesh._ring.position.set(pos.x, 0.02, pos.y);
   }
+
+  // Track trail buffer (last N positions)
+  if (!window._trailBuffers[tid]) window._trailBuffers[tid] = [];
+  window._trailBuffers[tid].push({ x: pos.x, y: pos.y, z: pos.z || 1 });
+  if (window._trailBuffers[tid].length > 50) {
+    window._trailBuffers[tid].shift();
+  }
+  if (window._trailBuffers[tid].length >= 2) {
+    window.addTrackerTrail(tid, window._trailBuffers[tid]);
+  }
 }
+
+/**
+ * Add a trail line for a tracker
+ * @param {string} trackerId
+ * @param {Array<{x,y,z}>} positions
+ */
+window.addTrackerTrail = function(trackerId, positions) {
+  if (!positions || positions.length < 2) return;
+
+  // Remove existing line
+  window.clearTrackerTrail(trackerId);
+
+  // Build flat position array for BufferGeometry
+  const posArray = [];
+  positions.forEach(p => {
+    posArray.push(p.x, p.z !== undefined ? p.z : 1, p.y);
+  });
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
+
+  const material = new THREE.LineBasicMaterial({
+    color: 0x00e5ff,
+    transparent: true,
+    opacity: 0.4,
+  });
+
+  const line = new THREE.Line(geometry, material);
+  window._scene.add(line);
+  window._trailLines[trackerId] = line;
+};
+
+/**
+ * Clear trail line for a tracker
+ * @param {string} trackerId
+ */
+window.clearTrackerTrail = function(trackerId) {
+  const line = window._trailLines[trackerId];
+  if (line) {
+    window._scene.remove(line);
+    line.geometry.dispose();
+    line.material.dispose();
+    delete window._trailLines[trackerId];
+  }
+};
 
 function focus3DTracker(tid) {
   const t = window.trackers && window.trackers[tid];
@@ -390,20 +470,156 @@ function raycastTracker(mouse) {
   if (hits.length > 0) {
     const tid = hits[0].object._trackerId;
     if (tid && window.selectTracker) window.selectTracker(tid);
+    // Set selected tracker and update visual
+    window._selectedTrackerId = tid;
+    updateTrackerSelectionVisuals();
   }
 }
+
+/**
+ * Update visual feedback for selected tracker
+ */
+function updateTrackerSelectionVisuals() {
+  // Remove previous selection ring
+  if (window._selectedTrackerRing) {
+    window._scene.remove(window._selectedTrackerRing);
+    window._selectedTrackerRing.geometry.dispose();
+    window._selectedTrackerRing.material.dispose();
+    window._selectedTrackerRing = null;
+  }
+
+  // Restore emissive of previous selection
+  Object.values(window._trackerMeshes).forEach(mesh => {
+    if (mesh.material && mesh.material.emissiveIntensity !== undefined) {
+      mesh.material.emissiveIntensity = 0.5;
+    }
+  });
+
+  // Apply new selection
+  if (window._selectedTrackerId) {
+    const mesh = window._trackerMeshes[window._selectedTrackerId];
+    if (mesh) {
+      // Increase emissive intensity
+      if (mesh.material) {
+        mesh.material.emissiveIntensity = 1.2;
+      }
+      // Add white selection ring
+      const ringGeo = new THREE.RingGeometry(1.2, 1.6, 32);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide,
+      });
+      window._selectedTrackerRing = new THREE.Mesh(ringGeo, ringMat);
+      window._selectedTrackerRing.rotation.x = -Math.PI / 2;
+      window._selectedTrackerRing.position.set(
+        mesh.position.x,
+        0.03,
+        mesh.position.z
+      );
+      window._scene.add(window._selectedTrackerRing);
+    }
+  }
+}
+
+/**
+ * Set the 3D floor view (0, 1, or 2)
+ * @param {number} floorIndex
+ */
+window.set3DFloor = function(floorIndex) {
+  window._currentFloor = floorIndex;
+
+  // Floor heights: floor 0 = 0, floor 1 = 20, floor 2 = 40
+  const floorHeights = [0, 20, 40];
+  const camPhis = [0.45, 0.35, 0.25];
+
+  _camPhi = camPhis[floorIndex] || 0.45;
+  updateCamera3D();
+
+  // Toggle active button
+  document.querySelectorAll('.floor-btn').forEach(btn => {
+    if (parseInt(btn.dataset.floor) === floorIndex) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  // Show/hide zones based on floor
+  const threshold = floorHeights[floorIndex];
+  Object.values(window._zoneMeshes).forEach(zoneData => {
+    const { mesh, wireMesh } = zoneData;
+    const show = zoneData.zoneZ <= threshold + 5 && zoneData.zoneZ >= threshold - 5;
+    if (mesh) mesh.visible = show;
+    if (wireMesh) wireMesh.visible = show;
+  });
+};
+
+/**
+ * Focus camera on the currently selected tracker
+ */
+window.focusSelectedTracker3D = function() {
+  const tid = window._selectedTrackerId;
+  if (!tid) {
+    // Try to focus on last selected tracker from dashboard
+    if (window.selectedTrackerId) {
+      tid = window.selectedTrackerId;
+    }
+  }
+  if (!tid) return;
+
+  const mesh = window._trackerMeshes[tid];
+  if (!mesh) return;
+
+  const targetX = mesh.position.x;
+  const targetZ = mesh.position.z;
+
+  // Animate camera to orbit around tracker
+  const startTheta = _camTheta;
+  const startDist = _camDist;
+  const targetDist = Math.min(30, _camDist);
+  const startTime = Date.now();
+  const duration = 500;
+
+  function animateFocus() {
+    const elapsed = Date.now() - startTime;
+    const t = Math.min(elapsed / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+
+    _camDist = startDist + (targetDist - startDist) * ease;
+    updateCamera3D();
+
+    if (t < 1) {
+      requestAnimationFrame(animateFocus);
+    }
+  }
+
+  animateFocus();
+};
 
 // ── Animation loop ────────────────────────────────────────────────────────────
 function animate3D() {
   window._animId = requestAnimationFrame(animate3D);
   updateCamera3D();
 
-  // Pulse tracker glow
+  // Pulse tracker glow (skip selected tracker - it has fixed highlight)
   const t = Date.now() * 0.002;
-  Object.values(window._trackerMeshes).forEach((mesh, i) => {
+  Object.entries(window._trackerMeshes).forEach(([tid, mesh], i) => {
+    if (tid === window._selectedTrackerId) return; // Skip selected - fixed highlight
     const pulse = 0.4 + 0.15 * Math.sin(t + i * 0.8);
     if (mesh.material) mesh.material.emissiveIntensity = pulse;
   });
+
+  // Animate selection ring rotation and follow selected tracker
+  if (window._selectedTrackerRing && window._selectedTrackerId) {
+    const mesh = window._trackerMeshes[window._selectedTrackerId];
+    if (mesh) {
+      window._selectedTrackerRing.position.x = mesh.position.x;
+      window._selectedTrackerRing.position.z = mesh.position.z;
+    }
+    window._selectedTrackerRing.rotation.z += 0.02;
+  }
 
   window._renderer.render(window._scene, window._camera);
 }

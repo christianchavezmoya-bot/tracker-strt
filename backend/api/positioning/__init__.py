@@ -17,6 +17,7 @@ positioning_bp = Blueprint("positioning", __name__, url_prefix="/api/positioning
 @positioning_bp.route("/live", methods=["GET"])
 @jwt_required()
 def live_positions():
+    """
     === A
     tags:
       - Positioning
@@ -56,6 +57,7 @@ def live_positions():
 @positioning_bp.route("/live/<int:tracker_id>", methods=["GET"])
 @jwt_required()
 def live_tracker(tracker_id):
+    """
     === A
     tags:
       - Positioning
@@ -92,6 +94,7 @@ def live_tracker(tracker_id):
 @positioning_bp.route("/history/<int:tracker_id>", methods=["GET"])
 @jwt_required()
 def tracker_history(tracker_id):
+    """
     === A
     tags:
       - Positioning
@@ -161,6 +164,7 @@ def tracker_history(tracker_id):
 @positioning_bp.route("/history/<int:tracker_id>/export", methods=["GET"])
 @jwt_required()
 def export_history(tracker_id):
+    """
     === A
     tags:
       - Positioning
@@ -236,6 +240,7 @@ def export_history(tracker_id):
 @positioning_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def history_stats():
+    """
     === A
     tags:
       - Positioning
@@ -262,6 +267,7 @@ def history_stats():
 @positioning_bp.route("/calibration", methods=["GET"])
 @jwt_required()
 def get_calibration():
+    """
     === A
     tags:
       - Positioning
@@ -286,6 +292,7 @@ def get_calibration():
 @positioning_bp.route("/calibration", methods=["POST"])
 @jwt_required()
 def add_calibration_point():
+    """
     === A
     tags:
       - Positioning

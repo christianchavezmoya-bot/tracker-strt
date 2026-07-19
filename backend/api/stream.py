@@ -3,11 +3,13 @@ HOLO-RTLS — SSE / Stream API
 Real-time position updates pushed to browsers via Server-Sent Events.
 Also handles MQTT state sync publishing.
 """
+from __future__ import annotations
 import json
 import logging
 import queue
 import threading
 from datetime import datetime, timezone
+from typing import Optional
 from flask import (
     Blueprint, Response, stream_with_context,
     request, jsonify, current_app,

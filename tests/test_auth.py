@@ -132,7 +132,7 @@ class TestAuth2FA:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["qr_code"].startswith("data:image/png;base64,")
-        assert "secret" in data["message"] or "totp_code" in data["message"].lower()
+        assert "confirm" in data["message"].lower()
 
     def test_2fa_confirm_invalid_code(self, client, auth_headers, sample_user):
         resp = client.post("/api/auth/2fa/confirm", json={"totp_code": "000000"}, headers=auth_headers)

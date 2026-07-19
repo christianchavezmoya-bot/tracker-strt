@@ -100,12 +100,20 @@ class User(db.Model):
         """True if the account is currently locked due to failed attempts."""
         if self.locked_until is None:
             return False
-        return datetime.now(timezone.utc) < self.locked_until
+        # Ensure both datetimes are timezone-aware for comparison
+        now = datetime.now(timezone.utc)
+        locked = self.locked_until
+        if locked.tzinfo is None:
+            locked = locked.replace(tzinfo=timezone.utc)
+        return now < locked
 
     # ── Permissions ──────────────────────────────────────────────────────────
     @property
     def role_name(self) -> str:
-        return self.role.name
+        try:
+            return UserRole(self.role).name
+        except ValueError:
+            return "UNKNOWN"
 
     def has_permission(self, permission: str) -> bool:
         """Check if user has a specific permission (by role)."""

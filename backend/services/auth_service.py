@@ -189,7 +189,7 @@ class AuthService:
             entity_id=user_id,
         )
 
-        return qr_b64, secret
+        return qr_b64, None
 
     def confirm_2fa(self, user_id: int, totp_code: str) -> Tuple[bool, Optional[str]]:
         """
