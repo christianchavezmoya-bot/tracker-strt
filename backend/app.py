@@ -154,7 +154,11 @@ def create_app(test_config: dict = None) -> Flask:
 
     @app.route("/hardware")
     def hardware_page():
-        return render_template("dashboard/hardware.html")
+        return render_template("hardware/index.html")
+
+    @app.route("/nodes")
+    def nodes_page():
+        return render_template("nodes/index.html")
 
     @app.route("/users")
     def users_page():

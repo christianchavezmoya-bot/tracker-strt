@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hardware Setup — HOLO-RTLS</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+
+<!-- ── Top Navigation Bar ─────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand">
+      <div class="brand-icon">◈</div>
+      <span class="brand-name">HOLO-RTLS</span>
+    </a>
+    <div class="breadcrumb">
+      <i class="fa-solid fa-chevron-right"></i>
+      <span>Hardware Setup</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></div>
+      <span id="statusText">System Online</span>
+    </div>
+    <a href="/" class="icon-btn" title="Dashboard">
+      <i class="fa-solid fa-gauge"></i>
+    </a>
+    <div class="user-menu" id="userMenu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main Layout ───────────────────────────────────────────────────── -->
+<div class="settings-layout">
+
+  <!-- Sidebar Nav -->
+  <aside class="settings-sidebar">
+    <div class="settings-nav-label">SYSTEM</div>
+    <nav class="settings-nav">
+      <a href="/" class="settings-nav-item">
+        <i class="fa-solid fa-gauge"></i> Dashboard
+      </a>
+      <a href="/hardware" class="settings-nav-item active">
+        <i class="fa-solid fa-microchip"></i> Hardware
+      </a>
+      <a href="/nodes" class="settings-nav-item">
+        <i class="fa-solid fa-anchor"></i> Nodes
+      </a>
+      <a href="/alerts" class="settings-nav-item">
+        <i class="fa-solid fa-bell"></i> Alerts
+      </a>
+      <a href="/settings" class="settings-nav-item">
+        <i class="fa-solid fa-gear"></i> Settings
+      </a>
+    </nav>
+
+    <div class="settings-nav-label" style="margin-top:24px">ADMIN</div>
+    <nav class="settings-nav" id="adminNav" style="display:none">
+      <a href="/users" class="settings-nav-item">
+        <i class="fa-solid fa-users"></i> Users
+      </a>
+      <a href="/audit" class="settings-nav-item">
+        <i class="fa-solid fa-clipboard-list"></i> Audit Log
+      </a>
+    </nav>
+
+    <!-- Bridge Status -->
+    <div class="bridge-status-card" id="bridgeStatusCard">
+      <div class="bridge-status-header">
+        <i class="fa-solid fa-wave-square"></i>
+        <span>Bridge Engine</span>
+      </div>
+      <div class="bridge-stat">
+        <span class="bridge-stat-label">Queue depth</span>
+        <span class="bridge-stat-value" id="queueDepth">—</span>
+      </div>
+      <div class="bridge-stat">
+        <span class="bridge-stat-label">SSE clients</span>
+        <span class="bridge-stat-value" id="sseClients">—</span>
+      </div>
+      <div class="bridge-stat">
+        <span class="bridge-stat-label">Ingestion</span>
+        <span class="bridge-stat-value" id="ingestionStatus">—</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="settings-main">
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">
+          <i class="fa-solid fa-microchip"></i>
+          Hardware Setup
+        </h1>
+        <p class="page-subtitle">Configure UWB anchors, BLE gateways, and environmental sensors</p>
+      </div>
+      <button class="btn btn-primary" onclick="openAddModal()">
+        <i class="fa-solid fa-plus"></i> Add Hardware
+      </button>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="hw-summary-grid" id="summaryGrid">
+      <div class="hw-summary-card hw-total" onclick="filterByType(null)">
+        <div class="hw-summary-icon"><i class="fa-solid fa-server"></i></div>
+        <div class="hw-summary-num" id="statTotal">—</div>
+        <div class="hw-summary-label">Total Devices</div>
+      </div>
+      <div class="hw-summary-card hw-connected" onclick="filterByType('CONNECTED')">
+        <div class="hw-summary-icon"><i class="fa-solid fa-link"></i></div>
+        <div class="hw-summary-num" id="statConnected">—</div>
+        <div class="hw-summary-label">Connected</div>
+      </div>
+      <div class="hw-summary-card hw-disconnected" onclick="filterByType('DISCONNECTED')">
+        <div class="hw-summary-icon"><i class="fa-solid fa-unlink"></i></div>
+        <div class="hw-summary-num" id="statDisconnected">—</div>
+        <div class="hw-summary-label">Disconnected</div>
+      </div>
+      <div class="hw-summary-card hw-error" onclick="filterByType('ERROR')">
+        <div class="hw-summary-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div class="hw-summary-num" id="statError">—</div>
+        <div class="hw-summary-label">Errors</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="hw-tabs">
+      <button class="hw-tab active" data-tab="configs" onclick="switchTab('configs')">
+        <i class="fa-solid fa-list-check"></i> Configurations
+      </button>
+      <button class="hw-tab" data-tab="catalog" onclick="switchTab('catalog')">
+        <i class="fa-solid fa-book-open"></i> Device Catalog
+      </button>
+      <button class="hw-tab" data-tab="nodes" onclick="switchTab('nodes')">
+        <i class="fa-solid fa-anchor"></i> Anchors / Nodes
+      </button>
+    </div>
+
+    <!-- ── Configurations Tab ─────────────────────────────────────── -->
+    <div class="hw-tab-content" id="tab-configs">
+      <div class="hw-toolbar">
+        <div class="hw-filter-chips">
+          <button class="hw-chip active" data-filter="ALL" onclick="filterConfigs('ALL')">All</button>
+          <button class="hw-chip" data-filter="UWB" onclick="filterConfigs('UWB')">UWB</button>
+          <button class="hw-chip" data-filter="BLE" onclick="filterConfigs('BLE')">BLE</button>
+          <button class="hw-chip" data-filter="WIFI" onclick="filterConfigs('WIFI')">WiFi</button>
+          <button class="hw-chip" data-filter="ENVIRO" onclick="filterConfigs('ENVIRO')">Enviro</button>
+        </div>
+      </div>
+
+      <div class="hw-config-table-wrap">
+        <table class="hw-config-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Profile</th>
+              <th>Protocol</th>
+              <th>Status</th>
+              <th>Last Seen</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="configsTable">
+            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Device Catalog Tab ────────────────────────────────────── -->
+    <div class="hw-tab-content" id="tab-catalog" style="display:none">
+      <p class="tab-description">Pre-configured profiles for supported hardware. Click a profile to add it.</p>
+      <div class="hw-catalog-grid" id="catalogGrid">
+        <div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading profiles...</div>
+      </div>
+    </div>
+
+    <!-- ── Anchors / Nodes Tab ────────────────────────────────────── -->
+    <div class="hw-tab-content" id="tab-nodes" style="display:none">
+      <div class="hw-toolbar">
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary" onclick="openAddNodeModal()" style="font-size:13px;padding:7px 14px">
+            <i class="fa-solid fa-plus"></i> Add Node
+          </button>
+        </div>
+      </div>
+      <div class="hw-config-table-wrap">
+        <table class="hw-config-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>MAC Address</th>
+              <th>Position (x, y, z)</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Last Heartbeat</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="nodesTable">
+            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Add / Edit Hardware Config Modal ────────────────────────────── -->
+<div class="modal-overlay" id="configModal" style="display:none" onclick="if(event.target===this)closeConfigModal()">
+  <div class="hw-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modalTitle">Add Hardware Configuration</h3>
+      <button class="modal-close" onclick="closeConfigModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Step 1: Choose Profile -->
+    <div id="stepProfile">
+      <p class="modal-section-label">Step 1 — Choose a device profile</p>
+      <div class="profile-picker-grid" id="profilePicker">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <!-- Step 2: Configure -->
+    <div id="stepConfig" style="display:none">
+      <p class="modal-section-label">Step 2 — Configure connection</p>
+      <div class="form-group">
+        <label class="form-label">Name <span class="form-required">*</span></label>
+        <input class="form-input" id="cfgName" placeholder="e.g. Longwall Gate UWB Anchor">
+      </div>
+      <div id="settingsFields">
+        <!-- Dynamic fields injected by JS -->
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-input" id="cfgNotes" rows="2" placeholder="Installation notes, location..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="showStep('profile')">
+          <i class="fa-solid fa-arrow-left"></i> Back
+        </button>
+        <button class="btn btn-secondary" onclick="testConnection()">
+          <i class="fa-solid fa-bolt"></i> Test Connection
+        </button>
+        <button class="btn btn-primary" onclick="saveConfig()">
+          <i class="fa-solid fa-check"></i> Save
+        </button>
+      </div>
+      <div id="testResult" style="margin-top:12px;display:none" class="test-result"></div>
+    </div>
+
+    <!-- Step 3: Confirmation -->
+    <div id="stepDone" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:48px;color:var(--green);margin-bottom:12px"><i class="fa-solid fa-check-circle"></i></div>
+      <h3 style="margin:0 0 8px">Configuration Saved</h3>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px">You can now connect this device from the configurations list.</p>
+      <button class="btn btn-primary" onclick="closeConfigModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add / Edit Node Modal ──────────────────────────────────────── -->
+<div class="modal-overlay" id="nodeModal" style="display:none" onclick="if(event.target===this)closeNodeModal()">
+  <div class="hw-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="nodeModalTitle">Add Node / Anchor</h3>
+      <button class="modal-close" onclick="closeNodeModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Name <span class="form-required">*</span></label>
+      <input class="form-input" id="nodeName" placeholder="e.g. Gate Entry Anchor">
+    </div>
+    <div class="form-group">
+      <label class="form-label">MAC Address <span class="form-required">*</span></label>
+      <input class="form-input" id="nodeMac" placeholder="e.g. AA:BB:CC:DD:EE:FF">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Position X (m)</label>
+        <input class="form-input" id="nodeX" type="number" step="0.01" value="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Position Y (m)</label>
+        <input class="form-input" id="nodeY" type="number" step="0.01" value="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Position Z (m)</label>
+        <input class="form-input" id="nodeZ" type="number" step="0.01" value="0">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Node Type</label>
+      <select class="form-input" id="nodeType">
+        <option value="1">Standard</option>
+        <option value="2">Check-In</option>
+        <option value="3">Check-Out</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeNodeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNode()">
+        <i class="fa-solid fa-check"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Scripts ───────────────────────────────────────────────────── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/auth.js"></script>
+<script>
+'use strict';
+
+// ── State ────────────────────────────────────────────────────────────────────
+let profiles = [];
+let configs = [];
+let nodes = [];
+let currentFilter = 'ALL';
+let selectedProfile = null;
+let editingConfigId = null;
+let editingNodeId = null;
+let bridgeStatus = {};
+let currentTab = 'configs';
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await loadUserInfo();
+  await Promise.all([loadProfiles(), loadConfigs(), loadNodes(), loadBridgeStatus()]);
+  renderConfigs();
+  renderCatalog();
+  renderNodes();
+  renderSummary();
+  startStatusPolling();
+});
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+async function loadUserInfo() {
+  const res = await API.get('/auth/me');
+  const data = await API.json(res);
+  if (!res || !res.ok) { window.location.href = '/login'; return; }
+  const u = data.user;
+  document.getElementById('userAvatar').textContent = (u.display_name || u.username).charAt(0).toUpperCase();
+  if (u.role === 'ADMIN') document.getElementById('adminNav').style.display = 'block';
+}
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+async function loadProfiles() {
+  const res = await API.get('/hardware/profiles');
+  const data = await API.json(res);
+  if (res && res.ok) profiles = data.profiles || [];
+}
+
+async function loadConfigs() {
+  const res = await API.get('/hardware');
+  const data = await API.json(res);
+  if (res && res.ok) configs = data.items || [];
+}
+
+async function loadNodes() {
+  const res = await API.get('/nodes');
+  const data = await API.json(res);
+  if (res && res.ok) nodes = data.items || [];
+}
+
+async function loadBridgeStatus() {
+  const res = await API.get('/api/stream/status');
+  const data = await API.json(res);
+  if (res && res.ok && data) {
+    bridgeStatus = data;
+    document.getElementById('queueDepth').textContent = data.queue_depth ?? 0;
+    document.getElementById('sseClients').textContent = data.sse_clients ?? 0;
+    document.getElementById('ingestionStatus').textContent =
+      data.ingestion_running ? '<span style="color:var(--green)">Running</span>' : '<span style="color:var(--yellow)">Stopped</span>';
+    document.getElementById('statusDot').style.background = data.ingestion_running ? 'var(--green)' : 'var(--yellow)';
+  }
+}
+
+function startStatusPolling() {
+  setInterval(loadBridgeStatus, 5000);
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+function renderSummary() {
+  document.getElementById('statTotal').textContent = configs.length;
+  document.getElementById('statConnected').textContent =
+    configs.filter(c => c.status === 'CONNECTED').length;
+  document.getElementById('statDisconnected').textContent =
+    configs.filter(c => c.status === 'DISCONNECTED').length;
+  document.getElementById('statError').textContent =
+    configs.filter(c => c.status === 'ERROR').length;
+}
+
+function filterByType(type) {
+  currentFilter = type || 'ALL';
+  renderConfigs();
+}
+
+// ── Configs Table ─────────────────────────────────────────────────────────────
+function filterConfigs(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.hw-chip').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.hw-chip[data-filter="${filter}"]`)?.classList.add('active');
+  renderConfigs();
+}
+
+function renderConfigs() {
+  const tbody = document.getElementById('configsTable');
+  let filtered = configs;
+  if (currentFilter !== 'ALL') {
+    filtered = configs.filter(c => c.hardware_type === currentFilter);
+  }
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No configurations${currentFilter !== 'ALL' ? ` for ${currentFilter}` : ''}. <a href="#" onclick="switchTab('catalog');return false">Browse device catalog →</a></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(c => {
+    const statusClass = statusClassFor(c.status);
+    const statusText = statusTextFor(c.status);
+    const hwIcon = hwTypeIcon(c.hardware_type);
+    return `
+    <tr class="${c.status === 'ERROR' ? 'row-error' : ''}">
+      <td>
+        <div class="config-name-cell">
+          <span class="config-icon">${hwIcon}</span>
+          <div>
+            <div class="config-name">${c.name}</div>
+            ${c.status === 'ERROR' && c.error_message ? `<div class="config-error">${c.error_message}</div>` : ''}
+          </div>
+        </div>
+      </td>
+      <td><span class="type-badge type-${c.hardware_type.toLowerCase()}">${c.hardware_type}</span></td>
+      <td class="mono">${c.profile_name || c.profile_id || '—'}</td>
+      <td class="mono">${c.protocol || '—'}</td>
+      <td>
+        <span class="status-pill ${statusClass}">
+          <span class="status-dot-sm"></span>${statusText}
+        </span>
+      </td>
+      <td class="mono">${c.last_seen ? timeAgo(c.last_seen) : 'Never'}</td>
+      <td>
+        <div class="action-btns">
+          ${c.status !== 'CONNECTED' ? `<button class="action-btn connect" onclick="connectConfig(${c.id})" title="Connect"><i class="fa-solid fa-plug"></i></button>` : ''}
+          ${c.status === 'CONNECTED' ? `<button class="action-btn disconnect" onclick="disconnectConfig(${c.id})" title="Disconnect"><i class="fa-solid fa-power-off"></i></button>` : ''}
+          <button class="action-btn" onclick="editConfig(${c.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="action-btn danger" onclick="deleteConfig(${c.id}, '${escapeHtml(c.name)}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function statusClassFor(s) {
+  if (s === 'CONNECTED') return 'pill-green';
+  if (s === 'ERROR') return 'pill-red';
+  if (s === 'CONNECTING') return 'pill-yellow';
+  return 'pill-gray';
+}
+
+function statusTextFor(s) {
+  const map = { CONNECTED: 'Connected', DISCONNECTED: 'Offline', ERROR: 'Error', CONNECTING: 'Connecting' };
+  return map[s] || s;
+}
+
+function hwTypeIcon(type) {
+  const icons = { UWB: '<i class="fa-solid fa-wifi" style="color:#e040fb"></i>',
+                  BLE: '<i class="fa-brands fa-bluetooth-b" style="color:#00e5ff"></i>',
+                  WIFI: '<i class="fa-solid fa-wifi" style="color:#00bcd4"></i>',
+                  ENVIRO: '<i class="fa-solid fa-temperature-quarter" style="color:#4caf50"></i>' };
+  return icons[type] || '<i class="fa-solid fa-microchip" style="color:var(--cyan)"></i>';
+}
+
+// ── Catalog ───────────────────────────────────────────────────────────────────
+function renderCatalog() {
+  const grid = document.getElementById('catalogGrid');
+  const grouped = {};
+  profiles.forEach(p => {
+    if (!grouped[p.hardware_type]) grouped[p.hardware_type] = [];
+    grouped[p.hardware_type].push(p);
+  });
+  grid.innerHTML = Object.entries(grouped).map(([type, prods]) => `
+    <div class="catalog-section">
+      <div class="catalog-type-header">
+        <span class="type-badge type-${type.toLowerCase()}">${type}</span>
+        <span style="color:var(--text-muted);font-size:12px">${prods.length} profile${prods.length > 1 ? 's' : ''}</span>
+      </div>
+      <div class="catalog-cards">${prods.map(p => `
+        <div class="catalog-card" onclick="selectProfileAndOpen('${p.id}')">
+          <div class="catalog-card-header">
+            <span class="catalog-vendor">${p.vendor}</span>
+          </div>
+          <div class="catalog-card-name">${p.name}</div>
+          <div class="catalog-card-desc">${p.description}</div>
+          <div class="catalog-card-footer">
+            <span class="mono" style="font-size:10px;color:var(--text-muted)">
+              <i class="fa-solid fa-plug"></i> ${p.protocol}
+            </span>
+            <span class="catalog-add-btn"><i class="fa-solid fa-plus"></i> Add</span>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function selectProfileAndOpen(profileId) {
+  selectedProfile = profiles.find(p => p.id === profileId);
+  if (!selectedProfile) return;
+  editingConfigId = null;
+  document.getElementById('modalTitle').textContent = `Add ${selectedProfile.name}`;
+  openConfigModal();
+  showStep('config');
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+function openAddModal() {
+  selectedProfile = null;
+  editingConfigId = null;
+  document.getElementById('modalTitle').textContent = 'Add Hardware Configuration';
+  openConfigModal();
+  showStep('profile');
+}
+
+function openConfigModal() {
+  document.getElementById('configModal').style.display = 'flex';
+  document.getElementById('testResult').style.display = 'none';
+  renderProfilePicker();
+}
+
+function closeConfigModal() {
+  document.getElementById('configModal').style.display = 'none';
+  selectedProfile = null;
+  editingConfigId = null;
+  showStep('profile');
+}
+
+function showStep(step) {
+  document.getElementById('stepProfile').style.display = step === 'profile' ? 'block' : 'none';
+  document.getElementById('stepConfig').style.display = step === 'config' ? 'block' : 'none';
+  document.getElementById('stepDone').style.display = step === 'done' ? 'block' : 'none';
+}
+
+function renderProfilePicker() {
+  const picker = document.getElementById('profilePicker');
+  const grouped = {};
+  profiles.forEach(p => {
+    if (!grouped[p.hardware_type]) grouped[p.hardware_type] = [];
+    grouped[p.hardware_type].push(p);
+  });
+  picker.innerHTML = Object.entries(grouped).map(([type, prods]) => `
+    <div class="profile-picker-type">${type}</div>
+    ${prods.map(p => `
+      <div class="profile-picker-item ${selectedProfile && selectedProfile.id === p.id ? 'selected' : ''}"
+           onclick="selectProfile('${p.id}')">
+        <div class="profile-picker-name">${p.name}</div>
+        <div class="profile-picker-vendor">${p.vendor}</div>
+      </div>`).join('')}
+  `).join('');
+}
+
+function selectProfile(profileId) {
+  selectedProfile = profiles.find(p => p.id === profileId);
+  if (!selectedProfile) return;
+  renderProfilePicker();
+  renderSettingsFields();
+  showStep('config');
+  document.getElementById('modalTitle').textContent = editingConfigId
+    ? `Edit: ${document.getElementById('cfgName').value || selectedProfile.name}`
+    : `Add: ${selectedProfile.name}`;
+}
+
+function renderSettingsFields() {
+  const container = document.getElementById('settingsFields');
+  if (!selectedProfile) { container.innerHTML = ''; return; }
+
+  container.innerHTML = (selectedProfile.settings_fields || []).map(f => `
+    <div class="form-group">
+      <label class="form-label">
+        ${f.label}${f.required ? ' <span class="form-required">*</span>' : ''}
+        ${f.help_text ? `<span class="form-help" title="${escapeHtml(f.help_text)}">?</span>` : ''}
+      </label>
+      ${f.type === 'select' ? `
+        <select class="form-input" id="sf_${f.key}" ${f.required ? 'required' : ''}>
+          ${(f.options || []).map(opt => `<option value="${opt}" ${opt == f.default ? 'selected' : ''}>${opt}</option>`).join('')}
+        </select>` :
+      f.type === 'bool' ? `
+        <label class="toggle-switch">
+          <input type="checkbox" id="sf_${f.key}" ${f.default === 'true' || f.default === true ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>` :
+      f.type === 'json' ? `
+        <textarea class="form-input mono" id="sf_${f.key}" rows="3" ${f.required ? 'required' : ''}
+                  placeholder='${escapeHtml(f.default || '{}")}'>${escapeHtml(f.default || '')}</textarea>` :
+      f.type === 'int' || f.type === 'float' ? `
+        <input class="form-input" type="number" id="sf_${f.key}" step="${f.type === 'float' ? '0.01' : '1'}"
+               value="${f.default || 0}" ${f.required ? 'required' : ''}>` :
+      `<input class="form-input" type="${f.secret ? 'password' : 'text'}"
+              id="sf_${f.key}" value="${escapeHtml(f.default || '')}"
+              placeholder="${escapeHtml(f.help_text || f.label)}" ${f.required ? 'required' : ''}>`}
+    </div>`).join('');
+
+  // Pre-fill name if empty
+  if (!document.getElementById('cfgName').value) {
+    document.getElementById('cfgName').value = selectedProfile.name;
+  }
+}
+
+// ── Save config ───────────────────────────────────────────────────────────────
+async function saveConfig() {
+  const name = document.getElementById('cfgName').value.trim();
+  if (!name) { alert('Name is required'); return; }
+  if (!selectedProfile) { alert('Please select a device profile'); return; }
+
+  const settings = {};
+  (selectedProfile.settings_fields || []).forEach(f => {
+    const el = document.getElementById(`sf_${f.key}`);
+    if (!el) return;
+    let val = el.type === 'checkbox' ? el.checked : el.value;
+    if (f.type === 'int') val = parseInt(val) || 0;
+    if (f.type === 'float') val = parseFloat(val) || 0;
+    if (f.type === 'bool') val = String(val);
+    if (f.type === 'json') {
+      try { val = JSON.parse(val); } catch { val = {}; }
+    }
+    settings[f.key] = val;
+  });
+
+  const body = {
+    profile_id: selectedProfile.id,
+    name,
+    settings,
+    notes: document.getElementById('cfgNotes').value.trim(),
+    is_active: true,
+  };
+
+  let res;
+  if (editingConfigId) {
+    res = await API.patch(`/hardware/${editingConfigId}`, body);
+  } else {
+    res = await API.post('/hardware', body);
+  }
+
+  const data = await API.json(res);
+  if (!res || !res.ok) {
+    alert('Failed to save: ' + (data.error || res.statusText));
+    return;
+  }
+
+  await loadConfigs();
+  renderConfigs();
+  renderSummary();
+  showStep('done');
+  editingConfigId = null;
+}
+
+async function editConfig(id) {
+  editingConfigId = id;
+  const cfg = configs.find(c => c.id === id);
+  if (!cfg) return;
+
+  selectedProfile = profiles.find(p => p.id === cfg.profile_id) || profiles.find(p => p.name === cfg.profile_name);
+  if (!selectedProfile) {
+    alert('Profile not found for this config');
+    return;
+  }
+
+  document.getElementById('modalTitle').textContent = `Edit: ${cfg.name}`;
+  openConfigModal();
+  renderSettingsFields();
+
+  // Fill in values from existing config
+  document.getElementById('cfgName').value = cfg.name || '';
+  document.getElementById('cfgNotes').value = cfg.notes || '';
+  const settings = cfg.settings || {};
+  (selectedProfile.settings_fields || []).forEach(f => {
+    const el = document.getElementById(`sf_${f.key}`);
+    if (!el) return;
+    const val = settings[f.key] !== undefined ? settings[f.key] : f.default;
+    if (el.type === 'checkbox') el.checked = val;
+    else if (el.tagName !== 'SELECT') el.value = val ?? '';
+  });
+
+  showStep('config');
+}
+
+async function deleteConfig(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const res = await API.del(`/hardware/${id}`);
+  if (res && res.ok) {
+    await loadConfigs();
+    renderConfigs();
+    renderSummary();
+  }
+}
+
+async function connectConfig(id) {
+  const res = await API.post(`/hardware/${id}/connect`, {});
+  const data = await API.json(res);
+  await loadConfigs();
+  renderConfigs();
+  renderSummary();
+  if (data.connected) showToast('Connected successfully', 'green');
+  else showToast('Connection failed: ' + (data.error || 'Unknown error'), 'red');
+}
+
+async function disconnectConfig(id) {
+  await API.post(`/hardware/${id}/disconnect`, {});
+  await loadConfigs();
+  renderConfigs();
+  renderSummary();
+  showToast('Disconnected', 'yellow');
+}
+
+async function testConnection() {
+  const resultEl = document.getElementById('testResult');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Testing connection...';
+  resultEl.className = 'test-result test-pending';
+
+  // Gather settings from form
+  const settings = {};
+  (selectedProfile.settings_fields || []).forEach(f => {
+    const el = document.getElementById(`sf_${f.key}`);
+    if (!el) return;
+    let val = el.type === 'checkbox' ? el.checked : el.value;
+    if (f.type === 'int') val = parseInt(val) || 0;
+    if (f.type === 'float') val = parseFloat(val) || 0;
+    if (f.type === 'bool') val = String(val);
+    if (f.type === 'json') {
+      try { val = JSON.parse(el.value); } catch { val = {}; }
+    }
+    settings[f.key] = val;
+  });
+
+  // POST to backend test endpoint
+  let res;
+  if (editingConfigId) {
+    res = await API.patch(`/hardware/${editingConfigId}`, { name: document.getElementById('cfgName').value, settings });
+    const data = await API.json(res);
+    res = await API.post(`/hardware/${editingConfigId}/test`, {});
+  } else {
+    // Create temp config and test
+    const createRes = await API.post('/hardware', {
+      profile_id: selectedProfile.id,
+      name: document.getElementById('cfgName').value || selectedProfile.name,
+      settings,
+    });
+    const createData = await API.json(createRes);
+    if (!createRes || !createRes.ok) {
+      resultEl.innerHTML = `❌ Failed to save config: ${createData.error || createRes.statusText}`;
+      resultEl.className = 'test-result test-error';
+      return;
+    }
+    res = await API.post(`/hardware/${createData.config.id}/test`, {});
+    // Delete temp config
+    await API.delete(`/hardware/${createData.config.id}`);
+  }
+
+  const data = await API.json(res);
+  if (res && res.ok && data.connected) {
+    resultEl.innerHTML = `✅ ${data.message || 'Connection successful'}`;
+    resultEl.className = 'test-result test-success';
+  } else {
+    resultEl.innerHTML = `❌ ${data.error || 'Connection failed'}`;
+    resultEl.className = 'test-result test-error';
+  }
+}
+
+// ── Nodes ─────────────────────────────────────────────────────────────────────
+function renderNodes() {
+  const tbody = document.getElementById('nodesTable');
+  if (nodes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No nodes configured. <a href="#" onclick="openAddNodeModal();return false">Add one →</a></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = nodes.map(n => `
+    <tr>
+      <td class="config-name">${n.assigned_name || '—'}</td>
+      <td class="mono">${n.mac_address || '—'}</td>
+      <td class="mono">${fmtPos(n.position)}</td>
+      <td><span class="type-badge type-${(n.node_type || '').toLowerCase()}">${n.node_type || 'Standard'}</span></td>
+      <td><span class="status-pill ${n.status === 'ACTIVE' ? 'pill-green' : 'pill-gray'}">${n.status || 'Unknown'}</span></td>
+      <td class="mono">${n.last_heartbeat ? timeAgo(n.last_heartbeat) : 'Never'}</td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn" onclick="editNode(${n.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="action-btn danger" onclick="deleteNode(${n.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function fmtPos(pos) {
+  if (!pos) return '—';
+  return `${(pos.x||0).toFixed(1)}, ${(pos.y||0).toFixed(1)}, ${(pos.z||0).toFixed(1)}m`;
+}
+
+function openAddNodeModal() {
+  editingNodeId = null;
+  document.getElementById('nodeModalTitle').textContent = 'Add Node / Anchor';
+  document.getElementById('nodeName').value = '';
+  document.getElementById('nodeMac').value = '';
+  document.getElementById('nodeX').value = '0';
+  document.getElementById('nodeY').value = '0';
+  document.getElementById('nodeZ').value = '0';
+  document.getElementById('nodeType').value = '1';
+  document.getElementById('nodeModal').style.display = 'flex';
+}
+
+function closeNodeModal() {
+  document.getElementById('nodeModal').style.display = 'none';
+  editingNodeId = null;
+}
+
+async function editNode(id) {
+  editingNodeId = id;
+  const n = nodes.find(x => x.id === id);
+  if (!n) return;
+  document.getElementById('nodeModalTitle').textContent = `Edit: ${n.assigned_name || n.mac_address}`;
+  document.getElementById('nodeName').value = n.assigned_name || '';
+  document.getElementById('nodeMac').value = n.mac_address || '';
+  const pos = n.position || {};
+  document.getElementById('nodeX').value = pos.x ?? 0;
+  document.getElementById('nodeY').value = pos.y ?? 0;
+  document.getElementById('nodeZ').value = pos.z ?? 0;
+  document.getElementById('nodeType').value = n.node_type === 'CHECK_IN' ? '2' : n.node_type === 'CHECK_OUT' ? '3' : '1';
+  document.getElementById('nodeModal').style.display = 'flex';
+}
+
+async function saveNode() {
+  const name = document.getElementById('nodeName').value.trim();
+  const mac = document.getElementById('nodeMac').value.trim();
+  if (!mac) { alert('MAC address is required'); return; }
+
+  const body = {
+    assigned_name: name || mac,
+    mac_address: mac,
+    pos_x: parseFloat(document.getElementById('nodeX').value) || 0,
+    pos_y: parseFloat(document.getElementById('nodeY').value) || 0,
+    pos_z: parseFloat(document.getElementById('nodeZ').value) || 0,
+    node_type: parseInt(document.getElementById('nodeType').value),
+  };
+
+  let res;
+  if (editingNodeId) {
+    res = await API.patch(`/nodes/${editingNodeId}`, body);
+  } else {
+    res = await API.post('/nodes', body);
+  }
+
+  if (res && res.ok) {
+    await loadNodes();
+    renderNodes();
+    closeNodeModal();
+  } else {
+    const data = await API.json(res);
+    alert('Failed: ' + (data.error || res.statusText));
+  }
+}
+
+async function deleteNode(id) {
+  if (!confirm('Delete this node?')) return;
+  const res = await API.delete(`/nodes/${id}`);
+  if (res && res.ok) {
+    await loadNodes();
+    renderNodes();
+  }
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.hw-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.hw-tab[data-tab="${tab}"]`)?.classList.add('active');
+  document.querySelectorAll('.hw-tab-content').forEach(c => c.style.display = 'none');
+  document.getElementById(`tab-${tab}`).style.display = 'block';
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 5) return 'just now';
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return d.toLocaleDateString();
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, color) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;
+    background:rgba(8,15,30,0.95);border:1px solid var(--${color});color:var(--${color});
+    border-radius:8px;font-size:13px;z-index:9999;animation:slideUp 0.2s`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.user-menu') && !e.target.closest('#userDropdown')) {
+    document.getElementById('userDropdown')?.classList.remove('open');
+  }
+});
+function toggleUserMenu() {
+  document.getElementById('userDropdown').classList.toggle('open');
+}
+function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+</script>
+
+<style>
+/* ── Layout ───────────────────────────────────────────────────────────── */
+.settings-layout { display:flex; min-height:100vh; background:var(--bg-primary); }
+.settings-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; display:flex; flex-direction:column; }
+.settings-main { flex:1; padding:28px 32px; overflow-y:auto; }
+.settings-nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+.settings-nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; }
+.settings-nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+.settings-nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
+
+/* ── Bridge Status Card ─────────────────────────────────────────────── */
+.bridge-status-card { margin:20px 16px 0; background:rgba(0,229,255,0.04); border:1px solid var(--border); border-radius:var(--radius); padding:14px; }
+.bridge-status-header { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:600; color:var(--cyan); margin-bottom:10px; letter-spacing:0.05em; }
+.bridge-stat { display:flex; justify-content:space-between; font-size:11px; margin-bottom:5px; }
+.bridge-stat-label { color:var(--text-muted); }
+.bridge-stat-value { color:var(--text-primary); font-family:var(--font-mono); }
+
+/* ── Page Header ─────────────────────────────────────────────────────── */
+.page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+.page-title { font-size:22px; font-weight:700; color:var(--text-primary); margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+.page-title i { color:var(--cyan); }
+.page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+
+/* ── Hardware Summary ───────────────────────────────────────────────── */
+.hw-summary-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+.hw-summary-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:18px; cursor:pointer; transition:all 0.15s; text-align:center; }
+.hw-summary-card:hover { border-color:var(--cyan); transform:translateY(-1px); }
+.hw-summary-icon { font-size:22px; margin-bottom:8px; }
+.hw-total .hw-summary-icon { color:var(--cyan); }
+.hw-connected .hw-summary-icon { color:var(--green); }
+.hw-disconnected .hw-summary-icon { color:var(--text-muted); }
+.hw-error .hw-summary-icon { color:var(--red); }
+.hw-summary-num { font-size:28px; font-weight:700; font-family:var(--font-mono); color:var(--text-primary); }
+.hw-summary-label { font-size:11px; color:var(--text-muted); margin-top:4px; letter-spacing:0.05em; }
+
+/* ── Tabs ────────────────────────────────────────────────────────────── */
+.hw-tabs { display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:0; }
+.hw-tab { background:none; border:none; color:var(--text-secondary); font-size:13px; font-weight:500; padding:10px 16px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; display:flex; align-items:center; gap:7px; }
+.hw-tab:hover { color:var(--text-primary); }
+.hw-tab.active { color:var(--cyan); border-bottom-color:var(--cyan); }
+.tab-description { color:var(--text-muted); font-size:13px; margin-bottom:16px; }
+
+/* ── Toolbar / Filters ──────────────────────────────────────────────── */
+.hw-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.hw-filter-chips { display:flex; gap:6px; }
+.hw-chip { background:none; border:1px solid var(--border); color:var(--text-secondary); font-size:11px; font-weight:600; padding:5px 12px; border-radius:20px; cursor:pointer; transition:all 0.1s; font-family:var(--font-mono); }
+.hw-chip:hover { border-color:var(--cyan); color:var(--cyan); }
+.hw-chip.active { background:rgba(0,229,255,0.1); border-color:var(--cyan); color:var(--cyan); }
+
+/* ── Config Table ───────────────────────────────────────────────────── */
+.hw-config-table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.hw-config-table { width:100%; border-collapse:collapse; }
+.hw-config-table th { text-align:left; font-size:10px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); padding:12px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+.hw-config-table td { padding:12px 14px; font-size:13px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+.hw-config-table tr:last-child td { border-bottom:none; }
+.hw-config-table tr:hover td { background:rgba(0,229,255,0.03); }
+.row-error td { background:rgba(255,68,68,0.04) !important; }
+.table-loading, .table-empty { text-align:center; color:var(--text-muted); font-size:13px; padding:30px; }
+.table-loading i { color:var(--cyan); }
+.config-name-cell { display:flex; align-items:center; gap:10px; }
+.config-icon { font-size:16px; }
+.config-name { font-weight:600; font-size:13px; }
+.config-error { font-size:11px; color:var(--red); margin-top:2px; font-family:var(--font-mono); }
+.mono { font-family:var(--font-mono) !important; font-size:12px !important; }
+
+.type-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; font-family:var(--font-mono); letter-spacing:0.05em; }
+.type-uwb { background:rgba(224,64,251,0.15); color:#e040fb; }
+.type-ble { background:rgba(0,229,255,0.15); color:#00e5ff; }
+.type-wifi { background:rgba(0,188,212,0.15); color:#00bcd4; }
+.type-enviro { background:rgba(76,175,80,0.15); color:#4caf50; }
+
+.status-pill { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 10px; border-radius:10px; font-family:var(--font-mono); }
+.status-dot-sm { width:5px; height:5px; border-radius:50%; background:currentColor; }
+.pill-green { background:rgba(105,255,71,0.12); color:var(--green); }
+.pill-yellow { background:rgba(255,179,0,0.12); color:var(--yellow); }
+.pill-red { background:rgba(255,68,68,0.12); color:var(--red); }
+.pill-gray { background:rgba(255,255,255,0.06); color:var(--text-muted); }
+
+.action-btns { display:flex; gap:4px; }
+.action-btn { width:28px; height:28px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:6px; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.1s; }
+.action-btn:hover { background:rgba(0,229,255,0.1); color:var(--cyan); border-color:var(--cyan); }
+.action-btn.connect:hover { background:rgba(105,255,71,0.1); color:var(--green); border-color:var(--green); }
+.action-btn.disconnect:hover { background:rgba(255,179,0,0.1); color:var(--yellow); border-color:var(--yellow); }
+.action-btn.danger:hover { background:rgba(255,68,68,0.1); color:var(--red); border-color:var(--red); }
+
+/* ── Catalog Grid ───────────────────────────────────────────────────── */
+.catalog-section { margin-bottom:24px; }
+.catalog-type-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.catalog-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+.catalog-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; cursor:pointer; transition:all 0.15s; }
+.catalog-card:hover { border-color:var(--cyan); transform:translateY(-2px); box-shadow:0 8px 20px rgba(0,229,255,0.08); }
+.catalog-vendor { font-size:10px; font-weight:600; color:var(--text-muted); letter-spacing:0.05em; text-transform:uppercase; }
+.catalog-card-name { font-size:14px; font-weight:700; color:var(--text-primary); margin:6px 0 4px; }
+.catalog-card-desc { font-size:12px; color:var(--text-secondary); line-height:1.4; margin-bottom:10px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.catalog-card-footer { display:flex; align-items:center; justify-content:space-between; }
+.catalog-add-btn { font-size:11px; font-weight:600; color:var(--cyan); }
+.catalog-add-btn:hover { color:#fff; }
+
+/* ── Modal ──────────────────────────────────────────────────────────── */
+.hw-modal { background:var(--bg-card); border:1px solid var(--border-bright); border-radius:var(--radius); width:560px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.7); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--border); }
+.modal-header h3 { margin:0; font-size:16px; color:var(--text-primary); }
+.modal-close { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:4px; }
+.modal-close:hover { color:var(--text-primary); }
+.modal-section-label { font-size:11px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); text-transform:uppercase; margin:16px 20px 10px; }
+.modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:16px 20px 0; border-top:1px solid var(--border); margin-top:16px; }
+
+.form-group { margin-bottom:14px; padding:0 20px; }
+.form-row { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.form-label { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:5px; }
+.form-required { color:var(--red); }
+.form-help { width:14px; height:14px; border-radius:50%; background:rgba(255,255,255,0.1); font-size:9px; display:inline-flex; align-items:center; justify-content:center; cursor:help; color:var(--text-muted); }
+.form-input { width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text-primary); font-size:13px; font-family:inherit; outline:none; box-sizing:border-box; transition:border-color 0.15s; }
+.form-input:focus { border-color:var(--cyan); }
+.form-input.mono { font-family:var(--font-mono); font-size:12px; }
+textarea.form-input { resize:vertical; }
+
+/* Toggle switch */
+.toggle-switch { display:inline-flex; cursor:pointer; }
+.toggle-switch input { display:none; }
+.toggle-slider { width:36px; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; position:relative; transition:background 0.2s; }
+.toggle-slider::after { content:''; width:16px; height:16px; border-radius:50%; background:#fff; position:absolute; top:2px; left:2px; transition:transform 0.2s; }
+.toggle-switch input:checked ~ .toggle-slider { background:var(--cyan); }
+.toggle-switch input:checked ~ .toggle-slider::after { transform:translateX(16px); }
+
+/* Profile picker */
+.profile-picker-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 20px 16px; }
+.profile-picker-type { grid-column:1/-1; font-size:10px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); text-transform:uppercase; margin-top:10px; margin-bottom:2px; }
+.profile-picker-item { background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:8px; padding:10px 12px; cursor:pointer; transition:all 0.1s; }
+.profile-picker-item:hover { border-color:var(--cyan); background:rgba(0,229,255,0.05); }
+.profile-picker-item.selected { border-color:var(--cyan); background:rgba(0,229,255,0.1); }
+.profile-picker-name { font-size:12px; font-weight:600; color:var(--text-primary); }
+.profile-picker-vendor { font-size:10px; color:var(--text-muted); }
+
+/* Test result */
+.test-result { padding:10px 14px; border-radius:8px; font-size:13px; font-family:var(--font-mono); }
+.test-success { background:rgba(105,255,71,0.1); border:1px solid rgba(105,255,71,0.3); color:var(--green); }
+.test-error { background:rgba(255,68,68,0.1); border:1px solid rgba(255,68,68,0.3); color:var(--red); }
+.test-pending { background:rgba(255,179,0,0.1); border:1px solid rgba(255,179,0,0.3); color:var(--yellow); }
+
+/* ── Breadcrumb ─────────────────────────────────────────────────────── */
+.breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
+.breadcrumb i { font-size:10px; }
+.breadcrumb span { color:var(--text-secondary); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; text-decoration:none; }
+.btn-primary { background:var(--cyan); color:#000; }
+.btn-primary:hover { background:#33eeff; box-shadow:0 4px 12px rgba(0,229,255,0.3); }
+.btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+.btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
+.btn-danger { background:rgba(255,68,68,0.15); color:var(--red); border:1px solid rgba(255,68,68,0.3); }
+.btn-danger:hover { background:rgba(255,68,68,0.25); }
+
+/* ── Animations ─────────────────────────────────────────────────────── */
+@keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+</style>
+</body>
+</html>

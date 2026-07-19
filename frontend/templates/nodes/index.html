@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nodes / Anchors — HOLO-RTLS</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand">
+      <div class="brand-icon">◈</div>
+      <span class="brand-name">HOLO-RTLS</span>
+    </a>
+    <div class="breadcrumb">
+      <i class="fa-solid fa-chevron-right"></i>
+      <span>Anchors / Nodes</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
+    <div class="user-menu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="settings-layout">
+  <aside class="settings-sidebar">
+    <div class="settings-nav-label">SYSTEM</div>
+    <nav class="settings-nav">
+      <a href="/" class="settings-nav-item"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+      <a href="/hardware" class="settings-nav-item"><i class="fa-solid fa-microchip"></i> Hardware</a>
+      <a href="/nodes" class="settings-nav-item active"><i class="fa-solid fa-anchor"></i> Nodes</a>
+      <a href="/alerts" class="settings-nav-item"><i class="fa-solid fa-bell"></i> Alerts</a>
+      <a href="/settings" class="settings-nav-item"><i class="fa-solid fa-gear"></i> Settings</a>
+    </nav>
+    <div class="settings-nav-label" style="margin-top:24px">ADMIN</div>
+    <nav class="settings-nav" id="adminNav" style="display:none">
+      <a href="/users" class="settings-nav-item"><i class="fa-solid fa-users"></i> Users</a>
+      <a href="/audit" class="settings-nav-item"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
+    </nav>
+  </aside>
+
+  <main class="settings-main">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">
+          <i class="fa-solid fa-anchor" style="color:var(--magenta)"></i>
+          Anchors / Nodes
+        </h1>
+        <p class="page-subtitle">Fixed-position reference points for positioning. Place at known survey coordinates.</p>
+      </div>
+      <button class="btn btn-primary" onclick="openNodeModal()">
+        <i class="fa-solid fa-plus"></i> Add Node
+      </button>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="hw-summary-grid">
+      <div class="hw-summary-card hw-total">
+        <div class="hw-summary-icon"><i class="fa-solid fa-anchor"></i></div>
+        <div class="hw-summary-num" id="statTotal">—</div>
+        <div class="hw-summary-label">Total Nodes</div>
+      </div>
+      <div class="hw-summary-card hw-connected">
+        <div class="hw-summary-icon"><i class="fa-solid fa-link"></i></div>
+        <div class="hw-summary-num" id="statActive">—</div>
+        <div class="hw-summary-label">Active</div>
+      </div>
+      <div class="hw-summary-card hw-disconnected">
+        <div class="hw-summary-icon"><i class="fa-solid fa-calibration"></i></div>
+        <div class="hw-summary-icon"><i class="fa-solid fa-wifi"></i></div>
+        <div class="hw-summary-num" id="statCalibrating">—</div>
+        <div class="hw-summary-label">Calibrating</div>
+      </div>
+      <div class="hw-summary-card hw-error">
+        <div class="hw-summary-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div class="hw-summary-num" id="statOffline">—</div>
+        <div class="hw-summary-label">Offline</div>
+      </div>
+    </div>
+
+    <!-- Info Banner -->
+    <div class="info-banner">
+      <i class="fa-solid fa-info-circle"></i>
+      Nodes are <strong>fixed reference points</strong> used for positioning. Place at known survey coordinates
+      and add to the <a href="/hardware">hardware configuration</a> to enable UWB ranging.
+      <strong>Calibrated</strong> nodes improve trilateration accuracy to ±10cm.
+    </div>
+
+    <!-- Nodes Table -->
+    <div class="hw-config-table-wrap">
+      <table class="hw-config-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>MAC Address</th>
+            <th>Position (X, Y, Z)</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Last Heartbeat</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="nodesTable">
+          <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- ── Add / Edit Node Modal ──────────────────────────────────────── -->
+<div class="modal-overlay" id="nodeModal" style="display:none" onclick="if(event.target===this)closeNodeModal()">
+  <div class="hw-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="nodeModalTitle">Add Node / Anchor</h3>
+      <button class="modal-close" onclick="closeNodeModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="form-group" style="padding-top:16px">
+      <label class="form-label">Name <span class="form-required">*</span></label>
+      <input class="form-input" id="nodeName" placeholder="e.g. Gate Entry Anchor">
+    </div>
+    <div class="form-group">
+      <label class="form-label">MAC Address <span class="form-required">*</span></label>
+      <input class="form-input mono" id="nodeMac" placeholder="AA:BB:CC:DD:EE:FF" style="text-transform:uppercase">
+    </div>
+
+    <!-- Position via coordinate input -->
+    <div style="padding:0 20px 8px">
+      <div class="form-label" style="margin-bottom:8px">
+        <i class="fa-solid fa-crosshairs"></i> Position (meters)
+        <span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px">
+          Survey coordinates — calibrate with map reference points
+        </span>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">X (meters)</label>
+          <input class="form-input" type="number" step="0.01" id="nodeX" value="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Y (meters)</label>
+          <input class="form-input" type="number" step="0.01" id="nodeY" value="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Z / Height (m)</label>
+          <input class="form-input" type="number" step="0.01" id="nodeZ" value="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Node Type</label>
+      <select class="form-input" id="nodeType">
+        <option value="1">Standard — Regular positioning anchor</option>
+        <option value="2">Check-In — Worker enters zone here</option>
+        <option value="3">Check-Out — Worker exits zone here</option>
+      </select>
+    </div>
+
+    <!-- Calibration status for existing node -->
+    <div class="form-group" id="calibrationGroup" style="display:none">
+      <label class="form-label">Calibration Status</label>
+      <div id="calibrationStatus" class="calibration-status">
+        <i class="fa-solid fa-circle-check" style="color:var(--green)"></i>
+        <span>Calibrated</span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeNodeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNode()">
+        <i class="fa-solid fa-check"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/auth.js"></script>
+<script>
+'use strict';
+let nodes = [];
+let editingNodeId = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await Promise.all([loadUserInfo(), loadNodes()]);
+  renderNodes();
+  renderSummary();
+});
+
+async function loadUserInfo() {
+  const res = await API.get('/auth/me');
+  const data = await API.json(res);
+  if (!res || !res.ok) { window.location.href = '/login'; return; }
+  const u = data.user;
+  document.getElementById('userAvatar').textContent = (u.display_name || u.username).charAt(0).toUpperCase();
+  if (u.role === 'ADMIN') document.getElementById('adminNav').style.display = 'block';
+}
+
+async function loadNodes() {
+  const res = await API.get('/nodes');
+  const data = await API.json(res);
+  if (res && res.ok) nodes = data.items || [];
+}
+
+function renderSummary() {
+  document.getElementById('statTotal').textContent = nodes.length;
+  document.getElementById('statActive').textContent = nodes.filter(n => n.status === 'ACTIVE').length;
+  document.getElementById('statCalibrating').textContent = nodes.filter(n => n.status === 'CALIBRATING').length;
+  document.getElementById('statOffline').textContent = nodes.filter(n => n.status === 'OFFLINE').length;
+}
+
+function renderNodes() {
+  const tbody = document.getElementById('nodesTable');
+  if (!nodes.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">
+      <div style="margin-bottom:8px"><i class="fa-solid fa-anchor" style="font-size:28px;color:var(--text-muted)"></i></div>
+      No anchors configured yet.<br>
+      <a href="#" onclick="openNodeModal();return false" style="color:var(--cyan)">Add your first node →</a>
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = nodes.map(n => {
+    const pos = n.position || {};
+    const typeIcon = { STANDARD: 'fa-anchor', CHECK_IN: 'fa-right-to-bracket', CHECK_OUT: 'fa-right-from-bracket' }[n.node_type] || 'fa-anchor';
+    const statusClass = statusClassFor(n.status);
+    return `<tr>
+      <td>
+        <div class="node-name-cell">
+          <i class="fa-solid ${typeIcon}" style="color:var(--magenta);font-size:14px"></i>
+          <span style="font-weight:600">${n.assigned_name || '—'}</span>
+        </div>
+      </td>
+      <td class="mono">${n.mac_address || '—'}</td>
+      <td class="mono pos-cell">
+        <span class="pos-label">X</span><span class="pos-val">${fmt(pos.x)}</span>
+        <span class="pos-label">Y</span><span class="pos-val">${fmt(pos.y)}</span>
+        <span class="pos-label">Z</span><span class="pos-val">${fmt(pos.z)}</span>
+      </td>
+      <td>
+        <span class="node-type-badge type-${(n.node_type||'').toLowerCase()}">
+          ${n.node_type === 'CHECK_IN' ? '<i class="fa-solid fa-right-to-bracket"></i>' : ''}
+          ${n.node_type === 'CHECK_OUT' ? '<i class="fa-solid fa-right-from-bracket"></i>' : ''}
+          ${n.node_type === 'STANDARD' ? '<i class="fa-solid fa-anchor"></i>' : ''}
+          ${n.node_type || 'Standard'}
+        </span>
+      </td>
+      <td><span class="status-pill ${statusClass}"><span class="status-dot-sm"></span>${n.status || 'Unknown'}</span></td>
+      <td class="mono">${n.last_heartbeat ? timeAgo(n.last_heartbeat) : '<span style="color:var(--text-muted)">Never</span>'}</td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn" onclick="editNode(${n.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="action-btn danger" onclick="deleteNode(${n.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function fmt(v) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00'; }
+
+function statusClassFor(s) {
+  if (s === 'ACTIVE') return 'pill-green';
+  if (s === 'OFFLINE') return 'pill-gray';
+  if (s === 'CALIBRATING') return 'pill-yellow';
+  return 'pill-gray';
+}
+
+function openNodeModal() {
+  editingNodeId = null;
+  document.getElementById('nodeModalTitle').textContent = 'Add Node / Anchor';
+  document.getElementById('nodeName').value = '';
+  document.getElementById('nodeMac').value = '';
+  document.getElementById('nodeX').value = '0';
+  document.getElementById('nodeY').value = '0';
+  document.getElementById('nodeZ').value = '0';
+  document.getElementById('nodeType').value = '1';
+  document.getElementById('calibrationGroup').style.display = 'none';
+  document.getElementById('nodeModal').style.display = 'flex';
+}
+
+function closeNodeModal() {
+  document.getElementById('nodeModal').style.display = 'none';
+  editingNodeId = null;
+}
+
+async function editNode(id) {
+  editingNodeId = id;
+  const n = nodes.find(x => x.id === id);
+  if (!n) return;
+  document.getElementById('nodeModalTitle').textContent = `Edit: ${n.assigned_name || n.mac_address}`;
+  document.getElementById('nodeName').value = n.assigned_name || '';
+  document.getElementById('nodeMac').value = n.mac_address || '';
+  const pos = n.position || {};
+  document.getElementById('nodeX').value = pos.x ?? 0;
+  document.getElementById('nodeY').value = pos.y ?? 0;
+  document.getElementById('nodeZ').value = pos.z ?? 0;
+  document.getElementById('nodeType').value =
+    n.node_type === 'CHECK_IN' ? '2' : n.node_type === 'CHECK_OUT' ? '3' : '1';
+  document.getElementById('calibrationGroup').style.display = 'block';
+  const calEl = document.getElementById('calibrationStatus');
+  calEl.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--green)"></i>
+    <span>Position: (${fmt(pos.x)}, ${fmt(pos.y)}, ${fmt(pos.z)}) — calibrated</span>`;
+  document.getElementById('nodeModal').style.display = 'flex';
+}
+
+async function saveNode() {
+  const name = document.getElementById('nodeName').value.trim();
+  const mac = document.getElementById('nodeMac').value.trim().toUpperCase();
+  if (!mac) { alert('MAC address is required'); return; }
+  // Basic MAC validation
+  if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(mac)) {
+    alert('Invalid MAC address format. Use AA:BB:CC:DD:EE:FF');
+    return;
+  }
+  const body = {
+    assigned_name: name || mac,
+    mac_address: mac,
+    pos_x: parseFloat(document.getElementById('nodeX').value) || 0,
+    pos_y: parseFloat(document.getElementById('nodeY').value) || 0,
+    pos_z: parseFloat(document.getElementById('nodeZ').value) || 0,
+    node_type: parseInt(document.getElementById('nodeType').value),
+  };
+  let res;
+  if (editingNodeId) {
+    res = await API.patch(`/nodes/${editingNodeId}`, body);
+  } else {
+    res = await API.post('/nodes', body);
+  }
+  if (res && res.ok) {
+    await loadNodes();
+    renderNodes();
+    renderSummary();
+    closeNodeModal();
+    showToast(editingNodeId ? 'Node updated' : 'Node added');
+  } else {
+    const data = await API.json(res);
+    alert('Failed: ' + (data.error || res.statusText));
+  }
+}
+
+async function deleteNode(id) {
+  if (!confirm('Delete this node?')) return;
+  const res = await API.del(`/nodes/${id}`);
+  if (res && res.ok) {
+    await loadNodes();
+    renderNodes();
+    renderSummary();
+    showToast('Node deleted', 'yellow');
+  }
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return d.toLocaleDateString();
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;
+    background:rgba(8,15,30,0.95);border:1px solid var(--cyan);color:var(--cyan);
+    border-radius:8px;font-size:13px;z-index:9999;animation:slideUp 0.2s`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(() => t.remove(), 300); }, 3000);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');
+});
+function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
+function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+</script>
+
+<style>
+/* Reuse hardware page styles */
+.settings-layout { display:flex; min-height:100vh; background:var(--bg-primary); }
+.settings-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
+.settings-nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+.settings-nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; }
+.settings-nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+.settings-nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
+.settings-main { flex:1; padding:28px 32px; overflow-y:auto; }
+.page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+.page-title { font-size:22px; font-weight:700; color:var(--text-primary); margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+.page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+.hw-summary-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+.hw-summary-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:18px; text-align:center; }
+.hw-summary-icon { font-size:22px; margin-bottom:8px; color:var(--magenta); }
+.hw-total .hw-summary-icon { color:var(--cyan); }
+.hw-connected .hw-summary-icon { color:var(--green); }
+.hw-disconnected .hw-summary-icon { color:var(--yellow); }
+.hw-error .hw-summary-icon { color:var(--red); }
+.hw-summary-num { font-size:28px; font-weight:700; font-family:var(--font-mono); }
+.hw-summary-label { font-size:11px; color:var(--text-muted); margin-top:4px; letter-spacing:0.05em; }
+.info-banner { background:rgba(0,229,255,0.05); border:1px solid rgba(0,229,255,0.2); border-radius:var(--radius); padding:14px 16px; font-size:13px; color:var(--text-secondary); margin-bottom:20px; display:flex; gap:10px; align-items:center; }
+.info-banner i { color:var(--cyan); flex-shrink:0; }
+.info-banner a { color:var(--cyan); }
+.hw-config-table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.hw-config-table { width:100%; border-collapse:collapse; }
+.hw-config-table th { text-align:left; font-size:10px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); padding:12px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+.hw-config-table td { padding:12px 14px; font-size:13px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+.hw-config-table tr:last-child td { border-bottom:none; }
+.hw-config-table tr:hover td { background:rgba(0,229,255,0.03); }
+.table-loading, .table-empty { text-align:center; color:var(--text-muted); font-size:13px; padding:40px; }
+.table-loading i { color:var(--cyan); }
+.mono { font-family:var(--font-mono) !important; font-size:12px !important; }
+.node-name-cell { display:flex; align-items:center; gap:8px; }
+.pos-cell { display:flex; gap:6px; align-items:center; }
+.pos-label { font-size:9px; font-weight:700; color:var(--text-muted); background:rgba(255,255,255,0.05); padding:1px 4px; border-radius:3px; }
+.pos-val { font-size:11px; color:var(--cyan); }
+.node-type-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; padding:3px 8px; border-radius:10px; font-family:var(--font-mono); }
+.node-type-badge.type-standard { background:rgba(224,64,251,0.15); color:#e040fb; }
+.node-type-badge.type-check_in { background:rgba(105,255,71,0.15); color:var(--green); }
+.node-type-badge.type-check_out { background:rgba(0,229,255,0.15); color:var(--cyan); }
+.status-pill { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 10px; border-radius:10px; font-family:var(--font-mono); }
+.status-dot-sm { width:5px; height:5px; border-radius:50%; background:currentColor; }
+.pill-green { background:rgba(105,255,71,0.12); color:var(--green); }
+.pill-yellow { background:rgba(255,179,0,0.12); color:var(--yellow); }
+.pill-red { background:rgba(255,68,68,0.12); color:var(--red); }
+.pill-gray { background:rgba(255,255,255,0.06); color:var(--text-muted); }
+.action-btns { display:flex; gap:4px; }
+.action-btn { width:28px; height:28px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:6px; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.1s; }
+.action-btn:hover { background:rgba(0,229,255,0.1); color:var(--cyan); border-color:var(--cyan); }
+.action-btn.danger:hover { background:rgba(255,68,68,0.1); color:var(--red); border-color:var(--red); }
+.breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
+.breadcrumb i { font-size:10px; }
+.breadcrumb span { color:var(--text-secondary); }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; text-decoration:none; }
+.btn-primary { background:var(--cyan); color:#000; }
+.btn-primary:hover { background:#33eeff; box-shadow:0 4px 12px rgba(0,229,255,0.3); }
+.btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+.btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
+.hw-modal { background:var(--bg-card); border:1px solid var(--border-bright); border-radius:var(--radius); width:520px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.7); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--border); }
+.modal-header h3 { margin:0; font-size:16px; }
+.modal-close { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; }
+.modal-close:hover { color:var(--text-primary); }
+.modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:16px 20px 0; border-top:1px solid var(--border); margin-top:16px; }
+.form-group { margin-bottom:14px; padding:0 20px; }
+.form-row { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.form-label { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:5px; }
+.form-required { color:var(--red); }
+.form-input { width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text-primary); font-size:13px; font-family:inherit; outline:none; box-sizing:border-box; transition:border-color 0.15s; }
+.form-input:focus { border-color:var(--cyan); }
+.form-input.mono { font-family:var(--font-mono); font-size:12px; }
+.calibration-status { display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(105,255,71,0.06); border:1px solid rgba(105,255,71,0.2); border-radius:8px; font-size:13px; color:var(--text-primary); }
+@keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+</style>
+</body>
+</html>
