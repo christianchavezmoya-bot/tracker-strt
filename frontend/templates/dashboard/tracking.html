@@ -780,8 +780,12 @@ const App = {
     await this.loadDevices();
     await this.loadPositions();
 
-    // Connect SSE
+    // Connect SSE (primary live stream — Pipeline 1)
     this.connectSSE();
+
+    // Start polling fallback for Pipeline 2 (scanner subsystem)
+    this.startScannerPolling(2000);
+    window.addEventListener('beforeunload', () => this.stopScannerPolling());
 
     // Start render loop
     this.lastFpsTime = performance.now();
@@ -1458,6 +1462,60 @@ const App = {
       // Auto-reconnect
       setTimeout(() => this.connectSSE(), 3000);
     };
+  },
+
+  // ── Polling fallback for scanner subsystem ─────────────────────────────────
+  // SSE /api/stream/positions carries Pipeline-1 data (WifiNode/Tracker).
+  // Scanner subsystem lives in /api/scanner/positions/live (WifiAnchor pipeline).
+  // Both are merged here so /tracking shows both live position sources.
+  _pollInterval: null,
+
+  startScannerPolling(intervalMs = 2000) {
+    if (this._pollInterval) clearInterval(this._pollInterval);
+    this._pollInterval = setInterval(() => this._pollScannerPositions(), intervalMs);
+    console.log('[tracking] Scanner polling started every', intervalMs, 'ms');
+  },
+
+  stopScannerPolling() {
+    if (this._pollInterval) {
+      clearInterval(this._pollInterval);
+      this._pollInterval = null;
+    }
+  },
+
+  async _pollScannerPositions() {
+    const token = localStorage.getItem('holo_access_token');
+    if (!token) return;
+    try {
+      const res = await fetch('/api/scanner/positions/live', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const dev of (data.devices || [])) {
+        if (dev.x == null) continue;
+        // Merge: scanner data keyed by mac_address
+        const key = dev.mac_address;
+        this.positions[key] = { x: dev.x, y: dev.y, z: dev.z || 0, accuracy: dev.accuracy || 10 };
+        if (!this.dots[key]) {
+          this.dots[key] = { x: dev.x, y: dev.y };
+        }
+        // Positions feed into this.positions — render loop picks them up automatically
+        // Just update the sidebar device list if needed
+        const existing = this.devices.find(d => d.mac_address === key);
+        if (existing) {
+          existing.x = dev.x;
+          existing.y = dev.y;
+          existing.last_seen = dev.last_seen;
+        }
+      }
+      // Update stats
+      const scannerCount = (data.devices || []).filter(d => d.x != null).length;
+      const oldCount = parseInt(document.getElementById('stat-devices').textContent) || 0;
+      document.getElementById('stat-devices').textContent = Math.max(oldCount, scannerCount);
+    } catch (e) {
+      // Silent fail — SSE is the primary path
+    }
   },
 
   // ── Actions ───────────────────────────────────────────────────────────────

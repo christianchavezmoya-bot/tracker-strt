@@ -306,7 +306,7 @@ def _init_positioning(app):
 
     mapper_svc = FloorPlanMapperService(db.session)
 
-    history_svc = init_history_service(db.session, retention_days=30, flush_interval=5)
+    history_svc = init_history_service(db.session, app=app, retention_days=30, flush_interval=5)
     history_svc.start()
 
     # Notification service (email/SMS dispatch)

@@ -26,11 +26,13 @@ class HistoryService:
     """
 
     def __init__(self, db_session, retention_days: int = 30, flush_interval: int = 5,
-                 max_buffer: int = 5000):
+                 max_buffer: int = 5000, app=None):
         self._db = db_session
         self._retention_days = retention_days
         self._flush_interval = flush_interval
         self._max_buffer = max_buffer
+        # Flask app reference — needed for app_context() in background threads
+        self._app = app
 
         # In-memory circular buffers: tracker_id → deque of positions
         from collections import deque
@@ -146,8 +148,12 @@ class HistoryService:
                 logger.error(f"History flush error: {e}")
 
     def _flush_all(self):
-        with self._lock:
-            self._flush_unlocked()
+        # Background thread has no Flask context by default — push one so scoped
+        # sessions (used by SQLAlchemy in this app) can acquire a connection.
+        app = self._app or __import__('flask').current_app._get_current_object()
+        with app.app_context():
+            with self._lock:
+                self._flush_unlocked()
 
     def _flush_unlocked(self):
         """Flush all buffers. Must be called while holding self._lock."""
@@ -253,7 +259,7 @@ def get_history_service() -> HistoryService:
     return _history_service
 
 
-def init_history_service(db_session, **kwargs) -> HistoryService:
+def init_history_service(db_session, app=None, **kwargs) -> HistoryService:
     global _history_service
-    _history_service = HistoryService(db_session, **kwargs)
+    _history_service = HistoryService(db_session, app=app, **kwargs)
     return _history_service
