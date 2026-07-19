@@ -124,6 +124,13 @@
     </div>
     <h2 class="auth-card-title">Reset Password</h2>
     <p class="auth-card-desc">Enter your email and we'll send you a reset link.</p>
+    <!-- Success Banner -->
+    <div class="auth-success" id="resetSuccess" style="display:none">
+      <i class="fa-solid fa-circle-check"></i>
+      <span id="resetSuccessMsg"></span>
+      <a id="resetDevLink" href="#" class="form-link" style="display:none;margin-left:8px">Open reset page</a>
+    </div>
+
     <form onsubmit="handlePasswordReset(event)">
       <div class="form-group">
         <div class="input-wrapper">

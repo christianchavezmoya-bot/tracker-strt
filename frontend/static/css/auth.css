@@ -81,6 +81,13 @@
   color: var(--red); font-size: 13px; margin-bottom: 16px;
 }
 
+.auth-success {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  background: rgba(45, 212, 191, 0.12); border: 1px solid rgba(45, 212, 191, 0.35);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+  color: var(--green); font-size: 13px; margin-bottom: 16px;
+}
+
 .form-group { margin-bottom: 18px; }
 .form-label {
   display: block; font-size: 12px; font-weight: 600;

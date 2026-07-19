@@ -34,6 +34,7 @@ bluepy==1.3.0        # Alternative BLE scanner for Raspberry Pi
 
 # Email
 Flask-Mail==0.10.0
+pywebpush==2.0.1
 
 # Background tasks
 APScheduler==3.10.4

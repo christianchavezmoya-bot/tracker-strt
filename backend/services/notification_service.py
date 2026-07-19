@@ -87,6 +87,12 @@ class NotificationService:
 
             self._db.commit()
 
+            try:
+                from backend.services.push_service import send_alert_push
+                send_alert_push(alert, [u.id for u in users])
+            except Exception as e:
+                logger.warning("Web push dispatch failed: %s", e)
+
     def notify_system(self, user_id: int, title: str, message: str,
                       link_url: str = None):
         """Create a system/in-app notification for one user."""

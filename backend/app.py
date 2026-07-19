@@ -152,6 +152,7 @@ def create_app(test_config: dict = None) -> Flask:
     from backend.api.sessions import sessions_bp
     from backend.api.webhooks import webhooks_bp, schedules_bp
     from backend.api.inject import inject_bp
+    from backend.api.push import push_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trackers_bp)
@@ -176,6 +177,7 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(schedules_bp)
     app.register_blueprint(inject_bp)
+    app.register_blueprint(push_bp)
 
     # ── JWT blocklist (session revoke) ────────────────────────────────────────
     @jwt.token_in_blocklist_loader
@@ -338,6 +340,14 @@ def create_app(test_config: dict = None) -> Flask:
     if not test_config:
         with app.app_context():
             _init_positioning(app)
+
+    if not test_config and not config.DEBUG:
+        import logging
+        uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        if str(uri).startswith("sqlite"):
+            logging.getLogger(__name__).warning(
+                "SQLite in non-debug mode — use PostgreSQL for production (docs/POSTGRES.md)"
+            )
 
     return app
 

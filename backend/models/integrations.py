@@ -61,3 +61,32 @@ class ReportSchedule(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
         }
+
+
+class PushSubscription(db.Model):
+    """Browser Web Push subscription (VAPID)."""
+    __tablename__ = "push_subscriptions"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    endpoint   = db.Column(db.Text, nullable=False, unique=True)
+    p256dh     = db.Column(db.String(255), nullable=False)
+    auth       = db.Column(db.String(255), nullable=False)
+    user_agent = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    last_used_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "endpoint": self.endpoint[:80] + "…" if len(self.endpoint or "") > 80 else self.endpoint,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+        }
+
+    def subscription_info(self) -> dict:
+        return {
+            "endpoint": self.endpoint,
+            "keys": {"p256dh": self.p256dh, "auth": self.auth},
+        }

@@ -60,6 +60,19 @@ export HOLO_ENABLE_UWB_DEMO=0
 
 Default is enabled for lab compatibility. Prefer `/api/positioning/*`.
 
+## Web Push (VAPID)
+
+Optional browser push for critical alerts (works with the service worker):
+
+```bash
+# Generate keys: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key); print(v.private_key)"
+export VAPID_PUBLIC_KEY='...'
+export VAPID_PRIVATE_KEY='...'
+export VAPID_CLAIMS_EMAIL='mailto:ops@example.com'
+```
+
+Users enable subscriptions in **Settings → Location Core → Enable Web Push**.
+
 ## Checklist
 
 | Item | Dev (SQLite) | Prod (Postgres) |

@@ -427,6 +427,7 @@ def integrations_status():
         "twilio_configured": twilio_ok,
         "twilio_from": config.TWILIO_FROM_NUMBER if twilio_ok else None,
         "sms_available": sms_available,
+        "web_push_configured": bool(config.WEB_PUSH_ENABLED),
     })
 
 

@@ -76,6 +76,7 @@ function onLoginSuccess(data) {
 function showError(msg) {
   const errorEl = document.getElementById('loginError');
   const errorMsg = document.getElementById('loginErrorMsg');
+  errorEl.className = 'auth-error';
   errorMsg.textContent = msg;
   errorEl.style.display = 'flex';
 }
@@ -107,9 +108,9 @@ async function confirmSetup2FA() {
   if (res && res.ok) {
     showCard('loginCard');
     showLogin();
-    alert('2FA enabled successfully!');
+    showSuccess('2FA enabled successfully.');
   } else {
-    alert(data.error || 'Invalid code');
+    showError(data.error || 'Invalid code');
   }
 }
 
@@ -133,25 +134,42 @@ function showCard(id) {
   });
 }
 
+function showSuccess(msg) {
+  const errorEl = document.getElementById('loginError');
+  const errorMsg = document.getElementById('loginErrorMsg');
+  errorEl.className = 'auth-success';
+  errorMsg.textContent = msg;
+  errorEl.style.display = 'flex';
+}
+
 async function handlePasswordReset(event) {
   event.preventDefault();
   const email = document.getElementById('resetEmailInput').value.trim();
+  const successEl = document.getElementById('resetSuccess');
+  const successMsg = document.getElementById('resetSuccessMsg');
+  const devLink = document.getElementById('resetDevLink');
+  if (successEl) {
+    successEl.style.display = 'none';
+    successEl.className = 'auth-success';
+  }
+  if (devLink) devLink.style.display = 'none';
+
   const res = await API.post('/auth/password/reset-request', { email });
   const data = await API.json(res);
   if (res && res.ok) {
-    let msg = data.message || 'If that email is registered, a reset link has been sent.';
-    if (data.reset_url) {
-      msg += '\n\nDev reset link:\n' + location.origin + data.reset_url;
-      if (confirm(msg + '\n\nOpen reset page now?')) {
-        location.href = data.reset_url;
-        return;
-      }
-    } else {
-      alert(msg);
+    const msg = data.message || 'If that email is registered, a reset link has been sent.';
+    if (successEl && successMsg) {
+      successMsg.textContent = msg;
+      successEl.style.display = 'flex';
     }
-    showLogin();
-  } else {
-    alert((data && data.error) || 'Request failed');
+    if (data.reset_url && devLink) {
+      devLink.href = data.reset_url;
+      devLink.style.display = 'inline';
+    }
+  } else if (successEl && successMsg) {
+    successMsg.textContent = (data && data.error) || 'Request failed';
+    successEl.className = 'auth-error';
+    successEl.style.display = 'flex';
   }
 }
 

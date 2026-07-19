@@ -206,3 +206,52 @@ def test_proximity_alert_engine(app, db_session):
 
         far = svc._check_proximity(t1.id, 100.0, 100.0, 0.0)
         assert len(far) == 0
+
+
+def test_audit_export_csv(client, admin_headers, app):
+    from backend.models import AuditLog
+    from backend.extensions import db
+
+    with app.app_context():
+        AuditLog.log(action="smoke.test", user_id=1, entity_type="Test", entity_id=1, details='{}')
+        db.session.commit()
+
+    res = client.get("/api/audit/export", headers=admin_headers)
+    assert res.status_code == 200
+    assert "text/csv" in (res.headers.get("Content-Type") or "")
+    body = res.get_data(as_text=True)
+    assert "timestamp" in body
+    assert "smoke.test" in body
+
+
+def test_push_subscribe_and_vapid(client, auth_headers, app, monkeypatch):
+    monkeypatch.setattr("backend.config.WEB_PUSH_ENABLED", True)
+    monkeypatch.setattr("backend.config.VAPID_PUBLIC_KEY", "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U")
+    monkeypatch.setattr("backend.config.VAPID_PRIVATE_KEY", "test-private-key")
+
+    res = client.get("/api/push/vapid-public-key", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.get_json() or {}
+    assert data.get("configured") is True
+    assert data.get("public_key")
+
+    sub = client.post(
+        "/api/push/subscribe",
+        headers=auth_headers,
+        json={
+            "endpoint": "https://push.example.com/sub/abc123",
+            "keys": {"p256dh": "key1", "auth": "auth1"},
+        },
+    )
+    assert sub.status_code == 201
+
+    lst = client.get("/api/push/subscriptions", headers=auth_headers)
+    assert lst.status_code == 200
+    assert len((lst.get_json() or {}).get("items") or []) >= 1
+
+    unsub = client.delete(
+        "/api/push/subscribe",
+        headers=auth_headers,
+        json={"endpoint": "https://push.example.com/sub/abc123"},
+    )
+    assert unsub.status_code == 200

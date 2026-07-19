@@ -18,7 +18,7 @@ from backend.models.detection import (
     FloorPlan, WifiAnchor, DetectionEvent, TrackedDevice,
     SignalType, AnchorStatus, DeviceType,
 )
-from backend.models.integrations import WebhookEndpoint, ReportSchedule
+from backend.models.integrations import WebhookEndpoint, ReportSchedule, PushSubscription
 
 __all__ = [
     "User", "UserRole", "UserSession",
@@ -33,5 +33,5 @@ __all__ = [
     "HardwareConfig",
     "FloorPlan", "WifiAnchor", "DetectionEvent", "TrackedDevice",
     "SignalType", "AnchorStatus", "DeviceType",
-    "WebhookEndpoint", "ReportSchedule",
+    "WebhookEndpoint", "ReportSchedule", "PushSubscription",
 ]

@@ -116,8 +116,10 @@
             <a class="btn btn-ghost" href="/tracking?legacy=1"><i class="fa-solid fa-satellite-dish"></i> Scanner lab</a>
             <a class="btn btn-ghost" href="/hardware"><i class="fa-solid fa-microchip"></i> Hardware</a>
             <button type="button" class="btn btn-ghost" onclick="enableDesktopAlerts()"><i class="fa-solid fa-bell"></i> Enable desktop alerts</button>
+            <button type="button" class="btn btn-ghost" onclick="enableWebPush()"><i class="fa-solid fa-mobile-screen"></i> Enable Web Push</button>
           </div>
           <p id="notifPermStatus" style="font-size:12px;color:var(--text-muted);margin-top:10px"></p>
+          <p id="webPushStatus" style="font-size:12px;color:var(--text-muted);margin-top:4px"></p>
         </div>
       </div>
     </div>
@@ -461,6 +463,7 @@ async function loadIntegrationsStatus() {
       smsGrid.innerHTML = [
         chip('Twilio configured', data.twilio_configured, data.twilio_from || 'Missing credentials'),
         chip('SMS available', data.sms_available, data.sms_available ? 'Can dispatch SMS alerts' : 'Install twilio + env vars'),
+        chip('Web Push (VAPID)', data.web_push_configured, data.web_push_configured ? 'Server keys configured' : 'Set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY'),
       ].join('');
     }
   } catch (e) {
@@ -517,6 +520,7 @@ async function loadLocationCore() {
     stats.textContent = 'Network error';
   }
   updateNotifPermStatus();
+  updateWebPushStatus();
 }
 
 function updateNotifPermStatus() {
@@ -531,7 +535,7 @@ function updateNotifPermStatus() {
 
 async function enableDesktopAlerts() {
   if (!('Notification' in window)) {
-    alert('Notifications not supported');
+    showSettingsToast('Desktop notifications not supported in this browser.', 'error');
     return;
   }
   const perm = await Notification.requestPermission();
@@ -540,6 +544,77 @@ async function enableDesktopAlerts() {
     try {
       new Notification('HOLO-RTLS', { body: 'Desktop alerts enabled for this browser.', icon: '/static/assets/icon-192.png' });
     } catch (e) {}
+    showSettingsToast('Desktop alerts enabled.', 'success');
+  } else {
+    showSettingsToast('Notification permission denied.', 'error');
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function updateWebPushStatus() {
+  const el = document.getElementById('webPushStatus');
+  if (!el) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    el.textContent = 'Web Push not supported in this browser.';
+    return;
+  }
+  try {
+    const res = await API.get('/push/subscriptions');
+    const data = await API.json(res);
+    const n = (data.items || []).length;
+    el.textContent = data.configured
+      ? `Web Push: ${n} subscription(s) on this account · server ready`
+      : `Web Push: ${n} subscription(s) · server VAPID keys not configured`;
+  } catch (e) {
+    el.textContent = 'Web Push status unavailable.';
+  }
+}
+
+async function enableWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    showSettingsToast('Web Push not supported in this browser.', 'error');
+    return;
+  }
+  try {
+    const keyRes = await API.get('/push/vapid-public-key');
+    const keyData = await API.json(keyRes);
+    if (!keyRes || !keyRes.ok || !keyData.configured || !keyData.public_key) {
+      showSettingsToast('Web Push server not configured (VAPID keys).', 'error');
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyData.public_key),
+      });
+    }
+    const body = sub.toJSON();
+    const res = await API.post('/push/subscribe', body);
+    const data = await API.json(res);
+    if (res && res.ok) {
+      showSettingsToast('Web Push enabled for this browser.', 'success');
+      updateWebPushStatus();
+    } else {
+      showSettingsToast(data.error || 'Subscribe failed', 'error');
+    }
+  } catch (e) {
+    showSettingsToast('Web Push setup failed: ' + (e.message || e), 'error');
+  }
+}
+
+function showSettingsToast(msg, type) {
+  const el = document.getElementById('notifPermStatus');
+  if (el) {
+    el.textContent = msg;
+    el.style.color = type === 'success' ? 'var(--green)' : (type === 'error' ? 'var(--red)' : 'var(--text-muted)');
   }
 }
 
