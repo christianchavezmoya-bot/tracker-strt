@@ -1,0 +1,6 @@
+# Optional Linux / edge hardware dependencies (not required for web app or CI)
+# Install when running scanner daemon or native BLE on Linux:
+#   apt install bluez libbluetooth-dev
+#   pip install -r requirements-hardware.txt
+pybluez==0.23
+bluepy==1.3.0
