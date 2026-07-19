@@ -33,6 +33,8 @@ JWT_REFRESH_TOKEN_EXPIRES = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", 7)) * 86400 
 JWT_TOKEN_LOCATION = ["headers", "query_string"]
 JWT_HEADER_NAME = "Authorization"
 JWT_HEADER_TYPE = "Bearer"
+# EventSource can't send headers, so the SSE page passes the token as ?token=
+JWT_QUERY_STRING_NAME = "token"
 
 # ── Security ────────────────────────────────────────────────────────────────
 # Argon2 hashing parameters (industry standard, winner of PHC)

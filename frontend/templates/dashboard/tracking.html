@@ -1493,24 +1493,24 @@ const App = {
       if (!res.ok) return;
       const data = await res.json();
       for (const dev of (data.devices || [])) {
-        if (dev.x == null) continue;
+        // /api/scanner/positions/live nests coords under `position` (not top-level x/y)
+        if (!dev.position || dev.position.x == null) continue;
         // Merge: scanner data keyed by mac_address
         const key = dev.mac_address;
-        this.positions[key] = { x: dev.x, y: dev.y, z: dev.z || 0, accuracy: dev.accuracy || 10 };
+        this.positions[key] = { x: dev.position.x, y: dev.position.y, z: dev.position.z || 0, accuracy: dev.pos_accuracy || 10 };
         if (!this.dots[key]) {
-          this.dots[key] = { x: dev.x, y: dev.y };
+          this.dots[key] = { x: dev.position.x, y: dev.position.y };
         }
         // Positions feed into this.positions — render loop picks them up automatically
         // Just update the sidebar device list if needed
         const existing = this.devices.find(d => d.mac_address === key);
         if (existing) {
-          existing.x = dev.x;
-          existing.y = dev.y;
+          existing.position = dev.position;
           existing.last_seen = dev.last_seen;
         }
       }
       // Update stats
-      const scannerCount = (data.devices || []).filter(d => d.x != null).length;
+      const scannerCount = (data.devices || []).filter(d => d.position && d.position.x != null).length;
       const oldCount = parseInt(document.getElementById('stat-devices').textContent) || 0;
       document.getElementById('stat-devices').textContent = Math.max(oldCount, scannerCount);
     } catch (e) {

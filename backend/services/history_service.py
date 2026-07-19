@@ -197,19 +197,23 @@ class HistoryService:
 
     def _maybe_prune(self):
         """Prune records older than retention_days. Runs nightly."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=self._retention_days)
-        from backend.models.positioning import TrackingHistory
-        try:
-            deleted = self._db.query(TrackingHistory).filter(
-                TrackingHistory.timestamp < cutoff
-            ).delete()
-            self._db.commit()
-            if deleted > 0:
-                self._total_pruned += deleted
-                logger.info(f"Pruned {deleted} history records older than {cutoff.date()}")
-        except Exception as e:
-            logger.error(f"History prune error: {e}")
-            self._db.rollback()
+        # Same as _flush_all: background thread needs an app context for the
+        # scoped session to reach the DB (incl. the rollback in the except).
+        app = self._app or __import__('flask').current_app._get_current_object()
+        with app.app_context():
+            cutoff = datetime.now(timezone.utc) - timedelta(days=self._retention_days)
+            from backend.models.positioning import TrackingHistory
+            try:
+                deleted = self._db.query(TrackingHistory).filter(
+                    TrackingHistory.timestamp < cutoff
+                ).delete()
+                self._db.commit()
+                if deleted > 0:
+                    self._total_pruned += deleted
+                    logger.info(f"Pruned {deleted} history records older than {cutoff.date()}")
+            except Exception as e:
+                logger.error(f"History prune error: {e}")
+                self._db.rollback()
 
     def prune_now(self) -> int:
         """Explicit prune. Returns number of deleted records."""

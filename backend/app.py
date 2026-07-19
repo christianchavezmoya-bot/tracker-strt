@@ -32,6 +32,8 @@ def create_app(test_config: dict = None) -> Flask:
     app.config["JWT_SECRET_KEY"] = config.JWT_SECRET_KEY
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = config.JWT_ACCESS_TOKEN_EXPIRES
     app.config["JWT_REFRESH_TOKEN_EXPIRES"] = config.JWT_REFRESH_TOKEN_EXPIRES
+    app.config["JWT_TOKEN_LOCATION"] = config.JWT_TOKEN_LOCATION
+    app.config["JWT_QUERY_STRING_NAME"] = config.JWT_QUERY_STRING_NAME
 
     # Mail
     app.config["MAIL_SERVER"] = config.MAIL_SERVER
