@@ -41,10 +41,63 @@ def _date_range(days=7):
 @reports_bp.route("/summary", methods=["GET"])
 @jwt_required()
 def summary():
-    """
-    GET /api/reports/summary
-    Returns daily aggregate stats for the last N days (default 30).
-    Returns JSON for charting — not CSV.
+    === A
+    tags:
+      - Reports
+    summary: Get analytics summary
+    description: Returns daily alert counts, tracker totals, and average response time for a date range.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+          default: 30
+        description: Number of past days to include
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date
+          description: Start date (YYYY-MM-DD)
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date
+          description: End date (YYYY-MM-DD)
+    responses:
+      200:
+        description: Summary data for charting
+        schema:
+          type: object
+          properties:
+            period:
+              type: object
+              properties:
+                start: { type: string }
+                end: { type: string }
+                days: { type: integer }
+            totals:
+              type: object
+              properties:
+                total_trackers: { type: integer }
+                active_trackers: { type: integer }
+                total_alerts: { type: integer }
+                acknowledged_alerts: { type: integer }
+                unresolved_alerts: { type: integer }
+                avg_response_minutes: { type: number }
+            alert_series:
+              type: array
+              items:
+                type: object
+                properties:
+                  date: { type: string }
+                  count: { type: integer }
+      400:
+        description: Invalid date format
+    ===
     """
     days = int(request.args.get("days", 30))
     start, end = _date_range(days)
@@ -118,9 +171,42 @@ def summary():
 @reports_bp.route("/tracker-activity", methods=["GET"])
 @jwt_required()
 def tracker_activity():
-    """
-    GET /api/reports/tracker-activity?days=7
-    Returns per-tracker activity summary: distance traveled, time in zone, alerts.
+    === A
+    tags:
+      - Reports
+    summary: Get tracker activity report
+    description: Returns per-tracker activity summary including distance traveled and alert counts.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+          default: 7
+        description: Number of past days to include
+    responses:
+      200:
+        description: Per-tracker activity data
+        schema:
+          type: object
+          properties:
+            trackers:
+              type: array
+              items:
+                type: object
+                properties:
+                  tracker_id: { type: integer }
+                  hardware_id: { type: string }
+                  assigned_name: { type: string }
+                  category: { type: string }
+                  position_count: { type: integer }
+                  distance_m: { type: number }
+                  alert_count: { type: integer }
+                  first_seen: { type: string, format: date-time }
+                  last_seen: { type: string, format: date-time }
+            days: { type: integer }
+    ===
     """
     days = int(request.args.get("days", 7))
     since = datetime.now(timezone.utc) - timedelta(days=days)
@@ -178,9 +264,36 @@ def tracker_activity():
 @reports_bp.route("/alert-breakdown", methods=["GET"])
 @jwt_required()
 def alert_breakdown():
-    """
-    GET /api/reports/alert-breakdown?days=30
-    Returns alert count grouped by alert type.
+    === A
+    tags:
+      - Reports
+    summary: Get alert breakdown by type
+    description: Returns alert counts grouped by alert type for a time period.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+          default: 30
+        description: Number of past days to include
+    responses:
+      200:
+        description: Alert breakdown by type
+        schema:
+          type: object
+          properties:
+            breakdown:
+              type: array
+              items:
+                type: object
+                properties:
+                  type: { type: string }
+                  count: { type: integer }
+            days: { type: integer }
+            since: { type: string, format: date-time }
+    ===
     """
     days = int(request.args.get("days", 30))
     since = datetime.now(timezone.utc) - timedelta(days=days)
@@ -209,6 +322,31 @@ def alert_breakdown():
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)
 def daily_summary():
+    === A
+    tags:
+      - Reports
+    summary: Export daily summary as CSV
+    description: Returns a CSV file with daily tracker and alert summary. Requires GENERATE_REPORT permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+        description: Date to summarize (YYYY-MM-DD, default today)
+    responses:
+      200:
+        description: CSV file download
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+      400:
+        description: Invalid date format
+    ===
     date_str = request.args.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     try:
         day = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -235,6 +373,22 @@ def daily_summary():
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)
 def battery_report():
+    === A
+    tags:
+      - Reports
+    summary: Export battery report as CSV
+    description: Returns a CSV file listing all trackers with battery level below 100%. Requires GENERATE_REPORT permission.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: CSV file download
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+    ===
     trackers = Tracker.query.filter(Tracker.battery_level < 100).order_by(Tracker.battery_level).all()
     rows = [{
         "hardware_id": t.hardware_id,
@@ -249,6 +403,28 @@ def battery_report():
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)
 def distance_report():
+    === A
+    tags:
+      - Reports
+    summary: Export distance history as CSV
+    description: Returns a CSV file with position history for distance analysis. Requires GENERATE_REPORT permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: tracker_id
+        schema:
+          type: integer
+        description: Filter by specific tracker ID
+    responses:
+      200:
+        description: CSV file download
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+    ===
     tracker_id = request.args.get("tracker_id", type=int)
     since = datetime.now(timezone.utc) - timedelta(days=1)
     q = TrackingHistory.query.filter(TrackingHistory.timestamp >= since)
@@ -271,9 +447,29 @@ def distance_report():
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)
 def full_export():
-    """
-    GET /api/reports/full-export?days=7
-    Comprehensive CSV export: all trackers + alerts + history summary.
+    === A
+    tags:
+      - Reports
+    summary: Full comprehensive report export
+    description: Returns a comprehensive CSV export with all trackers, alerts, and history summary. Requires GENERATE_REPORT permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+          default: 7
+        description: Number of past days to include
+    responses:
+      200:
+        description: CSV file download
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+    ===
     """
     days = int(request.args.get("days", 7))
     since = datetime.now(timezone.utc) - timedelta(days=days)

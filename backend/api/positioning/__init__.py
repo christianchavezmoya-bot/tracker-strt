@@ -17,9 +17,33 @@ positioning_bp = Blueprint("positioning", __name__, url_prefix="/api/positioning
 @positioning_bp.route("/live", methods=["GET"])
 @jwt_required()
 def live_positions():
-    """
-    GET /api/positioning/live
-    Returns the latest position for every tracker (position_snapshot table).
+    === A
+    tags:
+      - Positioning
+    summary: Get all live positions
+    description: Returns the latest position snapshot for every tracker.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Live position data
+        schema:
+          type: object
+          properties:
+            positions:
+              type: array
+              items:
+                type: object
+                properties:
+                  tracker_id: { type: integer }
+                  x: { type: number }
+                  y: { type: number }
+                  z: { type: number }
+                  accuracy: { type: number }
+                  timestamp: { type: string, format: date-time }
+            total: { type: integer }
+            timestamp: { type: string, format: date-time }
+    ===
     """
     snapshots = db.session.query(PositionSnapshot).all()
     return jsonify({
@@ -32,7 +56,32 @@ def live_positions():
 @positioning_bp.route("/live/<int:tracker_id>", methods=["GET"])
 @jwt_required()
 def live_tracker(tracker_id):
-    """GET /api/positioning/live/<tracker_id> — Latest position for one tracker."""
+    === A
+    tags:
+      - Positioning
+    summary: Get live position for one tracker
+    description: Returns the latest position snapshot for a specific tracker.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: tracker_id
+        required: true
+        schema:
+          type: integer
+        description: Tracker ID
+    responses:
+      200:
+        description: Tracker position
+        schema:
+          type: object
+          properties:
+            position:
+              type: object
+      404:
+        description: Tracker not found
+    ===
+    """
     snap = db.session.query(PositionSnapshot).get(tracker_id)
     if not snap:
         return jsonify({"error": "Tracker not found"}), 404
@@ -43,11 +92,47 @@ def live_tracker(tracker_id):
 @positioning_bp.route("/history/<int:tracker_id>", methods=["GET"])
 @jwt_required()
 def tracker_history(tracker_id):
-    """
-    GET /api/positioning/history/<tracker_id>
-    Query params:
-      since     — ISO datetime string (default: last 1 hour)
-      limit     — max records (default: 1000, max: 10000)
+    === A
+    tags:
+      - Positioning
+    summary: Get position history for a tracker
+    description: Returns historical position records for a specific tracker within a time range.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: tracker_id
+        required: true
+        schema:
+          type: integer
+        description: Tracker ID
+      - in: query
+        name: since
+        schema:
+          type: string
+        description: ISO datetime string to filter records from (default: last 1 hour)
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          default: 1000
+          maximum: 10000
+        description: Maximum number of records to return
+    responses:
+      200:
+        description: Position history records
+        schema:
+          type: object
+          properties:
+            tracker_id: { type: integer }
+            history:
+              type: array
+              items:
+                type: object
+            count: { type: integer }
+      400:
+        description: Invalid since format
+    ===
     """
     limit = min(int(request.args.get("limit", 1000)), 10000)
     since_str = request.args.get("since")
@@ -76,9 +161,41 @@ def tracker_history(tracker_id):
 @positioning_bp.route("/history/<int:tracker_id>/export", methods=["GET"])
 @jwt_required()
 def export_history(tracker_id):
-    """
-    GET /api/positioning/history/<tracker_id>/export?format=csv&since=...
-    Returns CSV of position history for the tracker.
+    === A
+    tags:
+      - Positioning
+    summary: Export position history as CSV
+    description: Returns a CSV file containing position history records for a specific tracker.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: tracker_id
+        required: true
+        schema:
+          type: integer
+        description: Tracker ID
+      - in: query
+        name: since
+        schema:
+          type: string
+        description: ISO datetime string to filter records from
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          default: 10000
+          maximum: 50000
+        description: Maximum number of records to export
+    responses:
+      200:
+        description: CSV file download
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+    ===
     """
     import csv
     from io import StringIO
@@ -119,7 +236,22 @@ def export_history(tracker_id):
 @positioning_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def history_stats():
-    """GET /api/positioning/stats — History service stats + total records."""
+    === A
+    tags:
+      - Positioning
+    summary: Get positioning service stats
+    description: Returns statistics from the history service including total records.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Service statistics
+        schema:
+          type: object
+      503:
+        description: History service not running
+    ===
+    """
     svc = get_history_service()
     if svc:
         return jsonify(svc.get_stats())
@@ -130,7 +262,22 @@ def history_stats():
 @positioning_bp.route("/calibration", methods=["GET"])
 @jwt_required()
 def get_calibration():
-    """GET /api/positioning/calibration — Floor plan calibration status."""
+    === A
+    tags:
+      - Positioning
+    summary: Get floor plan calibration status
+    description: Returns the calibration status for the floor plan mapper.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Calibration status
+        schema:
+          type: object
+          properties:
+            status: { type: object }
+    ===
+    """
     from backend.services.floor_plan_mapper import get_floor_plan_mapper
     svc = get_floor_plan_mapper()
     return jsonify({"status": svc.get_calibration_status()})
@@ -139,7 +286,54 @@ def get_calibration():
 @positioning_bp.route("/calibration", methods=["POST"])
 @jwt_required()
 def add_calibration_point():
-    """POST /api/positioning/calibration — Add a calibration point."""
+    === A
+    tags:
+      - Positioning
+    summary: Add a calibration point
+    description: Adds a new calibration point for mapping pixel coordinates to real-world coordinates.
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - pixel_x
+            - pixel_y
+            - real_x
+            - real_y
+          properties:
+            pixel_x:
+              type: number
+              description: X coordinate on floor plan image
+            pixel_y:
+              type: number
+              description: Y coordinate on floor plan image
+            real_x:
+              type: number
+              description: Real-world X coordinate in meters
+            real_y:
+              type: number
+              description: Real-world Y coordinate in meters
+            section_id:
+              type: integer
+              default: 0
+              description: Section ID for multi-floor setups
+    responses:
+      200:
+        description: Calibration point added
+        schema:
+          type: object
+          properties:
+            calibration_points: { type: array }
+            is_calibrated: { type: boolean }
+            calibration_error: { type: number }
+      400:
+        description: Missing required field
+    ===
+    """
     body = request.get_json() or {}
     required = ["pixel_x", "pixel_y", "real_x", "real_y"]
     for f in required:

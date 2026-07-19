@@ -18,9 +18,59 @@ def _safe_enum(enum_cls, value, fallback="UNKNOWN"):
 @search_bp.route("", methods=["GET"])
 @jwt_required()
 def global_search():
-    """
-    GET /api/search?q=<query>&type=<tracker|user|zone|section|alert|all>
-    Returns results across all tracked entities.
+    === A
+    tags:
+      - Search
+    summary: Global search across entities
+    description: Searches across trackers, users, zones, sections, and alerts. Minimum 2 characters required.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: q
+        required: true
+        schema:
+          type: string
+          minLength: 2
+        description: Search query (min 2 characters)
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum: [all, tracker, user, zone, section, alert]
+          default: all
+        description: Entity type to search
+    responses:
+      200:
+        description: Search results
+        schema:
+          type: object
+          properties:
+            query: { type: string }
+            results:
+              type: object
+              properties:
+                trackers:
+                  type: array
+                  items:
+                    type: object
+                users:
+                  type: array
+                  items:
+                    type: object
+                zones:
+                  type: array
+                  items:
+                    type: object
+                sections:
+                  type: array
+                  items:
+                    type: object
+                alerts:
+                  type: array
+                  items:
+                    type: object
+    ===
     """
     q = request.args.get("q", "").strip()
     search_type = request.args.get("type", "all").lower()

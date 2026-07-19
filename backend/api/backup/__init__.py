@@ -16,6 +16,24 @@ backup_bp = Blueprint("backup", __name__, url_prefix="/api/backup")
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)
 def list_backups():
+    === A
+    tags:
+      - Backup
+    summary: List backup jobs
+    description: Returns the list of backup jobs ordered by creation date. Requires TRIGGER_BACKUP permission.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of backup jobs
+        schema:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+    ===
     jobs = BackupJob.query.order_by(BackupJob.created_at.desc()).limit(50).all()
     return jsonify({"items": [j.to_dict() for j in jobs]})
 
@@ -24,6 +42,28 @@ def list_backups():
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)
 def trigger_backup():
+    === A
+    tags:
+      - Backup
+    summary: Trigger a manual backup
+    description: Creates a new database backup by copying the SQLite database file. Requires TRIGGER_BACKUP permission.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Backup completed successfully
+        schema:
+          type: object
+          properties:
+            job: { type: object }
+      500:
+        description: Backup failed
+        schema:
+          type: object
+          properties:
+            error: { type: string }
+            job: { type: object }
+    ===
     user_id = int(get_jwt_identity())
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"holo_rtls_backup_{ts}.db"
@@ -58,6 +98,31 @@ def trigger_backup():
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)
 def download_backup(job_id):
+    === A
+    tags:
+      - Backup
+    summary: Download a backup file
+    description: Downloads a specific backup file by job ID. Requires TRIGGER_BACKUP permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: job_id
+        required: true
+        schema:
+          type: integer
+        description: Backup job ID
+    responses:
+      200:
+        description: SQLite database file download
+        content:
+          application/x-sqlite3:
+            schema:
+              type: string
+              format: binary
+      404:
+        description: Backup file not found
+    ===
     job = BackupJob.query.get_or_404(job_id)
     filepath = config.BACKUP_DIR / job.filename
     if not filepath.exists():
@@ -74,6 +139,43 @@ def download_backup(job_id):
 @jwt_required()
 @require_permission(Permission.RESTORE_BACKUP)
 def restore_backup(job_id):
+    === A
+    tags:
+      - Backup
+    summary: Restore from a backup
+    description: Restores the database from a specific backup file. Requires RESTORE_BACKUP permission and confirmation.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: job_id
+        required: true
+        schema:
+          type: integer
+        description: Backup job ID
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - confirm
+          properties:
+            confirm:
+              type: boolean
+              description: Must be true to proceed with restore
+    responses:
+      200:
+        description: Restore completed
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      400:
+        description: Confirmation required or backup not found
+      404:
+        description: Backup file not found
+    ===
     job = BackupJob.query.get_or_404(job_id)
     filepath = config.BACKUP_DIR / job.filename
     if not filepath.exists():

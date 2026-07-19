@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="/static/css/dashboard.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#00e5ff">
 </head>
 <body>
 
@@ -72,6 +74,47 @@
       <button class="hw-tab" data-tab="appearance" onclick="switchTab('appearance')">
         <i class="fa-solid fa-palette"></i> Appearance
       </button>
+      <button class="hw-tab" data-tab="floorplans" onclick="switchTab('floorplans'); loadFloorPlans()">
+        <i class="fa-solid fa-map"></i> Floor Plans
+      </button>
+    </div>
+
+    <!-- ── Floor Plans ─────────────────────────────────────────── -->
+    <div class="settings-section" id="section-floorplans" style="display:none">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:18px;font-weight:700;margin:0 0 4px;display:flex;align-items:center;gap:8px"><i class="fa-solid fa-map" style="color:var(--cyan)"></i> Floor Plan Manager</h2>
+          <p style="color:var(--text-muted);font-size:12px;margin:0">Upload mine floor plan images, calibrate real-world coordinates, and manage map sections.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openUploadModal()"><i class="fa-solid fa-upload"></i> Upload Floor Plan</button>
+      </div>
+      <div class="hw-summary-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+        <div class="hw-summary-card hw-total">
+          <div class="hw-summary-icon"><i class="fa-solid fa-map"></i></div>
+          <div class="hw-summary-num" id="fpCount">—</div>
+          <div class="hw-summary-label">FLOOR PLANS</div>
+        </div>
+        <div class="hw-summary-card hw-connected">
+          <div class="hw-summary-icon"><i class="fa-solid fa-eye"></i></div>
+          <div class="hw-summary-num" id="fpVisible">—</div>
+          <div class="hw-summary-label">VISIBLE</div>
+        </div>
+        <div class="hw-summary-card hw-disconnected">
+          <div class="hw-summary-icon"><i class="fa-solid fa-eye-slash"></i></div>
+          <div class="hw-summary-num" id="fpHidden">—</div>
+          <div class="hw-summary-label">HIDDEN</div>
+        </div>
+      </div>
+      <div class="hw-config-table-wrap">
+        <table class="hw-config-table">
+          <thead>
+            <tr><th>Preview</th><th>Name</th><th>Color</th><th>Z-Index</th><th>Visible</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="floorPlanTable">
+            <tr><td colspan="6" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading floor plans…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- ── Business Settings ─────────────────────────────────────── -->
@@ -169,6 +212,61 @@
       </div>
     </div>
   </main>
+</div>
+
+<!-- Upload Floor Plan Modal -->
+<div class="modal-overlay" id="uploadModal" style="display:none" onclick="if(event.target===this)closeUploadModal()">
+  <div class="hw-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="uploadModalTitle"><i class="fa-solid fa-upload" style="color:var(--cyan)"></i> Upload Floor Plan</h3>
+      <button class="modal-close" onclick="closeUploadModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="padding:20px">
+      <div id="uploadDropZone" onclick="document.getElementById('fpFileInput').click()"
+        style="border:2px dashed var(--border);border-radius:var(--radius);padding:28px;text-align:center;cursor:pointer;transition:all 0.15s"
+        ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
+        ondragleave="this.style.borderColor='var(--border)'"
+        ondrop="handleFpDrop(event)">
+        <div style="font-size:26px;color:var(--cyan);margin-bottom:8px"><i class="fa-solid fa-image"></i></div>
+        <div style="font-weight:600;margin-bottom:4px">Drop floor plan image here</div>
+        <div style="font-size:11px;color:var(--text-muted)">PNG, JPG, WebP, TIFF, BMP — max 20MB</div>
+        <input type="file" id="fpFileInput" accept=".png,.jpg,.jpeg,.webp,.tiff,.bmp" style="display:none" onchange="handleFpSelect(this)">
+      </div>
+      <div id="fpPreview" style="display:none;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:8px">
+          <img id="fpPreviewImg" style="max-height:56px;max-width:80px;border-radius:4px;object-fit:contain">
+          <div>
+            <div id="fpPreviewName" style="font-weight:600;font-size:13px"></div>
+            <div id="fpPreviewSize" style="font-size:11px;color:var(--text-muted)"></div>
+          </div>
+          <button class="action-btn danger" onclick="clearFpSelection()" style="margin-left:auto;width:28px;height:28px"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:14px">
+        <label class="form-label">Section Name <span class="form-required">*</span></label>
+        <input class="form-input" id="fpName" placeholder="e.g. Longwall Panel A — Level 1">
+      </div>
+      <div class="form-row" style="margin-top:14px">
+        <div class="form-group">
+          <label class="form-label">Color</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="fpColor" value="#00e5ff" style="width:40px;height:32px;border:none;cursor:pointer;border-radius:6px">
+            <input class="form-input mono" id="fpColorHex" value="#00e5ff" style="width:100px" oninput="document.getElementById('fpColor').value=this.value">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Z-Index</label>
+          <input class="form-input" type="number" id="fpZIndex" value="0">
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+      <button class="btn btn-primary" id="fpUploadBtn" onclick="uploadFloorPlan()" disabled>
+        <i class="fa-solid fa-upload"></i> <span id="fpUploadBtnText">Upload & Create</span>
+      </button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
@@ -472,6 +570,176 @@ document.addEventListener('click', e => {
 });
 function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
 function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+
+// ── Floor Plan Manager ──────────────────────────────────────────────────────
+let floorPlans = [];
+let selectedFpFile = null;
+
+async function loadFloorPlans() {
+  const res = await API.get('/api/settings/floor-plans');
+  const data = await API.json(res);
+  if (!res || !res.ok) { document.getElementById('floorPlanTable').innerHTML = `<tr><td colspan="6" class="table-empty">Failed to load floor plans</td></tr>`; return; }
+  floorPlans = data.items || [];
+  document.getElementById('fpCount').textContent = floorPlans.length;
+  document.getElementById('fpVisible').textContent = floorPlans.filter(f => f.is_visible).length;
+  document.getElementById('fpHidden').textContent = floorPlans.filter(f => !f.is_visible).length;
+  renderFloorPlanTable();
+}
+
+function renderFloorPlanTable() {
+  const tbody = document.getElementById('floorPlanTable');
+  if (!floorPlans.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No floor plans. <a href="#" onclick="openUploadModal();return false">Upload one →</a></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = floorPlans.map(f => {
+    const img = f.image_url
+      ? `<img src="${f.image_url}" style="height:40px;max-width:70px;object-fit:cover;border-radius:4px;border:1px solid var(--border)" onerror="this.style.display='none'">`
+      : `<div style="width:70px;height:40px;background:rgba(255,255,255,0.05);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)"><i class="fa-solid fa-image"></i></div>`;
+    const esc = s => String(s || '').replace(/'/g, "\\'");
+    return `<tr>
+      <td>${img}</td>
+      <td><span style="font-weight:600">${escapeHtml(f.name)}</span></td>
+      <td><span class="mono" style="color:${f.color_hex}">${f.color_hex}</span></td>
+      <td class="mono">${f.z_index}</td>
+      <td>${f.is_visible ? '<i class="fa-solid fa-eye" style="color:var(--green)"></i>' : '<i class="fa-solid fa-eye-slash" style="color:var(--text-muted)"></i>'}</td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn" onclick="toggleFpVisibility(${f.id})" title="Toggle visibility"><i class="fa-solid fa-eye${f.is_visible ? '-slash' : ''}"></i></button>
+          <button class="action-btn" onclick="editFp(${f.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="action-btn danger" onclick="deleteFp(${f.id}, '${esc(f.name)}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openUploadModal() {
+  selectedFpFile = null;
+  document.getElementById('fpPreview').style.display = 'none';
+  document.getElementById('fpFileInput').value = '';
+  document.getElementById('fpUploadBtn').disabled = true;
+  document.getElementById('fpUploadBtnText').textContent = 'Upload & Create';
+  document.getElementById('uploadModalTitle').innerHTML = '<i class="fa-solid fa-upload" style="color:var(--cyan)"></i> Upload Floor Plan';
+  document.getElementById('uploadModal').dataset.editingId = '';
+  document.getElementById('fpName').value = '';
+  document.getElementById('fpColor').value = '#00e5ff';
+  document.getElementById('fpColorHex').value = '#00e5ff';
+  document.getElementById('fpZIndex').value = '0';
+  document.getElementById('uploadModal').style.display = 'flex';
+}
+
+function closeUploadModal() { document.getElementById('uploadModal').style.display = 'none'; selectedFpFile = null; }
+
+function handleFpSelect(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  showFpPreview(file);
+}
+
+function handleFpDrop(e) {
+  e.preventDefault();
+  e.currentTarget.style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files?.[0];
+  if (file) showFpPreview(file);
+}
+
+function showFpPreview(file) {
+  const allowed = ['image/png','image/jpeg','image/webp','image/tiff','image/bmp'];
+  if (!allowed.includes(file.type)) { alert('Invalid file type. Use PNG, JPG, WebP, TIFF, or BMP.'); return; }
+  if (file.size > 20 * 1024 * 1024) { alert('File too large (max 20MB)'); return; }
+  selectedFpFile = file;
+  document.getElementById('fpPreviewName').textContent = file.name;
+  document.getElementById('fpPreviewSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('fpPreviewImg').src = e.target.result; };
+  reader.readAsDataURL(file);
+  document.getElementById('fpPreview').style.display = 'block';
+  document.getElementById('fpUploadBtn').disabled = false;
+  if (!document.getElementById('fpName').value) {
+    document.getElementById('fpName').value = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+  }
+}
+
+function clearFpSelection() {
+  selectedFpFile = null;
+  document.getElementById('fpPreview').style.display = 'none';
+  document.getElementById('fpFileInput').value = '';
+  document.getElementById('fpUploadBtn').disabled = true;
+}
+
+async function uploadFloorPlan() {
+  const editingId = document.getElementById('uploadModal').dataset.editingId;
+  const name = document.getElementById('fpName').value.trim();
+  if (!name) { alert('Section name is required'); return; }
+
+  if (editingId) {
+    // Just update metadata — no file upload
+    const btn = document.getElementById('fpUploadBtn');
+    btn.disabled = true;
+    const res = await API.patch(`/api/settings/floor-plans/${editingId}`, {
+      name, color_hex: document.getElementById('fpColor').value,
+      z_index: parseInt(document.getElementById('fpZIndex').value) || 0,
+    });
+    btn.disabled = false;
+    if (res && res.ok) { closeUploadModal(); showToast('Floor plan updated'); await loadFloorPlans(); }
+    else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
+    return;
+  }
+
+  if (!selectedFpFile) { alert('Please select an image file'); return; }
+  const btn = document.getElementById('fpUploadBtn');
+  btn.disabled = true;
+  document.getElementById('fpUploadBtnText').textContent = 'Uploading…';
+  const formData = new FormData();
+  formData.append('image', selectedFpFile);
+  formData.append('name', name);
+  formData.append('color_hex', document.getElementById('fpColor').value);
+  formData.append('z_index', document.getElementById('fpZIndex').value);
+  const res = await API.postForm('/api/settings/floor-plans', formData);
+  btn.disabled = false;
+  document.getElementById('fpUploadBtnText').textContent = 'Upload & Create';
+  if (res && res.ok) { closeUploadModal(); showToast('Floor plan uploaded'); await loadFloorPlans(); }
+  else { const d = await API.json(res); alert('Upload failed: ' + (d.error || res.statusText)); }
+}
+
+async function toggleFpVisibility(id) {
+  const fp = floorPlans.find(f => f.id === id);
+  if (!fp) return;
+  await API.patch(`/api/settings/floor-plans/${id}`, { is_visible: !fp.is_visible });
+  await loadFloorPlans();
+}
+
+async function deleteFp(id, name) {
+  if (!confirm(`Delete floor plan "${name}"? This will remove the image file.`)) return;
+  const res = await API.del(`/api/settings/floor-plans/${id}`);
+  if (res && res.ok) { showToast('Floor plan deleted'); await loadFloorPlans(); }
+  else { const d = await API.json(res); alert('Delete failed: ' + (d.error || res.statusText)); }
+}
+
+function editFp(id) {
+  const fp = floorPlans.find(f => f.id === id);
+  if (!fp) return;
+  document.getElementById('fpName').value = fp.name;
+  document.getElementById('fpColor').value = fp.color_hex || '#00e5ff';
+  document.getElementById('fpColorHex').value = fp.color_hex || '#00e5ff';
+  document.getElementById('fpZIndex').value = fp.z_index || 0;
+  clearFpSelection();
+  document.getElementById('fpUploadBtn').disabled = false;
+  document.getElementById('fpUploadBtnText').textContent = 'Save Changes';
+  document.getElementById('uploadModalTitle').innerHTML = '<i class="fa-solid fa-pen" style="color:var(--cyan)"></i> Edit Floor Plan';
+  document.getElementById('uploadModal').dataset.editingId = id;
+  document.getElementById('uploadModal').style.display = 'flex';
+}
+
+function escapeHtml(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function showToast(msg, color) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;background:rgba(8,15,30,0.95);border:1px solid var(--cyan);color:var(--cyan);border-radius:8px;font-size:13px;z-index:9999;animation:slideUp 0.2s`;
+  t.textContent = msg; document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(() => t.remove(), 300); }, 3500);
+}
 </script>
 
 <style>
@@ -519,7 +787,7 @@ function logout() { localStorage.removeItem('holo_access_token'); localStorage.r
 .logo-meta { display:flex; gap:12px; font-size:11px; color:var(--text-muted); font-family:var(--font-mono); margin-top:8px; }
 .breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
 .breadcrumb i { font-size:10px; }
-.breadcrumb span { color:var(--text-secondary); }
+.settings-section-title { font-size:18px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
 .save-bar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; align-items:center; justify-content:space-between; gap:20px; background:rgba(8,15,30,0.96); border:1px solid var(--border-bright); border-radius:12px; padding:12px 20px; z-index:100; min-width:360px; backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,0.5); }
 .save-bar span { font-size:13px; color:var(--text-secondary); }
 .btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; text-decoration:none; }

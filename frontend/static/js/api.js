@@ -81,6 +81,25 @@ const API = {
   put(path, body)   { return this._fetch(path, { method: 'PUT', body: JSON.stringify(body) }); },
   del(path, body)   { return this._fetch(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined }); },
 
+  // ── FormData (file uploads — skips JSON Content-Type) ──────────────────────
+  async postForm(path, formData) {
+    const url = `${this.base}${path}`;
+    const headers = {};
+    if (this._token) headers['Authorization'] = `Bearer ${this._token}`;
+    const res = await fetch(url, { method: 'POST', headers, body: formData });
+    if (res.status === 401 && this._refresh) {
+      const refreshed = await this._attemptRefresh();
+      if (refreshed) {
+        headers['Authorization'] = `Bearer ${this._token}`;
+        return fetch(url, { method: 'POST', headers, body: formData });
+      }
+      this.clearTokens();
+      window.location.href = '/login';
+      return null;
+    }
+    return res;
+  },
+
   // ── Parse JSON safely ──────────────────────────────────────────────────────
   async json(res) {
     if (!res) return null;

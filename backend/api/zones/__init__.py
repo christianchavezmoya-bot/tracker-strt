@@ -12,6 +12,24 @@ zones_bp = Blueprint("zones", __name__, url_prefix="/api/zones")
 @zones_bp.route("/sections", methods=["GET"])
 @jwt_required()
 def list_sections():
+    === A
+    tags:
+      - Zones
+    summary: List all map sections
+    description: Returns all map sections ordered by z-index.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of sections
+        schema:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+    ===
     items = MapSection.query.order_by(MapSection.z_index).all()
     return jsonify({"items": [s.to_dict() for s in items]})
 
@@ -20,6 +38,53 @@ def list_sections():
 @jwt_required()
 @require_permission(Permission.CREATE_ZONE)
 def create_section():
+    === A
+    tags:
+      - Zones
+    summary: Create a map section
+    description: Creates a new map section (polygon area). Requires CREATE_ZONE permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+              description: Section name
+            polygon:
+              type: array
+              description: Array of polygon vertex coordinates
+            is_restricted:
+              type: boolean
+              default: false
+              description: Whether the section is restricted
+            is_visible:
+              type: boolean
+              default: true
+            color_hex:
+              type: string
+              default: "#00e5ff"
+              description: Hex color code
+            z_index:
+              type: integer
+              default: 0
+              description: Layer order
+    responses:
+      201:
+        description: Section created
+        schema:
+          type: object
+          properties:
+            section: { type: object }
+      400:
+        description: Name is required
+    ===
     body = request.get_json() or {}
     name = body.get("name", "").strip()
     if not name:
@@ -44,6 +109,41 @@ def create_section():
 @jwt_required()
 @require_permission(Permission.EDIT_ZONE)
 def update_section(section_id):
+    === A
+    tags:
+      - Zones
+    summary: Update a map section
+    description: Updates an existing map section. Requires EDIT_ZONE permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: section_id
+        required: true
+        schema:
+          type: integer
+        description: Section ID
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            name: { type: string }
+            polygon_json: { type: string }
+            is_restricted: { type: boolean }
+            is_visible: { type: boolean }
+            color_hex: { type: string }
+            z_index: { type: integer }
+    responses:
+      200:
+        description: Section updated
+        schema:
+          type: object
+          properties:
+            section: { type: object }
+      404:
+        description: Section not found
+    ===
     section = MapSection.query.get_or_404(section_id)
     body = request.get_json() or {}
     for field in ["name", "polygon_json", "is_restricted", "is_visible", "color_hex", "z_index"]:
@@ -59,6 +159,30 @@ def update_section(section_id):
 @jwt_required()
 @require_permission(Permission.DELETE_ZONE)
 def delete_section(section_id):
+    === A
+    tags:
+      - Zones
+    summary: Delete a map section
+    description: Deletes a map section. Requires DELETE_ZONE permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: section_id
+        required: true
+        schema:
+          type: integer
+        description: Section ID
+    responses:
+      200:
+        description: Section deleted
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      404:
+        description: Section not found
+    ===
     section = MapSection.query.get_or_404(section_id)
     AuditLog.log(action="section.delete", user_id=int(get_jwt_identity()),
                  entity_type="MapSection", entity_id=section.id)
@@ -71,6 +195,24 @@ def delete_section(section_id):
 @zones_bp.route("", methods=["GET"])
 @jwt_required()
 def list_zones():
+    === A
+    tags:
+      - Zones
+    summary: List all zones
+    description: Returns all zones in the system.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of zones
+        schema:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+    ===
     items = Zone.query.all()
     return jsonify({"items": [z.to_dict() for z in items]})
 
@@ -79,6 +221,60 @@ def list_zones():
 @jwt_required()
 @require_permission(Permission.CREATE_ZONE)
 def create_zone():
+    === A
+    tags:
+      - Zones
+    summary: Create a zone
+    description: Creates a new zone (circular area). Requires CREATE_ZONE permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+              default: "Unnamed Zone"
+              description: Zone name
+            zone_type:
+              type: integer
+              default: 1
+              description: Zone type classification
+            pos_x:
+              type: number
+              default: 0
+              description: X center coordinate
+            pos_y:
+              type: number
+              default: 0
+              description: Y center coordinate
+            pos_z:
+              type: number
+              default: 0
+              description: Z center coordinate (elevation)
+            radius:
+              type: number
+              default: 5
+              description: Zone radius in meters
+            is_visible:
+              type: boolean
+              default: true
+            color_hex:
+              type: string
+              default: "#00e5ff"
+            section_id:
+              type: integer
+              description: Associated section ID
+    responses:
+      201:
+        description: Zone created
+        schema:
+          type: object
+          properties:
+            zone: { type: object }
+    ===
     body = request.get_json() or {}
     zone = Zone(
         name=body.get("name", "").strip() or "Unnamed Zone",
@@ -102,6 +298,44 @@ def create_zone():
 @jwt_required()
 @require_permission(Permission.EDIT_ZONE)
 def update_zone(zone_id):
+    === A
+    tags:
+      - Zones
+    summary: Update a zone
+    description: Updates an existing zone. Requires EDIT_ZONE permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: integer
+        description: Zone ID
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            name: { type: string }
+            zone_type: { type: integer }
+            pos_x: { type: number }
+            pos_y: { type: number }
+            pos_z: { type: number }
+            radius: { type: number }
+            is_visible: { type: boolean }
+            color_hex: { type: string }
+            section_id: { type: integer }
+    responses:
+      200:
+        description: Zone updated
+        schema:
+          type: object
+          properties:
+            zone: { type: object }
+      404:
+        description: Zone not found
+    ===
     zone = Zone.query.get_or_404(zone_id)
     body = request.get_json() or {}
     for field in ["name", "zone_type", "pos_x", "pos_y", "pos_z",
@@ -118,6 +352,30 @@ def update_zone(zone_id):
 @jwt_required()
 @require_permission(Permission.DELETE_ZONE)
 def delete_zone(zone_id):
+    === A
+    tags:
+      - Zones
+    summary: Delete a zone
+    description: Deletes a zone. Requires DELETE_ZONE permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: zone_id
+        required: true
+        schema:
+          type: integer
+        description: Zone ID
+    responses:
+      200:
+        description: Zone deleted
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      404:
+        description: Zone not found
+    ===
     zone = Zone.query.get_or_404(zone_id)
     AuditLog.log(action="zone.delete", user_id=int(get_jwt_identity()),
                  entity_type="Zone", entity_id=zone.id)

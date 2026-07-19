@@ -13,7 +13,54 @@ users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 @jwt_required()
 @admin_only
 def create_user():
-    """Create a new user account. Admin only."""
+    === A
+    tags:
+      - Users
+    summary: Create a new user account
+    description: Creates a new user account. Admin only.
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - password
+          properties:
+            email:
+              type: string
+              format: email
+              description: User email address
+            password:
+              type: string
+              format: password
+              description: Password (min 8 characters)
+            username:
+              type: string
+              description: Unique username
+            display_name:
+              type: string
+              description: Display name
+            role:
+              type: integer
+              default: 1
+              description: User role (0=ADMIN, 1=OPERATOR, 2=VIEWER)
+    responses:
+      201:
+        description: User created
+        schema:
+          type: object
+          properties:
+            user: { type: object }
+      400:
+        description: Validation error
+      409:
+        description: Email or username already exists
+    ===
+    """
     from backend.services.auth_service import AuthService
     body = request.get_json() or {}
     email = body.get("email", "").strip().lower()
@@ -52,6 +99,37 @@ def create_user():
 @jwt_required()
 @admin_only
 def list_users():
+    === A
+    tags:
+      - Users
+    summary: List all users
+    description: Returns all users with optional filtering by role and active status. Admin only.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: role
+        schema:
+          type: integer
+        description: Filter by role
+      - in: query
+        name: is_active
+        schema:
+          type: string
+          enum: [true, false]
+        description: Filter by active status
+    responses:
+      200:
+        description: List of users
+        schema:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            total: { type: integer }
+    ===
     q = User.query
     if request.args.get("role"):
         q = q.filter_by(role=int(request.args["role"]))
@@ -66,6 +144,39 @@ def list_users():
 @jwt_required()
 @admin_only
 def update_user(user_id):
+    === A
+    tags:
+      - Users
+    summary: Update a user
+    description: Updates user details. Admin only.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          type: integer
+        description: User ID
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            username: { type: string }
+            display_name: { type: string }
+            role: { type: integer }
+            is_active: { type: boolean }
+    responses:
+      200:
+        description: User updated
+        schema:
+          type: object
+          properties:
+            user: { type: object }
+      404:
+        description: User not found
+    ===
     user = User.query.get_or_404(user_id)
     body = request.get_json() or {}
     for field in ["username", "display_name", "role", "is_active"]:
@@ -81,6 +192,32 @@ def update_user(user_id):
 @jwt_required()
 @admin_only
 def deactivate_user(user_id):
+    === A
+    tags:
+      - Users
+    summary: Deactivate a user
+    description: Deactivates a user account. Admin only. Cannot deactivate yourself.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          type: integer
+        description: User ID
+    responses:
+      200:
+        description: User deactivated
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      400:
+        description: Cannot deactivate yourself
+      404:
+        description: User not found
+    ===
     user = User.query.get_or_404(user_id)
     if user.id == int(get_jwt_identity()):
         return jsonify({"error": "Cannot deactivate yourself"}), 400

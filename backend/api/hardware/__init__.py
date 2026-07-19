@@ -19,9 +19,36 @@ hardware_bp = Blueprint("hardware", __name__, url_prefix="/api/hardware")
 @hardware_bp.route("/profiles", methods=["GET"])
 @jwt_required()
 def list_profiles():
-    """
-    Return all supported hardware profiles.
-    This is a catalog, not user data — always returns 200.
+    === A
+    tags:
+      - Hardware
+    summary: List all hardware profiles
+    description: Returns the catalog of all supported hardware profiles with their configuration fields.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Hardware profile catalog
+        schema:
+          type: object
+          properties:
+            profiles:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  vendor: { type: string }
+                  hardware_type: { type: string }
+                  protocol: { type: string }
+                  description: { type: string }
+                  connection_help: { type: string }
+                  positioning_supported: { type: boolean }
+                  settings_fields: { type: array }
+                  example_settings: { type: object }
+            total: { type: integer }
+    ===
     """
     profiles = []
     for p in PROFILES.values():
@@ -43,7 +70,40 @@ def list_profiles():
 @hardware_bp.route("/profiles/type/<hardware_type>", methods=["GET"])
 @jwt_required()
 def profiles_by_type(hardware_type):
-    """Return profiles filtered by hardware type."""
+    === A
+    tags:
+      - Hardware
+    summary: Get profiles by hardware type
+    description: Returns hardware profiles filtered by the specified hardware type.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: hardware_type
+        required: true
+        schema:
+          type: string
+        description: Hardware type (e.g., UWB, BLE, WIFI, ENVIRONMENTAL)
+    responses:
+      200:
+        description: Profiles matching the hardware type
+        schema:
+          type: object
+          properties:
+            hardware_type: { type: string }
+            profiles:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  vendor: { type: string }
+                  description: { type: string }
+      400:
+        description: Unknown hardware type
+    ===
+    """
     try:
         ht = HardwareType[hardware_type.upper()]
     except KeyError:
@@ -60,7 +120,25 @@ def profiles_by_type(hardware_type):
 @hardware_bp.route("", methods=["GET"])
 @jwt_required()
 def list_configs():
-    """List all configured hardware entries."""
+    === A
+    tags:
+      - Hardware
+    summary: List all hardware configurations
+    description: Returns all configured hardware entries ordered by type and name.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of hardware configurations
+        schema:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            total: { type: integer }
+    ===
     configs = HardwareConfig.query.order_by(HardwareConfig.hardware_type, HardwareConfig.name).all()
     return jsonify({"items": [c.to_dict() for c in configs], "total": len(configs)})
 
@@ -68,6 +146,30 @@ def list_configs():
 @hardware_bp.route("/<int:config_id>", methods=["GET"])
 @jwt_required()
 def get_config(config_id):
+    === A
+    tags:
+      - Hardware
+    summary: Get a hardware configuration
+    description: Returns details for a specific hardware configuration.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: config_id
+        required: true
+        schema:
+          type: integer
+        description: Configuration ID
+    responses:
+      200:
+        description: Hardware configuration
+        schema:
+          type: object
+          properties:
+            config: { type: object }
+      404:
+        description: Configuration not found
+    ===
     config = HardwareConfig.query.get_or_404(config_id)
     return jsonify({"config": config.to_dict(include_sensitive=False)})
 
@@ -76,9 +178,44 @@ def get_config(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def create_config():
-    """
-    Add a new hardware configuration.
-    Does NOT connect — use /connect after creation.
+    === A
+    tags:
+      - Hardware
+    summary: Create a hardware configuration
+    description: Creates a new hardware configuration entry. Requires EDIT_SETTINGS permission. Does not connect automatically.
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - profile_id
+          properties:
+            profile_id:
+              type: string
+              description: Hardware profile ID
+            name:
+              type: string
+              description: Configuration name (defaults to profile name)
+            settings:
+              type: object
+              description: Connection settings for the hardware
+            notes:
+              type: string
+              description: Optional notes
+    responses:
+      201:
+        description: Configuration created
+        schema:
+          type: object
+          properties:
+            config: { type: object }
+      400:
+        description: Missing profile_id or invalid profile
+    ===
     """
     body = request.get_json() or {}
 
@@ -120,7 +257,39 @@ def create_config():
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def update_config(config_id):
-    """Update a hardware configuration."""
+    === A
+    tags:
+      - Hardware
+    summary: Update a hardware configuration
+    description: Updates a hardware configuration. Requires EDIT_SETTINGS permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: config_id
+        required: true
+        schema:
+          type: integer
+        description: Configuration ID
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            name: { type: string }
+            settings: { type: object }
+            is_active: { type: boolean }
+            notes: { type: string }
+    responses:
+      200:
+        description: Configuration updated
+        schema:
+          type: object
+          properties:
+            config: { type: object }
+      404:
+        description: Configuration not found
+    ===
     config = HardwareConfig.query.get_or_404(config_id)
     body = request.get_json() or {}
 
@@ -149,7 +318,30 @@ def update_config(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def delete_config(config_id):
-    """Delete a hardware configuration."""
+    === A
+    tags:
+      - Hardware
+    summary: Delete a hardware configuration
+    description: Deletes a hardware configuration. Requires EDIT_SETTINGS permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: config_id
+        required: true
+        schema:
+          type: integer
+        description: Configuration ID
+    responses:
+      200:
+        description: Configuration deleted
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      404:
+        description: Configuration not found
+    ===
     config = HardwareConfig.query.get_or_404(config_id)
     AuditLog.log(
         action="hardware.config_delete",
@@ -168,10 +360,32 @@ def delete_config(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def test_connection(config_id):
-    """
-    Test a hardware connection without activating it permanently.
-    Returns detailed success/error info.
-    """
+    === A
+    tags:
+      - Hardware
+    summary: Test hardware connection
+    description: Tests connectivity to a hardware device without permanent activation. Requires EDIT_SETTINGS permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: config_id
+        required: true
+        schema:
+          type: integer
+        description: Configuration ID
+    responses:
+      200:
+        description: Test result
+        schema:
+          type: object
+          properties:
+            connected: { type: boolean }
+            message: { type: string }
+            error: { type: string }
+      404:
+        description: Configuration not found
+    ===
     config = HardwareConfig.query.get_or_404(config_id)
     profile = get_profile(config.profile_id)
 
@@ -183,7 +397,39 @@ def test_connection(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def connect(config_id):
-    """Attempt to connect to a hardware device."""
+    === A
+    tags:
+      - Hardware
+    summary: Connect to hardware device
+    description: Attempts to establish a connection to a hardware device. Requires EDIT_SETTINGS permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: config_id
+        required: true
+        schema:
+          type: integer
+        description: Configuration ID
+    responses:
+      200:
+        description: Connection successful
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+            connected: { type: boolean }
+      400:
+        description: Connection failed
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+            connected: { type: boolean }
+            error: { type: string }
+      404:
+        description: Configuration not found
+    ===
     config = HardwareConfig.query.get_or_404(config_id)
     profile = get_config(config.profile_id)
 
@@ -210,7 +456,30 @@ def connect(config_id):
 @jwt_required()
 @require_permission(Permission.EDIT_SETTINGS)
 def disconnect(config_id):
-    """Disconnect from a hardware device."""
+    === A
+    tags:
+      - Hardware
+    summary: Disconnect from hardware device
+    description: Disconnects from a hardware device. Requires EDIT_SETTINGS permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: config_id
+        required: true
+        schema:
+          type: integer
+        description: Configuration ID
+    responses:
+      200:
+        description: Disconnected
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      404:
+        description: Configuration not found
+    ===
     config = HardwareConfig.query.get_or_404(config_id)
     config.status = ConnectionStatus.DISCONNECTED
     config.last_seen = None
@@ -221,7 +490,33 @@ def disconnect(config_id):
 @hardware_bp.route("/status", methods=["GET"])
 @jwt_required()
 def hardware_status():
-    """Get connection status of all configured hardware."""
+    === A
+    tags:
+      - Hardware
+    summary: Get hardware connection status
+    description: Returns connection status summary and details grouped by hardware type.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Hardware status by type
+        schema:
+          type: object
+          properties:
+            summary:
+              type: object
+              properties:
+                total: { type: integer }
+                connected: { type: integer }
+                disconnected: { type: integer }
+                error: { type: integer }
+            by_type:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: object
+    ===
     configs = HardwareConfig.query.all()
     by_type = {}
     for c in configs:

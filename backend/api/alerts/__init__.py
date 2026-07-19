@@ -18,15 +18,69 @@ alerts_bp = Blueprint("alerts", __name__, url_prefix="/api/alerts")
 @alerts_bp.route("", methods=["GET"])
 @jwt_required()
 def list_alerts():
-    """
-    GET /api/alerts
-    Query params:
-      state         — ACTIVE, ACKNOWLEDGED, RESOLVED, ESCALATED
-      alert_type   — NO_SIGNAL, LOW_BATTERY, RESTRICTED_ZONE, etc.
-      tracker_id    — filter by tracker
-      section       — filter by section name (partial match)
-      since         — ISO datetime (default: last 24h)
-      page / per_page
+    === A
+    tags:
+      - Alerts
+    summary: List alerts with filtering
+    description: Returns paginated alerts filtered by state, type, tracker, section, and time range.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: state
+        schema:
+          type: string
+          enum: [ACTIVE, ACKNOWLEDGED, RESOLVED, ESCALATED]
+        description: Filter by alert state
+      - in: query
+        name: alert_type
+        schema:
+          type: string
+        description: Filter by alert type (NO_SIGNAL, LOW_BATTERY, RESTRICTED_ZONE, etc.)
+      - in: query
+        name: tracker_id
+        schema:
+          type: integer
+        description: Filter by tracker ID
+      - in: query
+        name: section
+        schema:
+          type: string
+        description: Filter by section name (partial match)
+      - in: query
+        name: since
+        schema:
+          type: string
+          format: date-time
+        description: Filter alerts from this ISO datetime (default: last 24h)
+      - in: query
+        name: page
+        schema:
+          type: integer
+          default: 1
+        description: Page number
+      - in: query
+        name: per_page
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+        description: Items per page
+    responses:
+      200:
+        description: Paginated alerts list
+        schema:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            total: { type: integer }
+            page: { type: integer }
+            per_page: { type: integer }
+            pages: { type: integer }
+    ===
     """
     q = Alert.query
 
@@ -78,7 +132,27 @@ def list_alerts():
 @alerts_bp.route("/active", methods=["GET"])
 @jwt_required()
 def active_alerts():
-    """GET /api/alerts/active — All unacknowledged alerts."""
+    === A
+    tags:
+      - Alerts
+    summary: Get active alerts
+    description: Returns all unacknowledged alerts (ACTIVE and ESCALATED states).
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Active alerts list
+        schema:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            total: { type: integer }
+            unacknowledged: { type: integer }
+    ===
+    """
     items = Alert.query.filter(
         Alert.state.in_([AlertState.ACTIVE.value, AlertState.ESCALATED.value])
     ).order_by(Alert.triggered_at.desc()).all()
@@ -92,7 +166,30 @@ def active_alerts():
 @alerts_bp.route("/counts", methods=["GET"])
 @jwt_required()
 def alert_counts():
-    """GET /api/alerts/counts — Alert counts by type and state."""
+    === A
+    tags:
+      - Alerts
+    summary: Get alert counts by type and state
+    description: Returns aggregated counts of alerts grouped by alert type and state.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Alert counts
+        schema:
+          type: object
+          properties:
+            by_type:
+              type: object
+              additionalProperties:
+                type: integer
+            by_state:
+              type: object
+              additionalProperties:
+                type: integer
+            total: { type: integer }
+    ===
+    """
     from sqlalchemy import func
     counts = db.session.query(
         Alert.alert_type,
@@ -118,7 +215,26 @@ def alert_counts():
 @alerts_bp.route("/stats", methods=["GET"])
 @jwt_required()
 def alert_stats():
-    """GET /api/alerts/stats — Summary stats for dashboard."""
+    === A
+    tags:
+      - Alerts
+    summary: Get alert statistics for dashboard
+    description: Returns summary statistics including total, active, today's count, and average resolution time.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Dashboard statistics
+        schema:
+          type: object
+          properties:
+            total: { type: integer }
+            active: { type: integer }
+            today: { type: integer }
+            avg_resolution_seconds: { type: number }
+            alert_service_stats: { type: object }
+    ===
+    """
     from sqlalchemy import func
     from datetime import timedelta
 
@@ -166,6 +282,31 @@ def _get_alert_service_stats():
 @alerts_bp.route("/<int:alert_id>", methods=["GET"])
 @jwt_required()
 def get_alert(alert_id):
+    === A
+    tags:
+      - Alerts
+    summary: Get a single alert
+    description: Returns details for a specific alert by ID.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: alert_id
+        required: true
+        schema:
+          type: integer
+        description: Alert ID
+    responses:
+      200:
+        description: Alert details
+        schema:
+          type: object
+          properties:
+            alert:
+              type: object
+      404:
+        description: Alert not found
+    ===
     alert = Alert.query.get_or_404(alert_id)
     return jsonify({"alert": alert.to_dict()})
 
@@ -176,9 +317,38 @@ def get_alert(alert_id):
 @jwt_required()
 @require_permission(Permission.ACKNOWLEDGE_ALERT)
 def acknowledge_alert(alert_id):
-    """
-    POST /api/alerts/<id>/acknowledge
-    Body: { "notes": "optional notes" }
+    === A
+    tags:
+      - Alerts
+    summary: Acknowledge an alert
+    description: Marks an alert as acknowledged. Requires ACKNOWLEDGE_ALERT permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: alert_id
+        required: true
+        schema:
+          type: integer
+        description: Alert ID
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            notes:
+              type: string
+              description: Optional acknowledgement notes
+    responses:
+      200:
+        description: Alert acknowledged
+        schema:
+          type: object
+          properties:
+            alert: { type: object }
+      404:
+        description: Alert not found
+    ===
     """
     alert = Alert.query.get_or_404(alert_id)
     body = request.get_json() or {}
@@ -213,9 +383,38 @@ def acknowledge_alert(alert_id):
 @jwt_required()
 @require_permission(Permission.ACKNOWLEDGE_ALERT)
 def resolve_alert(alert_id):
-    """
-    POST /api/alerts/<id>/resolve
-    Body: { "notes": "optional resolution notes" }
+    === A
+    tags:
+      - Alerts
+    summary: Resolve an alert
+    description: Marks an alert as resolved. Requires ACKNOWLEDGE_ALERT permission.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: alert_id
+        required: true
+        schema:
+          type: integer
+        description: Alert ID
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            notes:
+              type: string
+              description: Optional resolution notes
+    responses:
+      200:
+        description: Alert resolved
+        schema:
+          type: object
+          properties:
+            alert: { type: object }
+      404:
+        description: Alert not found
+    ===
     """
     alert = Alert.query.get_or_404(alert_id)
     body = request.get_json() or {}
@@ -248,7 +447,23 @@ def resolve_alert(alert_id):
 @jwt_required()
 @require_permission(Permission.ACKNOWLEDGE_ALERT)
 def acknowledge_all():
-    """POST /api/alerts/acknowledge-all — Acknowledge all active alerts."""
+    === A
+    tags:
+      - Alerts
+    summary: Acknowledge all active alerts
+    description: Marks all active alerts as acknowledged. Requires ACKNOWLEDGE_ALERT permission.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Alerts acknowledged
+        schema:
+          type: object
+          properties:
+            acknowledged: { type: integer }
+            message: { type: string }
+    ===
+    """
     user_id = int(get_jwt_identity())
     count = Alert.query.filter(
         Alert.state == AlertState.ACTIVE.value
@@ -266,7 +481,48 @@ def acknowledge_all():
 @alerts_bp.route("/notifications", methods=["GET"])
 @jwt_required()
 def list_notifications():
-    """GET /api/alerts/notifications — Current user's in-app notifications."""
+    === A
+    tags:
+      - Alerts
+    summary: List user notifications
+    description: Returns the current user's in-app notifications with optional unread filter.
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: unread
+        schema:
+          type: boolean
+          default: false
+        description: Filter to unread notifications only
+      - in: query
+        name: page
+        schema:
+          type: integer
+          default: 1
+        description: Page number
+      - in: query
+        name: per_page
+        schema:
+          type: integer
+          default: 20
+          maximum: 50
+        description: Items per page
+    responses:
+      200:
+        description: Notifications list
+        schema:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            unread_count: { type: integer }
+            total: { type: integer }
+            page: { type: integer }
+    ===
+    """
     user_id = int(get_jwt_identity())
     unread_only = request.args.get("unread", "false").lower() == "true"
     page = request.args.get("page", 1, type=int)
@@ -294,7 +550,31 @@ def list_notifications():
 @alerts_bp.route("/notifications/<int:notif_id>/read", methods=["POST"])
 @jwt_required()
 def mark_notification_read(notif_id):
-    """POST /api/alerts/notifications/<id>/read — Mark as read."""
+    === A
+    tags:
+      - Alerts
+    summary: Mark notification as read
+    description: Marks a specific notification as read for the current user.
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: notif_id
+        required: true
+        schema:
+          type: integer
+        description: Notification ID
+    responses:
+      200:
+        description: Notification updated
+        schema:
+          type: object
+          properties:
+            notification: { type: object }
+      404:
+        description: Notification not found
+    ===
+    """
     user_id = int(get_jwt_identity())
     notif = db.session.query(Notification).filter(
         Notification.id == notif_id,
@@ -308,7 +588,22 @@ def mark_notification_read(notif_id):
 @alerts_bp.route("/notifications/read-all", methods=["POST"])
 @jwt_required()
 def mark_all_read():
-    """POST /api/alerts/notifications/read-all — Mark all as read."""
+    === A
+    tags:
+      - Alerts
+    summary: Mark all notifications as read
+    description: Marks all unread notifications as read for the current user.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: All notifications marked as read
+        schema:
+          type: object
+          properties:
+            marked_read: { type: integer }
+    ===
+    """
     user_id = int(get_jwt_identity())
     count = db.session.query(Notification).filter(
         Notification.user_id == user_id,

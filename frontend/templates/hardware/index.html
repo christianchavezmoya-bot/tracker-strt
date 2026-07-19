@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hardware Setup — HOLO-RTLS</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#00e5ff">
   <link rel="stylesheet" href="/static/css/main.css">
   <link rel="stylesheet" href="/static/css/dashboard.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1092,5 +1094,8 @@ textarea.form-input { resize:vertical; }
 /* ── Animations ─────────────────────────────────────────────────────── */
 @keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
 </style>
+  <script>
+    if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/static/sw.js').catch(() => {})); }
+  </script>
 </body>
 </html>

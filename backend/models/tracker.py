@@ -201,6 +201,7 @@ class MapSection(db.Model):
     is_restricted = db.Column(db.Boolean, default=False)
     is_visible    = db.Column(db.Boolean, default=True)
     color_hex     = db.Column(db.String(8), default="#00e5ff")
+    image_url     = db.Column(db.String(500), nullable=True)  # Path to floor plan PNG image
     z_index       = db.Column(db.Integer, default=0)     # For multi-floor ordering
     created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
@@ -225,7 +226,7 @@ class MapSection(db.Model):
             "is_visible": self.is_visible,
             "color_hex": self.color_hex,
             "z_index": self.z_index,
-            "image_url": getattr(self, 'image_url', None) or None,
+            "image_url": self.image_url,
         }
 
 

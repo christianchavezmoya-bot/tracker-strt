@@ -27,9 +27,59 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 # ── Register ──────────────────────────────────────────────────────────────────
 @auth_bp.route("/register", methods=["POST"])
 def register():
-    """
-    Create a new user account.
-    Open to anyone in dev mode; in production, restrict to admin-initiated invites.
+    === A
+    tags:
+      - Auth
+    summary: Register a new user account
+    description: Create a new user account. Open to anyone in dev mode; in production, restrict to admin-initiated invites.
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - username
+            - password
+          properties:
+            email:
+              type: string
+              format: email
+              description: User email address
+            username:
+              type: string
+              description: Unique username
+            password:
+              type: string
+              format: password
+              description: Password (min 8 characters)
+            display_name:
+              type: string
+              description: Optional display name
+            role:
+              type: integer
+              default: 1
+              description: User role (0=ADMIN, 1=OPERATOR, 2=VIEWER)
+    responses:
+      201:
+        description: User created successfully
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+            user:
+              type: object
+              properties:
+                id: { type: integer }
+                email: { type: string }
+                username: { type: string }
+                role: { type: integer }
+      400:
+        description: Validation error
+      403:
+        description: Registration is admin-only in production
+    ===
     """
     body = request.get_json() or {}
     email = body.get("email", "").strip()
@@ -79,7 +129,52 @@ def register():
 # ── Login ────────────────────────────────────────────────────────────────────
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    """Authenticate and return JWT tokens."""
+    === A
+    tags:
+      - Auth
+    summary: Authenticate and return JWT tokens
+    description: Login with email/username and password. Returns access and refresh tokens. Optionally supports TOTP 2FA.
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email_or_username
+            - password
+          properties:
+            email_or_username:
+              type: string
+              description: User email or username
+            password:
+              type: string
+              format: password
+              description: User password
+            totp_code:
+              type: string
+              description: Optional TOTP code if 2FA is enabled
+    responses:
+      200:
+        description: Login successful
+        schema:
+          type: object
+          properties:
+            access_token: { type: string }
+            refresh_token: { type: string }
+            user:
+              type: object
+      401:
+        description: Invalid credentials
+      403:
+        description: 2FA required
+        schema:
+          type: object
+          properties:
+            requires_2fa: { type: boolean }
+            user_id: { type: integer }
+    ===
+    """
     body = request.get_json() or {}
     email_or_username = body.get("email_or_username", "").strip()
     password = body.get("password", "")
@@ -116,6 +211,21 @@ def login():
 @auth_bp.route("/logout", methods=["POST"])
 @jwt_required()
 def logout():
+    === A
+    tags:
+      - Auth
+    summary: Logout the current user
+    description: Invalidates the current JWT token and logs the logout event.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Logged out successfully
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+    ===
     user_id = int(get_jwt_identity())
     AUTH_SERVICE.logout(user_id, ip_address=request.remote_addr)
     return jsonify({"message": "Logged out"}), 200
@@ -125,6 +235,21 @@ def logout():
 @auth_bp.route("/refresh", methods=["POST"])
 @jwt_required(refresh=True)
 def refresh():
+    === A
+    tags:
+      - Auth
+    summary: Refresh access token
+    description: Exchange a valid refresh token for a new access token.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: New access token issued
+        schema:
+          type: object
+          properties:
+            access_token: { type: string }
+    ===
     user_id = get_jwt_identity()
     new_token = AUTH_SERVICE.refresh_access_token(user_id)
     return jsonify({"access_token": new_token}), 200
@@ -134,6 +259,24 @@ def refresh():
 @auth_bp.route("/2fa/setup", methods=["POST"])
 @jwt_required()
 def setup_2fa():
+    === A
+    tags:
+      - Auth
+    summary: Start 2FA setup
+    description: Generates a TOTP secret and QR code for authenticator app enrollment.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: QR code generated
+        schema:
+          type: object
+          properties:
+            qr_code: { type: string }
+            message: { type: string }
+      400:
+        description: 2FA setup failed
+    ===
     user_id = int(get_jwt_identity())
     qr_b64, err = AUTH_SERVICE.setup_2fa(user_id)
     if err:
@@ -147,6 +290,35 @@ def setup_2fa():
 @auth_bp.route("/2fa/confirm", methods=["POST"])
 @jwt_required()
 def confirm_2fa():
+    === A
+    tags:
+      - Auth
+    summary: Confirm 2FA enrollment
+    description: Verify TOTP code to complete 2FA setup.
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - totp_code
+          properties:
+            totp_code:
+              type: string
+              description: 6-digit TOTP code from authenticator app
+    responses:
+      200:
+        description: 2FA enabled successfully
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      400:
+        description: Invalid TOTP code
+    ===
     user_id = int(get_jwt_identity())
     body = request.get_json() or {}
     totp_code = body.get("totp_code", "").strip()
@@ -164,6 +336,39 @@ def confirm_2fa():
 @auth_bp.route("/2fa/disable", methods=["POST"])
 @jwt_required()
 def disable_2fa():
+    === A
+    tags:
+      - Auth
+    summary: Disable 2FA
+    description: Disable two-factor authentication for the current user.
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - password
+          properties:
+            password:
+              type: string
+              format: password
+              description: Current password for verification
+            totp_code:
+              type: string
+              description: Current TOTP code (required if 2FA is enabled)
+    responses:
+      200:
+        description: 2FA disabled
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      400:
+        description: Verification failed
+    ===
     user_id = int(get_jwt_identity())
     body = request.get_json() or {}
     password = body.get("password", "")
@@ -179,6 +384,32 @@ def disable_2fa():
 # ── Password Reset ────────────────────────────────────────────────────────────
 @auth_bp.route("/password/reset-request", methods=["POST"])
 def reset_request():
+    === A
+    tags:
+      - Auth
+    summary: Request password reset
+    description: Sends a password reset email to the provided address. Always returns 200 to prevent email enumeration.
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              format: email
+              description: Registered email address
+    responses:
+      200:
+        description: Reset email sent if address exists
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+    ===
     body = request.get_json() or {}
     email = body.get("email", "").strip()
     if not email:
@@ -191,6 +422,38 @@ def reset_request():
 
 @auth_bp.route("/password/reset", methods=["POST"])
 def reset_password():
+    === A
+    tags:
+      - Auth
+    summary: Reset password with token
+    description: Set a new password using a valid reset token.
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - token
+            - new_password
+          properties:
+            token:
+              type: string
+              description: Password reset token from email
+            new_password:
+              type: string
+              format: password
+              description: New password
+    responses:
+      200:
+        description: Password reset successfully
+        schema:
+          type: object
+          properties:
+            message: { type: string }
+      400:
+        description: Invalid or expired token
+    ===
     body = request.get_json() or {}
     token = body.get("token", "")
     new_password = body.get("new_password", "")
@@ -209,6 +472,31 @@ def reset_password():
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()
 def me():
+    === A
+    tags:
+      - Auth
+    summary: Get current user profile
+    description: Returns the profile of the currently authenticated user.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Current user profile
+        schema:
+          type: object
+          properties:
+            user:
+              type: object
+              properties:
+                id: { type: integer }
+                email: { type: string }
+                username: { type: string }
+                display_name: { type: string }
+                role: { type: integer }
+                created_at: { type: string, format: date-time }
+      404:
+        description: User not found
+    ===
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
     if not user:
@@ -219,6 +507,27 @@ def me():
 @auth_bp.route("/permissions", methods=["GET"])
 @jwt_required()
 def permissions():
+    === A
+    tags:
+      - Auth
+    summary: Get current user's permissions
+    description: Returns the role and computed permission list for the authenticated user.
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: User role and permissions
+        schema:
+          type: object
+          properties:
+            role: { type: string }
+            permissions:
+              type: array
+              items:
+                type: string
+      404:
+        description: User not found
+    ===
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
     if not user:
