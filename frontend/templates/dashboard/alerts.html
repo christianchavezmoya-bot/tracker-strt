@@ -298,6 +298,10 @@ function renderAlertRow(alert) {
         </div>
         <span class="alert-state-badge ${stateCls}">${alert.state}</span>
         <div class="alert-actions">
+          ${(alert.position?.x != null || alert.pos_x != null) ? `
+            <a class="btn btn-secondary" style="padding:5px 12px;font-size:11px;text-decoration:none" href="/?alert=${alert.id}&x=${alert.position?.x ?? alert.pos_x}&y=${alert.position?.y ?? alert.pos_y}">
+              <i class="fa-solid fa-map-location-dot"></i> Map
+            </a>` : ''}
           ${alert.state === 'ACTIVE' ? `
             <button class="btn btn-secondary" style="padding:5px 12px;font-size:11px" onclick="acknowledge(${alert.id})">
               <i class="fa-solid fa-check"></i> Ack

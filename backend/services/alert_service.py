@@ -179,6 +179,9 @@ class AlertService:
         if env_data:
             alerts.extend(self._check_env_hazard(tracker_id, env_data, x, y, z))
 
+        # 5. Proximity (tag-to-tag)
+        alerts.extend(self._check_proximity(tracker_id, x, y, z))
+
         # Fire non-suppressed alerts
         for alert in alerts:
             if self._should_fire(tracker_id, alert.alert_type):
@@ -288,6 +291,48 @@ class AlertService:
 
         return alerts
 
+    def _check_proximity(self, tracker_id: int,
+                         x: float, y: float, z: float) -> List[AlertEvent]:
+        """Warn when two active trackers are closer than proximity threshold."""
+        import os
+        try:
+            threshold = float(os.getenv("PROXIMITY_ALERT_METERS", "2.0"))
+        except ValueError:
+            threshold = 2.0
+        if threshold <= 0:
+            return []
+
+        alerts = []
+        try:
+            from backend.models import Tracker, Setting
+            # Optional override from settings
+            setting = Setting.query.filter_by(key="proximity_meters").first()
+            if setting and setting.value:
+                try:
+                    threshold = float(setting.value)
+                except ValueError:
+                    pass
+
+            others = Tracker.query.filter(Tracker.id != tracker_id).all()
+            for other in others:
+                ox = getattr(other, "pos_x", None)
+                oy = getattr(other, "pos_y", None)
+                if ox is None or oy is None:
+                    continue
+                dist = ((x - ox) ** 2 + (y - oy) ** 2) ** 0.5
+                if dist <= threshold:
+                    name = other.assigned_name or other.hardware_id or f"#{other.id}"
+                    alerts.append(AlertEvent(
+                        tracker_id=tracker_id,
+                        alert_type=9,  # PROXIMITY
+                        message=f"Proximity warning: within {dist:.1f}m of {name} (limit {threshold}m)",
+                        pos_x=x, pos_y=y, pos_z=z,
+                    ))
+                    break  # one proximity alert per evaluation
+        except Exception as e:
+            logger.warning("Proximity check failed: %s", e)
+        return alerts
+
     def _check_no_signal(self, tracker_id: int,
                          x: float, y: float, z: float) -> List[AlertEvent]:
         """Tracker hasn't reported in no_signal_timeout seconds."""
@@ -313,72 +358,6 @@ class AlertService:
         broadcast_fn(alert: Alert) — sends the alert to all SSE clients.
         """
         self._sse_broadcast = broadcast_fn
-
-    def _broadcast_alert(self, alert_record):
-        """Push alert to all SSE clients via registered broadcaster."""
-        broadcaster = getattr(self, '_sse_broadcast', None)
-        if callable(broadcaster):
-            try:
-                broadcaster(alert_record)
-            except Exception as e:
-                logger.error(f"SSE broadcast error: {e}")
-
-    def _fire_alert(self, event: AlertEvent):
-        """
-        Persist alert to DB and broadcast to SSE clients.
-        Called when an alert condition is first met (debounced).
-        """
-        if self._app is None:
-            logger.warning("AlertService: no Flask app context, skipping DB write")
-            return
-
-        with self._app.app_context():
-            from backend.models.alert import Alert
-            try:
-                record = Alert(
-                    tracker_id=event.tracker_id,
-                    alert_type=event.alert_type,
-                    state=1,   # ACTIVE
-                    message=event.message,
-                    pos_x=event.pos_x,
-                    pos_y=event.pos_y,
-                    pos_z=event.pos_z,
-                    section_name=event.section_name,
-                )
-                self._db.add(record)
-                self._db.commit()
-                logger.info(f"Alert fired: {event.message} tracker={event.tracker_id}")
-
-                # Broadcast via SSE
-                self._broadcast_alert(record)
-
-                # Queue notification delivery
-                self._deliver_notifications(record)
-
-            except Exception as e:
-                logger.error(f"Failed to fire alert: {e}")
-                self._db.rollback()
-
-    def _deliver_notifications(self, alert_record):
-        """Create in-app notifications for the alert."""
-        try:
-            from backend.models import User
-            users = self._db.query(User).filter(
-                User.role.in_([1, 2])  # ADMIN, OPERATOR
-            ).all()
-            for user in users:
-                from backend.models.alert import Notification, NotificationType
-                notif = Notification(
-                    user_id=user.id,
-                    type=NotificationType.ALERT,
-                    title=f"⚠️ {alert_record.to_dict()['alert_type']}",
-                    message=alert_record.message,
-                    link_url=f"/alerts?id={alert_record.id}",
-                )
-                self._db.add(notif)
-            self._db.commit()
-        except Exception as e:
-            logger.error(f"Failed to deliver notifications: {e}")
 
     # ── Periodic check thread ──────────────────────────────────────────────────
 
@@ -456,20 +435,36 @@ class AlertService:
             # Schedule email/SMS dispatch
             self._dispatch_notifications(alert)
 
+            # Webhooks (best-effort)
+            try:
+                from backend.api.webhooks import dispatch_webhooks
+                dispatch_webhooks("alert.created", {
+                    "id": alert.id,
+                    "tracker_id": alert.tracker_id,
+                    "alert_type": alert.alert_type,
+                    "message": alert.message,
+                    "pos_x": alert.pos_x,
+                    "pos_y": alert.pos_y,
+                })
+            except Exception as we:
+                logger.warning("Webhook dispatch failed: %s", we)
+
             logger.info(f"[ALERT] tracker={event.tracker_id} type={event.alert_type} msg={event.message}")
 
     def _broadcast_alert(self, alert):
         """Push alert event to all SSE clients."""
+        broadcaster = getattr(self, '_sse_broadcast', None)
+        if callable(broadcaster):
+            try:
+                broadcaster(alert)
+                return
+            except Exception as e:
+                logger.error(f"SSE broadcast error: {e}")
         from backend.services.ingestion_loop import get_ingestion_loop
         loop = get_ingestion_loop()
         if not loop:
             return
-
-        sse_data = {
-            "type": "alert",
-            "alert": alert.to_dict(),
-        }
-        loop._broadcast_sse(sse_data)
+        loop._broadcast_sse({"type": "alert", "alert": alert.to_dict()})
 
     def _dispatch_notifications(self, alert):
         """Send in-app + email/SMS notifications for the alert."""

@@ -388,7 +388,7 @@ async function loadNodes() {
 }
 
 async function loadBridgeStatus() {
-  const res = await API.get('/api/stream/status');
+  const res = await API.get('/stream/status');
   const data = await API.json(res);
   if (res && res.ok && data) {
     bridgeStatus = data;

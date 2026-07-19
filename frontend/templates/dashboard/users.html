@@ -153,6 +153,10 @@
         <input class="form-input" type="password" id="userPassword" placeholder="Min. 8 characters">
       </div>
       <div class="form-group">
+        <label class="form-label">Phone (E.164 for SMS)</label>
+        <input class="form-input" id="userPhone" placeholder="+15551234567">
+      </div>
+      <div class="form-group">
         <label class="form-label">Role</label>
         <select class="form-input" id="userRole">
           <option value="1">Viewer — Read-only access</option>
@@ -221,7 +225,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadUserInfo() {
-  const res = await API.get('/api/auth/me');
+  const res = await API.get('/auth/me');
   const data = await API.json(res);
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
@@ -234,7 +238,7 @@ async function loadUserInfo() {
 async function loadUsers() {
   const q = document.getElementById('searchInput')?.value || '';
   const role = document.querySelector('.hw-chip.active')?.dataset.filter || 'ALL';
-  let url = `/api/users?page=${currentPage}&per_page=${PER_PAGE}`;
+  let url = `/users?page=${currentPage}&per_page=${PER_PAGE}`;
   if (q) url += `&q=${encodeURIComponent(q)}`;
   const res = await API.get(url);
   const data = await API.json(res);
@@ -345,6 +349,7 @@ function openCreateModal() {
   document.getElementById('userUsername').value = '';
   document.getElementById('userDisplayName').value = '';
   document.getElementById('userPassword').value = '';
+  document.getElementById('userPhone').value = '';
   document.getElementById('userRole').value = '2';
   document.getElementById('userModal').style.display = 'flex';
 }
@@ -360,6 +365,7 @@ function openEditModal(id) {
   document.getElementById('userEmail').value = u.email || '';
   document.getElementById('userUsername').value = u.username || '';
   document.getElementById('userDisplayName').value = u.display_name || '';
+  document.getElementById('userPhone').value = u.phone || '';
   document.getElementById('userRole').value = { VIEWER: '1', OPERATOR: '2', ADMIN: '3' }[u.role] || '1';
   document.getElementById('userActive').value = u.is_active ? 'true' : 'false';
   document.getElementById('userModal').style.display = 'flex';
@@ -389,6 +395,7 @@ async function saveUser() {
   const username = document.getElementById('userUsername').value.trim();
   const display_name = document.getElementById('userDisplayName').value.trim();
   const password = document.getElementById('userPassword').value;
+  const phone = document.getElementById('userPhone').value.trim();
   const role = parseInt(document.getElementById('userRole').value);
   const is_active = document.getElementById('userActive').value === 'true';
 
@@ -397,22 +404,22 @@ async function saveUser() {
   if (!currentUserId && !password) { alert('Password is required for new users'); return; }
   if (password && password.length < 8) { alert('Password must be at least 8 characters'); return; }
 
-  const body = { email, username, display_name, role };
+  const body = { email, username, display_name, role, phone };
   if (password) body.password = password;
   if (currentUserId) {
     body.is_active = is_active;
-    const res = await API.patch(`/api/users/${currentUserId}`, body);
+    const res = await API.patch(`/users/${currentUserId}`, body);
     if (res && res.ok) { closeUserModal(); await loadUsers(); showToast('User updated'); }
     else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
   } else {
-    const res = await API.post('/api/users', body);
+    const res = await API.post('/users', body);
     if (res && res.ok) { closeUserModal(); await loadUsers(); showToast('User created'); }
     else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
   }
 }
 
 async function toggleActive(id, active) {
-  const res = await API.patch(`/api/users/${id}`, { is_active: active });
+  const res = await API.patch(`/users/${id}`, { is_active: active });
   if (res && res.ok) {
     const u = users.find(x => x.id === id);
     if (u) u.is_active = active;
@@ -428,7 +435,7 @@ async function toggleActive(id, active) {
 
 async function deleteUser(id, name) {
   if (!confirm(`Deactivate user "${name}"?\n\nThey will no longer be able to log in.`)) return;
-  const res = await API.del(`/api/users/${id}`);
+  const res = await API.del(`/users/${id}`);
   if (res && res.ok) { await loadUsers(); showToast('User deactivated'); }
   else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
 }
@@ -438,7 +445,7 @@ async function resetPassword() {
   const confirm = document.getElementById('confirmPassword').value;
   if (!pw || pw.length < 8) { alert('Password must be at least 8 characters'); return; }
   if (pw !== confirm) { alert('Passwords do not match'); return; }
-  const res = await API.patch(`/api/users/${window._pwUserId}`, { password: pw });
+  const res = await API.patch(`/users/${window._pwUserId}`, { password: pw });
   if (res && res.ok) { closePwModal(); showToast('Password reset successfully'); }
   else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
 }

@@ -7,6 +7,9 @@ let trackerList = [];       // ordered list for rendering
 let alerts = [];
 let nodes = [];
 let selectedTrackerId = null;
+// Expose for map2d.js / map3d.js
+Object.defineProperty(window, 'trackers', { get: () => trackers, set: (v) => { trackers = v; } });
+Object.defineProperty(window, 'selectedTrackerId', { get: () => selectedTrackerId, set: (v) => { selectedTrackerId = v; } });
 let currentView = '2d';
 let filters = { people: true, machines: true, sensors: true, offline: true, alerts: true };
 
@@ -54,6 +57,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMap3D();
   startSSE();
   setupKeyboardShortcuts();
+  // Deep-link from Alerts "Show on map"
+  try {
+    const params = new URLSearchParams(location.search);
+    const x = parseFloat(params.get('x'));
+    const y = parseFloat(params.get('y'));
+    if (!Number.isNaN(x) && !Number.isNaN(y) && window.zoomToPosition) {
+      setTimeout(() => window.zoomToPosition(x, y), 800);
+    }
+  } catch (e) {}
 });
 
 // ── Auth / User ──────────────────────────────────────────────────────────────
@@ -121,7 +133,7 @@ async function loadAlerts() {
   if (!res || !res.ok) return;
   alerts = data.items || [];
   renderAlertFeed();
-  const badge = document.getElementById('alertBadge');
+  const badge = document.getElementById('alertCount');
   const count = alerts.length;
   if (count > 0) {
     badge.textContent = count > 99 ? '99+' : count;
@@ -464,10 +476,14 @@ async function triggerAlarm() {
   }
   try {
     const res = await API.post('/alerts/trigger', { tracker_id: selectedTrackerId });
+    const data = await API.json(res);
     if (res && res.ok) {
-      showToast('Alarm triggered for ' + (trackers[selectedTrackerId]?.assigned_name || 'tracker'), 'success');
+      if (data.downlink_available === false) {
+        showToast('Alarm queued — downlink unavailable (MQTT offline). Logged for hardware when connected.', 'warning');
+      } else {
+        showToast('Alarm sent to ' + (trackers[selectedTrackerId]?.assigned_name || 'tracker'), 'success');
+      }
     } else {
-      const data = await API.json(res);
       showToast('Failed: ' + (data?.error || 'Server error'), 'error');
     }
   } catch (e) {
@@ -552,7 +568,7 @@ function startSSE() {
       renderAlertFeed();
     }
     // Badge
-    const badge = document.getElementById('alertBadge');
+    const badge = document.getElementById('alertCount');
     const count = alerts.filter(a => a.state === 'ACTIVE').length;
     if (count > 0) {
       badge.textContent = count > 99 ? '99+' : count;
@@ -702,12 +718,15 @@ async function startPlayback() {
   document.getElementById('playbackBar').style.display = 'flex';
   document.getElementById('playbackBadgeLive').style.display = 'none';
   document.getElementById('playbackBadgePlayback').style.display = 'inline-block';
-  document.getElementById('playbackPlayIcon').className = 'fa-solid fa-play';
-  document.getElementById('playbackPlayBtn').classList.remove('playing');
+  document.getElementById('playPauseIcon').className = 'fa-solid fa-play';
+  document.getElementById('playPauseBtn').classList.remove('playing');
   updatePlaybackSpeedUI(1);
 
   // Update range labels
-  document.getElementById('playbackRangeStart').textContent = fmtTime(playbackStart);
+  const _prs = document.getElementById('playbackStartTime');
+  if (_prs) _prs.textContent = fmtTime(playbackStart);
+  const _pre = document.getElementById('playbackEndTime');
+  if (_pre) _pre.textContent = fmtTime(playbackEnd);
 
   // Fetch history for all trackers in parallel
   const trackerIds = Object.keys(trackers);
@@ -776,8 +795,8 @@ function advancePlayback() {
       clearInterval(playbackInterval);
       playbackInterval = null;
     }
-    document.getElementById('playbackPlayIcon').className = 'fa-solid fa-play';
-    document.getElementById('playbackPlayBtn').classList.remove('playing');
+    document.getElementById('playPauseIcon').className = 'fa-solid fa-play';
+    document.getElementById('playPauseBtn').classList.remove('playing');
   }
   renderPlaybackFrame();
   // Sync slider
@@ -843,8 +862,8 @@ function stepPlayback(deltaSeconds) {
     clearInterval(playbackInterval);
     playbackInterval = null;
   }
-  document.getElementById('playbackPlayIcon').className = 'fa-solid fa-play';
-  document.getElementById('playbackPlayBtn').classList.remove('playing');
+  document.getElementById('playPauseIcon').className = 'fa-solid fa-play';
+  document.getElementById('playPauseBtn').classList.remove('playing');
   playbackCursor = new Date(playbackCursor.getTime() + deltaSeconds * 1000);
   if (playbackCursor < playbackStart) playbackCursor = new Date(playbackStart);
   if (playbackCursor > playbackEnd) playbackCursor = new Date(playbackEnd);
@@ -871,8 +890,8 @@ function updatePlaybackSpeedUI(speed) {
 function togglePlaybackPlay() {
   if (!isPlayback) return;
   playbackIsPlaying = !playbackIsPlaying;
-  const icon = document.getElementById('playbackPlayIcon');
-  const btn = document.getElementById('playbackPlayBtn');
+  const icon = document.getElementById('playPauseIcon');
+  const btn = document.getElementById('playPauseBtn');
   if (playbackIsPlaying) {
     icon.className = 'fa-solid fa-pause';
     btn.classList.add('playing');
@@ -894,8 +913,8 @@ function onPlaybackSliderInput(value) {
     clearInterval(playbackInterval);
     playbackInterval = null;
   }
-  document.getElementById('playbackPlayIcon').className = 'fa-solid fa-play';
-  document.getElementById('playbackPlayBtn').classList.remove('playing');
+  document.getElementById('playPauseIcon').className = 'fa-solid fa-play';
+  document.getElementById('playPauseBtn').classList.remove('playing');
   playbackCursor = new Date(playbackStart.getTime() + parseInt(value) * 1000);
   renderPlaybackFrame();
 }
@@ -1030,20 +1049,32 @@ let historyIndex = 0;
 
 async function viewHistory() {
   if (!selectedTrackerId) return;
-  document.getElementById('historyBar').style.display = 'flex';
+  document.getElementById('playbackBar').style.display = 'flex';
+  const live = document.getElementById('playbackBadgeLive');
+  const pb = document.getElementById('playbackBadgePlayback');
+  if (live) live.style.display = 'none';
+  if (pb) pb.style.display = 'inline-block';
   const res = await API.get(`/positioning/history/${selectedTrackerId}?limit=500`);
   const data = await API.json(res);
   if (!res || !res.ok || !data.history) return;
   historyData = data.history.reverse();  // oldest first
   historyIndex = historyData.length - 1;  // start at newest
+  historyMode = true;
 
-  const slider = document.getElementById('historySlider');
-  slider.max = historyData.length - 1;
-  slider.value = historyIndex;
+  const slider = document.getElementById('playbackSlider');
+  if (slider) {
+    slider.max = Math.max(historyData.length - 1, 0);
+    slider.value = historyIndex;
+  }
   updateHistoryFrame();
-
-  document.getElementById('historyStartTime').textContent =
-    historyData[0] ? timeAgo(historyData[0].timestamp) : '—';
+  const st = document.getElementById('playbackStartTime');
+  const et = document.getElementById('playbackEndTime');
+  if (st) st.textContent = historyData[0] ? timeAgo(historyData[0].timestamp) : '—';
+  if (et) et.textContent = historyData.length ? timeAgo(historyData[historyData.length-1].timestamp) : '—';
+  // Draw trajectory polyline
+  if (window.showTrajectory && historyData.length) {
+    window.showTrajectory(historyData.map(h => ({ x: h.x, y: h.y })));
+  }
 }
 
 function updateHistoryFrame() {
@@ -1066,17 +1097,19 @@ function updateHistoryFrame() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const slider = document.getElementById('historySlider');
+  const slider = document.getElementById('playbackSlider');
   if (slider) {
     slider.addEventListener('input', () => {
-      historyIndex = parseInt(slider.value);
-      updateHistoryFrame();
+      if (historyMode && historyData.length) {
+        historyIndex = parseInt(slider.value);
+        updateHistoryFrame();
+      }
     });
   }
 });
 
 function closeHistory() {
-  document.getElementById('historyBar').style.display = 'none';
+  document.getElementById('playbackBar').style.display = 'none';
   historyMode = false;
   historyData = [];
   // Restore live positions
@@ -1089,14 +1122,14 @@ function closeHistory() {
 
 // ── Notifications ────────────────────────────────────────────────────────────
 function toggleNotifications() {
-  const dropdown = document.getElementById('notifDropdown');
+  const dropdown = document.getElementById('notifPanel');
   const isOpen = dropdown.style.display !== 'none';
   dropdown.style.display = isOpen ? 'none' : 'block';
   if (!isOpen) loadNotifications();
 }
 document.addEventListener('click', e => {
   if (!e.target.closest('#notifBtn') && !e.target.closest('.notifications-dropdown')) {
-    const d = document.getElementById('notifDropdown');
+    const d = document.getElementById('notifPanel');
     if (d) d.style.display = 'none';
   }
 });

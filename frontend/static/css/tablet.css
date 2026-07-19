@@ -1,0 +1,45 @@
+/* Tablet live-view polish for HOLO-RTLS */
+@media (max-width: 1100px) and (min-width: 700px) {
+  .shell-page .shell-main {
+    padding: 12px 14px 88px;
+  }
+  .map-container,
+  #map2d,
+  .command-center-map {
+    min-height: 62vh;
+  }
+  .tag-card,
+  .side-panel,
+  .left-panel {
+    max-height: 42vh;
+  }
+  .tablet-alert-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1200;
+    background: rgba(11, 18, 32, 0.96);
+    border-top: 1px solid rgba(45, 212, 191, 0.25);
+    padding: 10px 14px 14px;
+    max-height: 28vh;
+    overflow: auto;
+  }
+  .tablet-alert-sheet h3 {
+    margin: 0 0 8px;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 0.95rem;
+    color: #2dd4bf;
+  }
+}
+
+@media (max-width: 699px) {
+  .shell-page .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .data-table {
+    font-size: 13px;
+  }
+}

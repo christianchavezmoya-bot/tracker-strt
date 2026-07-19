@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadUserInfo() {
-  const res = await API.get('/api/auth/me');
+  const res = await API.get('/auth/me');
   const data = await API.json(res);
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
@@ -298,13 +298,13 @@ async function loadUserInfo() {
 }
 
 async function loadSections() {
-  const res = await API.get('/api/zones/sections');
+  const res = await API.get('/zones/sections');
   const data = await API.json(res);
   if (res && res.ok) sections = data.items || [];
 }
 
 async function loadZones() {
-  const res = await API.get('/api/zones');
+  const res = await API.get('/zones');
   const data = await API.json(res);
   if (res && res.ok) zones = data.items || [];
 }
@@ -415,9 +415,9 @@ async function saveSection() {
   };
   let res;
   if (editingSectionId) {
-    res = await API.patch(`/api/zones/sections/${editingSectionId}`, body);
+    res = await API.patch(`/zones/sections/${editingSectionId}`, body);
   } else {
-    res = await API.post('/api/zones/sections', body);
+    res = await API.post('/zones/sections', body);
   }
   if (res && res.ok) {
     await loadSections();
@@ -433,7 +433,7 @@ async function saveSection() {
 
 async function deleteSection(id, name) {
   if (!confirm(`Delete section "${name}"?`)) return;
-  const res = await API.del(`/api/zones/sections/${id}`);
+  const res = await API.del(`/zones/sections/${id}`);
   if (res && res.ok) {
     await loadSections();
     renderSections();
@@ -524,9 +524,9 @@ async function saveZone() {
   };
   let res;
   if (editingZoneId) {
-    res = await API.patch(`/api/zones/${editingZoneId}`, body);
+    res = await API.patch(`/zones/${editingZoneId}`, body);
   } else {
-    res = await API.post('/api/zones', body);
+    res = await API.post('/zones', body);
   }
   if (res && res.ok) {
     await loadZones();
@@ -542,7 +542,7 @@ async function saveZone() {
 
 async function deleteZone(id, name) {
   if (!confirm(`Delete zone "${name}"?`)) return;
-  const res = await API.del(`/api/zones/${id}`);
+  const res = await API.del(`/zones/${id}`);
   if (res && res.ok) {
     await loadZones();
     renderZones();

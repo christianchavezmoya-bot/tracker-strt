@@ -169,6 +169,9 @@
       <div class="reports-nav-item" data-tab="export" onclick="switchTab('export')">
         <i class="fa-solid fa-file-export"></i> Export Data
       </div>
+      <div class="reports-nav-item" data-tab="schedules" onclick="switchTab('schedules')">
+        <i class="fa-solid fa-clock"></i> Schedules
+      </div>
     </nav>
     <div class="reports-nav-label" style="margin-top:24px">NAVIGATE</div>
     <nav>
@@ -375,6 +378,47 @@
             </div>
           </div>
         </div>
+        <div class="export-card">
+          <div class="export-title"><i class="fa-solid fa-hourglass-half" style="color:var(--cyan);margin-right:6px"></i> Zone Dwell</div>
+          <div class="export-desc">Time each tracker spent inside each zone for the selected window.</div>
+          <div class="export-actions">
+            <button class="btn btn-secondary" onclick="exportDwell('json')"><i class="fa-solid fa-table"></i> Preview</button>
+            <button class="btn btn-primary" onclick="exportDwell('csv')"><i class="fa-solid fa-download"></i> CSV</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-title"><i class="fa-solid fa-file-pdf" style="color:var(--red);margin-right:6px"></i> PDF Reports</div>
+          <div class="export-desc">Branded PDF summary / battery / dwell / full for compliance packs.</div>
+          <div class="export-actions">
+            <select class="control-input" id="pdfType" style="flex:1">
+              <option value="summary">Summary</option>
+              <option value="battery">Battery</option>
+              <option value="dwell">Dwell</option>
+              <option value="full">Full alerts</option>
+            </select>
+            <button class="btn btn-primary" onclick="exportPdf()"><i class="fa-solid fa-download"></i> PDF</button>
+          </div>
+        </div>
+      </div>
+      <div id="dwellPreview" class="data-table-wrap" style="margin-top:20px;display:none">
+        <table class="data-table"><thead><tr><th>Tracker</th><th>Zone</th><th>Minutes</th></tr></thead><tbody id="dwellBody"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Schedules Tab -->
+    <div id="tab-schedules" style="display:none">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title"><i class="fa-solid fa-clock" style="color:var(--cyan)"></i> Scheduled Email Reports</h1>
+          <p class="page-subtitle">Deliver CSV/PDF reports to operators on a cron schedule</p>
+        </div>
+        <button class="btn btn-primary" onclick="createSchedule()"><i class="fa-solid fa-plus"></i> Add schedule</button>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Type</th><th>Cron</th><th>Format</th><th>Recipients</th><th>Last run</th><th></th></tr></thead>
+          <tbody id="schedulesBody"><tr><td colspan="7" class="table-empty">Loading…</td></tr></tbody>
+        </table>
       </div>
     </div>
 
@@ -398,7 +442,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadUserInfo() {
-  const res = await API.get('/api/auth/me');
+  const res = await API.get('/auth/me');
   const data = await API.json(res);
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
@@ -432,6 +476,7 @@ function switchTab(tab) {
   if (target) target.style.display = 'block';
   if (tab === 'activity') loadActivity();
   if (tab === 'alerts') loadBreakdown();
+  if (tab === 'schedules') loadSchedules();
 }
 
 function changePeriod(days) {
@@ -448,7 +493,7 @@ function changePeriod(days) {
 async function loadOverview() {
   const start = document.getElementById('startDate').value;
   const end = document.getElementById('endDate').value;
-  const url = `/api/reports/summary?start=${start}&end=${end}`;
+  const url = `/reports/summary?start=${start}&end=${end}`;
   const res = await API.get(url);
   const data = await API.json(res);
   if (!res || !res.ok) { console.error(data); return; }
@@ -524,7 +569,7 @@ async function loadActivity() {
   const days = document.getElementById('activityDays').value;
   const tbody = document.getElementById('activityTable');
   tbody.innerHTML = `<tr><td colspan="7" class="loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading…</td></tr>`;
-  const res = await API.get(`/api/reports/tracker-activity?days=${days}`);
+  const res = await API.get(`/reports/tracker-activity?days=${days}`);
   const data = await API.json(res);
   if (!res || !res.ok) { tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Failed to load data</td></tr>`; return; }
   const trackers = data.trackers || [];
@@ -557,7 +602,7 @@ const BREAKDOWN_COLORS = [
 
 async function loadBreakdown() {
   const days = document.getElementById('alertDays').value;
-  const res = await API.get(`/api/reports/alert-breakdown?days=${days}`);
+  const res = await API.get(`/reports/alert-breakdown?days=${days}`);
   const data = await API.json(res);
   if (!res || !res.ok) return;
   const breakdown = data.breakdown || [];
@@ -646,6 +691,71 @@ function exportDistance() {
 function exportFull() {
   const days = document.getElementById('exportDays').value;
   doDownload(`/api/reports/full-export?days=${days}`, `full_report_${new Date().toISOString().split('T')[0]}.csv`);
+}
+
+async function exportDwell(fmt) {
+  const days = document.getElementById('periodSelect')?.value || 7;
+  if (fmt === 'csv') {
+    doDownload(`/api/reports/dwell?days=${days}&format=csv`, 'dwell_report.csv');
+    return;
+  }
+  const res = await API.get(`/reports/dwell?days=${days}`);
+  const data = await API.json(res);
+  const wrap = document.getElementById('dwellPreview');
+  const body = document.getElementById('dwellBody');
+  wrap.style.display = 'block';
+  const items = data.items || [];
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="3" class="table-empty">No dwell data in this window</td></tr>';
+    return;
+  }
+  body.innerHTML = items.map(r => `<tr>
+    <td>${r.assigned_name || r.hardware_id}</td>
+    <td>${r.zone_name}</td>
+    <td class="mono">${r.dwell_minutes}</td>
+  </tr>`).join('');
+}
+
+function exportPdf() {
+  const type = document.getElementById('pdfType').value;
+  doDownload(`/api/reports/pdf?type=${type}`, `${type}_report.pdf`);
+}
+
+async function loadSchedules() {
+  const res = await API.get('/reports/schedules');
+  const data = await API.json(res);
+  const body = document.getElementById('schedulesBody');
+  const items = data.items || [];
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="7" class="table-empty">No schedules yet — add one to email daily reports</td></tr>';
+    return;
+  }
+  body.innerHTML = items.map(s => `<tr>
+    <td><strong>${s.name}</strong></td>
+    <td>${s.report_type}</td>
+    <td class="mono">${s.cron}</td>
+    <td>${s.format}</td>
+    <td>${s.recipients || '—'}</td>
+    <td>${s.last_run_at ? fmtDT(s.last_run_at) : '—'}</td>
+    <td><button class="btn btn-danger" onclick="deleteSchedule(${s.id})">Delete</button></td>
+  </tr>`).join('');
+}
+
+async function createSchedule() {
+  const name = prompt('Schedule name', 'Daily summary');
+  if (!name) return;
+  const recipients = prompt('Recipient emails (comma-separated)', API.getUser()?.email || '');
+  const report_type = prompt('Type: summary|battery|dwell|full', 'summary') || 'summary';
+  const format = prompt('Format: csv|pdf', 'csv') || 'csv';
+  const cron = prompt('Cron (m h * * *)', '0 6 * * *') || '0 6 * * *';
+  await API.post('/reports/schedules', { name, recipients, report_type, format, cron });
+  loadSchedules();
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('Delete this schedule?')) return;
+  await API.del('/reports/schedules/' + id);
+  loadSchedules();
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

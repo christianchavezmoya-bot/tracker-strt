@@ -134,10 +134,19 @@ async function handlePasswordReset(event) {
   const res = await API.post('/auth/password/reset-request', { email });
   const data = await API.json(res);
   if (res && res.ok) {
-    alert('If that email is registered, a reset link has been sent.');
+    let msg = data.message || 'If that email is registered, a reset link has been sent.';
+    if (data.reset_url) {
+      msg += '\n\nDev reset link:\n' + location.origin + data.reset_url;
+      if (confirm(msg + '\n\nOpen reset page now?')) {
+        location.href = data.reset_url;
+        return;
+      }
+    } else {
+      alert(msg);
+    }
     showLogin();
   } else {
-    alert(data.error || 'Request failed');
+    alert((data && data.error) || 'Request failed');
   }
 }
 

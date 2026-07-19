@@ -2,7 +2,7 @@
 HOLO-RTLS — All Models
 Import this module to load all SQLAlchemy models.
 """
-from backend.models.user import User, UserRole
+from backend.models.user import User, UserRole, UserSession
 from backend.models.tracker import (
     Tracker, WifiNode, MapSection, Zone,
     DeviceCategory, TagType, AssetState, AlertStatus,
@@ -18,27 +18,20 @@ from backend.models.detection import (
     FloorPlan, WifiAnchor, DetectionEvent, TrackedDevice,
     SignalType, AnchorStatus, DeviceType,
 )
+from backend.models.integrations import WebhookEndpoint, ReportSchedule
 
 __all__ = [
-    # User
-    "User", "UserRole",
-    # Tracker
+    "User", "UserRole", "UserSession",
     "Tracker", "WifiNode", "MapSection", "Zone",
     "DeviceCategory", "TagType", "AssetState", "AlertStatus",
     "CheckInStatus", "NodeType", "NodeStatus", "ZoneType",
-    # Alert
     "Alert", "Notification", "AlertType", "AlertState", "NotificationType",
-    # Audit
     "AuditLog",
-    # Settings
     "Setting", "BusinessLogo", "SettingScope",
-    # Backup / History / API
     "BackupJob", "CheckInLog", "ApiKey",
-    # Positioning
     "TrackingHistory", "PositionSnapshot",
-    # Hardware
     "HardwareConfig",
-    # WiFi/BLE RTLS
     "FloorPlan", "WifiAnchor", "DetectionEvent", "TrackedDevice",
     "SignalType", "AnchorStatus", "DeviceType",
+    "WebhookEndpoint", "ReportSchedule",
 ]

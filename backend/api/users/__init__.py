@@ -184,9 +184,17 @@ def update_user(user_id):
     """
     user = User.query.get_or_404(user_id)
     body = request.get_json() or {}
-    for field in ["username", "display_name", "role", "is_active"]:
+    for field in ["username", "display_name", "role", "is_active", "phone"]:
         if field in body:
             setattr(user, field, body[field])
+    if "notify_prefs" in body:
+        import json
+        prefs = body["notify_prefs"]
+        user.notify_prefs = json.dumps(prefs) if isinstance(prefs, dict) else prefs
+    if body.get("password"):
+        if len(body["password"]) < 8:
+            return jsonify({"error": "Password must be at least 8 characters"}), 400
+        user.set_password(body["password"])
     db.session.commit()
     AuditLog.log(action="user.update", user_id=int(get_jwt_identity()),
                  entity_type="User", entity_id=user.id)

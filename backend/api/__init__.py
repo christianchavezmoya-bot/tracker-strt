@@ -232,6 +232,23 @@ def logout():
     ===
     """
     user_id = int(get_jwt_identity())
+    # Revoke current access token session
+    try:
+        from flask_jwt_extended import get_jwt
+        from backend.api.sessions import _REVOKED_JTI
+        from backend.models import UserSession
+        from backend.extensions import db
+        from datetime import datetime, timezone
+        jti = get_jwt().get("jti")
+        if jti:
+            _REVOKED_JTI.add(jti)
+            row = UserSession.query.filter_by(jti=jti).first()
+            if row:
+                row.is_revoked = True
+                row.revoked_at = datetime.now(timezone.utc)
+                db.session.commit()
+    except Exception:
+        pass
     AUTH_SERVICE.logout(user_id, ip_address=request.remote_addr)
     return jsonify({"message": "Logged out"}), 200
 
@@ -432,7 +449,14 @@ def reset_request():
 
     AUTH_SERVICE.request_password_reset(email, ip_address=request.remote_addr)
     # Always return 200 — don't reveal if email exists
-    return jsonify({"message": "If that email is registered, a reset link has been sent"}), 200
+    resp = {"message": "If that email is registered, a reset link has been sent"}
+    # Dev/debug: expose token so reset UI works without SMTP
+    from backend.config import DEBUG, FLASK_MAIL_SUPPRESS_SEND
+    token = getattr(AUTH_SERVICE, "_last_reset_token", None)
+    if token and (DEBUG or FLASK_MAIL_SUPPRESS_SEND):
+        resp["debug_token"] = token
+        resp["reset_url"] = f"/reset-password?token={token}"
+    return jsonify(resp), 200
 
 
 @auth_bp.route("/password/reset", methods=["POST"])
@@ -520,6 +544,31 @@ def me():
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
+    return jsonify({"user": user.to_dict(include_email=True)}), 200
+
+
+@auth_bp.route("/me", methods=["PATCH"])
+@jwt_required()
+def update_me():
+    """Update own profile: phone, display_name, notify_prefs."""
+    import json
+    from backend.extensions import db
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    body = request.get_json() or {}
+    if "display_name" in body:
+        user.display_name = (body.get("display_name") or "")[:200]
+    if "phone" in body:
+        user.phone = (body.get("phone") or "").strip()[:32] or None
+    if "notify_prefs" in body:
+        prefs = body["notify_prefs"]
+        if isinstance(prefs, dict):
+            user.notify_prefs = json.dumps(prefs)
+        elif isinstance(prefs, str):
+            user.notify_prefs = prefs
+    db.session.commit()
     return jsonify({"user": user.to_dict(include_email=True)}), 200
 
 

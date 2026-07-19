@@ -272,7 +272,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadUserInfo() {
-  const res = await API.get('/api/auth/me');
+  const res = await API.get('/auth/me');
   const data = await API.json(res);
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
@@ -281,7 +281,7 @@ async function loadUserInfo() {
 
 async function loadBackups() {
   const tbody = document.getElementById('backupTable');
-  const res = await API.get('/api/backup');
+  const res = await API.get('/backup');
   const data = await API.json(res);
   if (!res || !res.ok) {
     tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Failed to load backups</td></tr>`;
@@ -342,7 +342,7 @@ async function createBackup() {
   const btn = document.getElementById('createBtn');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin spinner"></i> Creating…';
-  const res = await API.post('/api/backup/trigger', {});
+  const res = await API.post('/backup/trigger', {});
   const data = await API.json(res);
   btn.disabled = false;
   btn.innerHTML = '<i class="fa-solid fa-plus"></i> Create Backup';
@@ -389,7 +389,7 @@ async function confirmRestore() {
   const btn = document.getElementById('confirmRestoreBtn');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin spinner"></i> Restoring…';
-  const res = await API.post(`/api/backup/${restoringJobId}/restore`, { confirm: true });
+  const res = await API.post(`/backup/${restoringJobId}/restore`, { confirm: true });
   const data = await API.json(res);
   btn.disabled = false;
   btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Restore Now';

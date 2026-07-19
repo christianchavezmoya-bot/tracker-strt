@@ -7,7 +7,7 @@ import qrcode
 import io
 import base64
 from typing import Optional, Tuple
-from flask_jwt_extended import create_access_token, create_refresh_token
+from flask_jwt_extended import create_access_token, create_refresh_token, get_jti
 from argon2.exceptions import VerifyMismatchError, InvalidHash
 
 from backend.extensions import db
@@ -20,6 +20,32 @@ class AuthService:
     Business logic for authentication.
     Called by auth API routes — keeps routes thin.
     """
+
+    def create_user(
+        self,
+        email: str,
+        password: str,
+        username: Optional[str] = None,
+        display_name: Optional[str] = None,
+        role: int = UserRole.OPERATOR,
+        phone: Optional[str] = None,
+    ) -> User:
+        """Admin create-user helper used by /api/users."""
+        email = email.strip().lower()
+        username = (username or email.split("@")[0]).strip()
+        user, err = self.register(
+            email=email,
+            username=username,
+            password=password,
+            role=role,
+            display_name=display_name,
+        )
+        if err:
+            raise ValueError(err)
+        if phone:
+            user.phone = phone.strip()
+            db.session.commit()
+        return user
 
     # ── Registration ──────────────────────────────────────────────────────────
     def register(
@@ -121,6 +147,18 @@ class AuthService:
         access_token = create_access_token(identity=str(user.id))
         refresh_token = create_refresh_token(identity=str(user.id))
 
+        # Track session for revoke / force-logout
+        try:
+            from backend.api.sessions import register_session
+            register_session(
+                user.id,
+                get_jti(access_token),
+                ip=ip_address,
+                ua=None,
+            )
+        except Exception:
+            pass
+
         AuditLog.log(
             action="user.login",
             user_id=user.id,
@@ -135,7 +173,6 @@ class AuthService:
             "refresh_token": refresh_token,
             "user": user.to_dict(include_email=True),
         }, None
-
     def _handle_failed_login(self, user: User, ip_address: Optional[str]):
         locked = user.record_failed_login()
         AuditLog.log(
@@ -258,34 +295,64 @@ class AuthService:
         """
         Initiate password reset for an email.
         Returns True always (don't reveal whether email exists).
+        In DEBUG / mail-suppressed mode the reset token is audited for operators.
         """
+        import time
+        import jwt as pyjwt
+        from backend.config import JWT_SECRET_KEY, PASSWORD_RESET_TOKEN_EXPIRES, DEBUG, FLASK_MAIL_SUPPRESS_SEND
+
         user = User.query.filter_by(email=email.strip().lower()).first()
         if user:
-            # TODO: Generate a signed reset token and email it
-            # For now, log the attempt
+            token = pyjwt.encode(
+                {
+                    "sub": str(user.id),
+                    "type": "password_reset",
+                    "exp": int(time.time()) + int(PASSWORD_RESET_TOKEN_EXPIRES),
+                },
+                JWT_SECRET_KEY,
+                algorithm="HS256",
+            )
+            if isinstance(token, bytes):
+                token = token.decode("utf-8")
+
+            # Attempt email delivery
+            mailed = False
+            try:
+                from backend.services.notification_service import get_notification_service
+                notif = get_notification_service()
+                if notif:
+                    mailed = bool(notif.send_email(
+                        to=user.email,
+                        subject="HOLO-RTLS password reset",
+                        body=f"Use this token on the reset form (valid ~1 hour):\n\n{token}\n\nOr open /login and paste it into Reset Password.",
+                    ))
+            except Exception:
+                mailed = False
+
             AuditLog.log(
                 action="user.password_reset_requested",
                 user_id=user.id,
                 entity_type="User",
                 entity_id=user.id,
                 ip_address=ip_address,
+                details=f'{{"mailed": {str(mailed).lower()}, "debug_token": "{token if (DEBUG or FLASK_MAIL_SUPPRESS_SEND) else ""}"}}',
             )
-        return True   # Always return True to prevent email enumeration
+            # Stash last debug token on service for API to optionally return in DEBUG
+            self._last_reset_token = token if (DEBUG or FLASK_MAIL_SUPPRESS_SEND) else None
+        return True
 
     def reset_password(self, token: str, new_password: str) -> Tuple[bool, Optional[str]]:
         """
         Reset password using a signed token.
         Returns (success, error_message).
         """
-        # TODO: Verify signed token (use itsdangerous or JWT)
-        # For now: accept user_id as token placeholder
-        from backend.config import PASSWORD_RESET_TOKEN_EXPIRES
-        import jwt, time
+        from backend.config import JWT_SECRET_KEY
+        import jwt as pyjwt, time
 
         try:
-            payload = jwt.decode(
+            payload = pyjwt.decode(
                 token,
-                __import__("backend.config").config.JWT_SECRET_KEY,
+                JWT_SECRET_KEY,
                 algorithms=["HS256"],
             )
             user_id = int(payload.get("sub"))

@@ -77,6 +77,39 @@
       <button class="hw-tab" data-tab="floorplans" onclick="switchTab('floorplans'); loadFloorPlans()">
         <i class="fa-solid fa-map"></i> Floor Plans
       </button>
+      <button class="hw-tab" data-tab="profile" onclick="switchTab('profile'); loadProfileSecurity()">
+        <i class="fa-solid fa-user-shield"></i> Profile & Sessions
+      </button>
+    </div>
+
+    <!-- ── Profile & Sessions ───────────────────────────────────── -->
+    <div class="settings-section" id="section-profile" style="display:none">
+      <div class="settings-card">
+        <div class="settings-card-header"><i class="fa-solid fa-bell"></i> Notification preferences</div>
+        <div class="settings-grid" style="padding:16px">
+          <div class="form-group">
+            <label class="form-label">Phone (E.164)</label>
+            <input class="form-input" id="prefPhone" placeholder="+15551234567">
+          </div>
+          <div class="form-group">
+            <label class="form-label"><input type="checkbox" id="prefEmail" checked> Email alerts</label>
+          </div>
+          <div class="form-group">
+            <label class="form-label"><input type="checkbox" id="prefSms"> SMS alerts</label>
+          </div>
+          <button class="btn btn-primary" onclick="saveNotifyPrefs()"><i class="fa-solid fa-check"></i> Save preferences</button>
+        </div>
+      </div>
+      <div class="settings-card" style="margin-top:16px">
+        <div class="settings-card-header"><i class="fa-solid fa-laptop"></i> Active sessions</div>
+        <div style="padding:12px">
+          <button class="btn btn-secondary" style="margin-bottom:10px" onclick="revokeAllSessions()">Revoke other sessions</button>
+          <table class="hw-config-table">
+            <thead><tr><th>IP</th><th>Agent</th><th>Created</th><th>Current</th><th></th></tr></thead>
+            <tbody id="sessionsBody"><tr><td colspan="5">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ── Floor Plans ─────────────────────────────────────────── -->
@@ -287,7 +320,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadUserInfo() {
-  const res = await API.get('/api/auth/me');
+  const res = await API.get('/auth/me');
   const data = await API.json(res);
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
@@ -296,7 +329,7 @@ async function loadUserInfo() {
 }
 
 async function loadSettings() {
-  const res = await API.get('/api/settings');
+  const res = await API.get('/settings');
   const data = await API.json(res);
   if (res && res.ok && data.items) {
     settings = {};
@@ -305,7 +338,7 @@ async function loadSettings() {
 }
 
 async function loadLogo() {
-  const res = await API.get('/api/settings/logo');
+  const res = await API.get('/settings/logo');
   const data = await API.json(res);
   if (res && res.ok && data.logo) {
     logo = data;
@@ -467,7 +500,7 @@ async function saveAllSettings() {
   let saved = 0;
   let errors = 0;
   for (const [key, value] of Object.entries(pendingChanges)) {
-    const res = await API.put(`/api/settings/${key}`, { value });
+    const res = await API.put(`/settings/${key}`, { value });
     if (res && res.ok) {
       // Update local cache
       if (settings[key]) settings[key].value = value;
@@ -576,7 +609,7 @@ let floorPlans = [];
 let selectedFpFile = null;
 
 async function loadFloorPlans() {
-  const res = await API.get('/api/settings/floor-plans');
+  const res = await API.get('/settings/floor-plans');
   const data = await API.json(res);
   if (!res || !res.ok) { document.getElementById('floorPlanTable').innerHTML = `<tr><td colspan="6" class="table-empty">Failed to load floor plans</td></tr>`; return; }
   floorPlans = data.items || [];
@@ -677,7 +710,7 @@ async function uploadFloorPlan() {
     // Just update metadata — no file upload
     const btn = document.getElementById('fpUploadBtn');
     btn.disabled = true;
-    const res = await API.patch(`/api/settings/floor-plans/${editingId}`, {
+    const res = await API.patch(`/settings/floor-plans/${editingId}`, {
       name, color_hex: document.getElementById('fpColor').value,
       z_index: parseInt(document.getElementById('fpZIndex').value) || 0,
     });
@@ -706,13 +739,13 @@ async function uploadFloorPlan() {
 async function toggleFpVisibility(id) {
   const fp = floorPlans.find(f => f.id === id);
   if (!fp) return;
-  await API.patch(`/api/settings/floor-plans/${id}`, { is_visible: !fp.is_visible });
+  await API.patch(`/settings/floor-plans/${id}`, { is_visible: !fp.is_visible });
   await loadFloorPlans();
 }
 
 async function deleteFp(id, name) {
   if (!confirm(`Delete floor plan "${name}"? This will remove the image file.`)) return;
-  const res = await API.del(`/api/settings/floor-plans/${id}`);
+  const res = await API.del(`/settings/floor-plans/${id}`);
   if (res && res.ok) { showToast('Floor plan deleted'); await loadFloorPlans(); }
   else { const d = await API.json(res); alert('Delete failed: ' + (d.error || res.statusText)); }
 }
@@ -801,6 +834,55 @@ function showToast(msg, color) {
 .table-loading i { color:var(--cyan); margin-right:8px; }
 @keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
 </style>
+<script>
+async function loadProfileSecurity() {
+  try {
+    const me = await API.json(await API.get('/auth/me'));
+    const u = me.user || {};
+    document.getElementById('prefPhone').value = u.phone || '';
+    const prefs = u.notify_prefs || {};
+    document.getElementById('prefEmail').checked = prefs.email_alerts !== false;
+    document.getElementById('prefSms').checked = !!prefs.sms_alerts;
+  } catch (e) {}
+  try {
+    const data = await API.json(await API.get('/sessions'));
+    const body = document.getElementById('sessionsBody');
+    const items = data.items || [];
+    if (!items.length) {
+      body.innerHTML = '<tr><td colspan="5">No tracked sessions yet (login again to register)</td></tr>';
+      return;
+    }
+    body.innerHTML = items.map(s => `<tr>
+      <td>${s.ip_address || '—'}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${s.user_agent || '—'}</td>
+      <td>${(s.created_at||'').slice(0,19)}</td>
+      <td>${s.is_current ? 'Yes' : ''}${s.is_revoked ? 'Revoked' : ''}</td>
+      <td>${(!s.is_revoked && !s.is_current) ? `<button class="btn btn-danger" onclick="revokeSession(${s.id})">Revoke</button>` : ''}</td>
+    </tr>`).join('');
+  } catch (e) {
+    document.getElementById('sessionsBody').innerHTML = '<tr><td colspan="5">Could not load sessions</td></tr>';
+  }
+}
+async function saveNotifyPrefs() {
+  const phone = document.getElementById('prefPhone').value.trim();
+  const notify_prefs = {
+    email_alerts: document.getElementById('prefEmail').checked,
+    sms_alerts: document.getElementById('prefSms').checked,
+  };
+  const res = await API.patch('/auth/me', { phone, notify_prefs });
+  if (res && res.ok) alert('Preferences saved');
+  else alert('Save failed');
+}
+async function revokeSession(id) {
+  await API.post('/sessions/' + id + '/revoke', {});
+  loadProfileSecurity();
+}
+async function revokeAllSessions() {
+  if (!confirm('Revoke all other sessions?')) return;
+  await API.post('/sessions/revoke-all', { keep_current: true });
+  loadProfileSecurity();
+}
+</script>
 <script src="/static/js/nav.js" defer></script>
 </body>
 </html>

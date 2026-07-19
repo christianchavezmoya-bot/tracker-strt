@@ -1,29 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Integrations — HOLO-RTLS</title>
-  <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/shell.css">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-</head>
-<body class="shell-page">
-<header class="topbar shell-topbar">
-  <div class="topbar-left">
-    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
-    <div class="breadcrumb"><span>Integrations</span></div>
-  </div>
-</header>
-<main class="shell-main">
+{% extends "base.html" %}
+{% block title %}Integrations — HOLO-RTLS{% endblock %}
+{% block breadcrumb %}<span>Integrations</span>{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary" id="btnCreate"><i class="fa-solid fa-plus"></i> Create API key</button>
+{% endblock %}
+{% block content %}
   <div class="page-header">
     <div>
       <h1 class="page-title">Integrations</h1>
-      <p class="page-subtitle">API keys for scanners, MES, and external systems</p>
+      <p class="page-subtitle">API keys, webhooks, and external position inject</p>
     </div>
-    <button class="btn btn-primary" id="btnCreate"><i class="fa-solid fa-plus"></i> Create API key</button>
   </div>
+
+  <h2 class="page-title" style="font-size:1.1rem;margin:8px 0 12px">API keys</h2>
   <div class="table-panel">
     <table class="data-table">
       <thead><tr><th>Name</th><th>Prefix</th><th>Status</th><th>Last used</th><th>Created</th><th></th></tr></thead>
@@ -31,12 +20,24 @@
     </table>
   </div>
   <p id="secretBanner" class="form-error" style="color:var(--accent);margin-top:16px" hidden></p>
-</main>
-<script src="/static/js/api.js"></script>
-<script src="/static/js/nav.js" defer></script>
+
+  <h2 class="page-title" style="font-size:1.1rem;margin:28px 0 12px">Webhooks</h2>
+  <p class="page-subtitle" style="margin-bottom:12px">Receive <code>alert.created</code> / <code>zone.enter</code> events. Sign with <code>X-HOLO-Signature</code>.</p>
+  <button class="btn btn-secondary" id="btnWebhook" style="margin-bottom:12px"><i class="fa-solid fa-plus"></i> Add webhook</button>
+  <div class="table-panel">
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>URL</th><th>Events</th><th>Status</th><th>Last</th><th></th></tr></thead>
+      <tbody id="hooksBody"><tr><td colspan="6" class="empty-cell">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2 class="page-title" style="font-size:1.1rem;margin:28px 0 12px">External inject</h2>
+  <p class="page-subtitle">POST <code>/api/integrations/positions</code> with JWT or <code>X-API-Key</code> to push hybrid IPS coordinates into Location Core.</p>
+{% endblock %}
+{% block scripts %}
 <script>
 if (!API.isLoggedIn()) location.href='/login';
-async function load() {
+async function loadKeys() {
   const res = await API.get('/keys');
   const data = await res.json();
   const items = data.items || [];
@@ -57,6 +58,27 @@ async function load() {
     </td>
   </tr>`).join('');
 }
+async function loadHooks() {
+  const res = await API.get('/webhooks');
+  const data = await res.json();
+  const items = data.items || [];
+  const body = document.getElementById('hooksBody');
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="6" class="empty-cell">No webhooks</td></tr>';
+    return;
+  }
+  body.innerHTML = items.map(h => `<tr>
+    <td><strong>${h.name}</strong></td>
+    <td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${h.url}</td>
+    <td>${(h.events||[]).join(', ')}</td>
+    <td>${h.is_active ? 'Active' : 'Off'} · ${h.last_status || '—'}</td>
+    <td>${h.last_delivery_at || '—'}</td>
+    <td class="row-actions">
+      <button class="icon-btn" onclick="testHook(${h.id})" title="Test"><i class="fa-solid fa-paper-plane"></i></button>
+      <button class="icon-btn danger" onclick="delHook(${h.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+    </td>
+  </tr>`).join('');
+}
 document.getElementById('btnCreate').onclick = async () => {
   const name = prompt('Key name', 'Scanner / MES');
   if (!name) return;
@@ -67,12 +89,21 @@ document.getElementById('btnCreate').onclick = async () => {
     b.hidden = false;
     b.textContent = 'Copy now (shown once): ' + data.key.secret;
   }
-  load();
+  loadKeys();
+};
+document.getElementById('btnWebhook').onclick = async () => {
+  const name = prompt('Webhook name', 'Alert sink');
+  if (!name) return;
+  const url = prompt('HTTPS endpoint URL');
+  if (!url) return;
+  const events = prompt('Events (comma-separated)', 'alert.created') || 'alert.created';
+  await API.post('/webhooks', { name, url, events: events.split(',').map(s => s.trim()) });
+  loadHooks();
 };
 async function revokeKey(id) {
   if (!confirm('Revoke this key?')) return;
   await API.del('/keys/' + id);
-  load();
+  loadKeys();
 }
 async function rotateKey(id) {
   const res = await API.post('/keys/' + id + '/rotate', {});
@@ -82,9 +113,20 @@ async function rotateKey(id) {
     b.hidden = false;
     b.textContent = 'New secret (shown once): ' + data.key.secret;
   }
-  load();
+  loadKeys();
 }
-load();
+async function testHook(id) {
+  const res = await API.post('/webhooks/' + id + '/test', {});
+  const data = await res.json();
+  alert(data.ok ? 'Delivery OK (' + data.status + ')' : 'Delivery failed: ' + data.status);
+  loadHooks();
+}
+async function delHook(id) {
+  if (!confirm('Delete webhook?')) return;
+  await API.del('/webhooks/' + id);
+  loadHooks();
+}
+loadKeys();
+loadHooks();
 </script>
-</body>
-</html>
+{% endblock %}

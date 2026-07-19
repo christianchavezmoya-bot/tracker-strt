@@ -149,6 +149,9 @@ def create_app(test_config: dict = None) -> Flask:
     from backend.api.scanner import scanner_bp
     from backend.api.keys import keys_bp
     from backend.api.checkin import checkin_bp
+    from backend.api.sessions import sessions_bp
+    from backend.api.webhooks import webhooks_bp, schedules_bp
+    from backend.api.inject import inject_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trackers_bp)
@@ -169,6 +172,41 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(stream_bp)
     app.register_blueprint(keys_bp)
     app.register_blueprint(checkin_bp)
+    app.register_blueprint(sessions_bp)
+    app.register_blueprint(webhooks_bp)
+    app.register_blueprint(schedules_bp)
+    app.register_blueprint(inject_bp)
+
+    # ── JWT blocklist (session revoke) ────────────────────────────────────────
+    @jwt.token_in_blocklist_loader
+    def check_if_token_revoked(jwt_header, jwt_payload):
+        from backend.api.sessions import is_jti_revoked
+        return is_jti_revoked(jwt_payload.get("jti"))
+
+    # ── API key middleware (X-API-Key on selected routes) ──────────────────────
+    @app.before_request
+    def api_key_auth_optional():
+        """Allow X-API-Key as alternative auth for /api/trackers, /api/alerts, inject."""
+        if not request.path.startswith("/api/"):
+            return None
+        raw = request.headers.get("X-API-Key")
+        if not raw:
+            return None
+        import hashlib
+        from backend.models import ApiKey
+        from datetime import datetime, timezone
+        h = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        key = ApiKey.query.filter_by(key_hash=h, is_active=True).first()
+        if not key or key.is_expired():
+            return jsonify({"error": "Invalid API key"}), 401
+        key.last_used_at = datetime.now(timezone.utc)
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        request.api_key = key
+        request.current_user_id = key.user_id
+        return None
 
     # ── Frontend routes ───────────────────────────────────────────────────────
     from flask import render_template
@@ -180,6 +218,10 @@ def create_app(test_config: dict = None) -> Flask:
     @app.route("/login")
     def login_page():
         return render_template("auth/login.html")
+
+    @app.route("/reset-password")
+    def reset_password_page():
+        return render_template("auth/reset_password.html")
 
     @app.route("/trackers")
     def trackers_page():
@@ -334,6 +376,12 @@ def _init_positioning(app):
         no_signal_timeout=int(getattr(cfg, 'NO_SIGNAL_TIMEOUT', 120)),
     )
     alert_svc.start()
+
+    try:
+        from backend.services.scheduler_service import init_scheduler
+        init_scheduler(app)
+    except Exception as e:
+        logger.warning(f"Scheduler not started: {e}")
 
     try:
         mqtt_pub = init_mqtt_publisher(

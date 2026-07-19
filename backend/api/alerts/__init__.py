@@ -693,7 +693,8 @@ def trigger_alarm():
         "triggered_by": int(get_jwt_identity()),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    if mqtt and mqtt.is_connected:
+    downlink = bool(mqtt and getattr(mqtt, "is_connected", False))
+    if downlink:
         mqtt.publish("rtls/alarms/trigger", json.dumps(alarm_payload), qos=1)
         logger.info(f"Alarm triggered for tracker {tracker_id} ({tracker.hardware_id})")
     else:
@@ -712,5 +713,6 @@ def trigger_alarm():
     return jsonify({
         "success": True,
         "tracker_id": tracker_id,
-        "message": "Alarm triggered",
+        "message": "Alarm triggered" if downlink else "Alarm queued — downlink unavailable",
+        "downlink_available": downlink,
     })

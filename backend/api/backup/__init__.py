@@ -40,6 +40,61 @@ def list_backups():
     return jsonify({"items": [j.to_dict() for j in jobs]})
 
 
+def _create_backup_file(trigger: str = "manual", user_id: int = None):
+    """Shared backup implementation for manual + scheduled triggers."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"holo_rtls_backup_{ts}.db"
+    filepath = config.BACKUP_DIR / filename
+
+    job = BackupJob(
+        filename=filename,
+        status="running",
+        trigger=trigger,
+        created_by_id=user_id,
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    try:
+        # Prefer configured URI path; fall back to data dir
+        uri = str(config.SQLALCHEMY_DATABASE_URI or "")
+        if uri.startswith("sqlite:////"):
+            db_path = uri.replace("sqlite:////", "/", 1)
+        elif uri.startswith("sqlite:///"):
+            db_path = uri.replace("sqlite:///", "", 1)
+        else:
+            db_path = str(config.DATA_DIR / "holo_rtls.db")
+        if not os.path.exists(db_path):
+            # Try exec DB name variants
+            for cand in (config.DATA_DIR / "holo_rtls.db", config.DATA_DIR / "holo_rtls_exec.db"):
+                if cand.exists():
+                    db_path = str(cand)
+                    break
+        shutil.copy2(str(db_path), str(filepath))
+        # Retention
+        retention = int(getattr(config, "BACKUP_RETENTION_COUNT", 10) or 10)
+        jobs = BackupJob.query.filter_by(status="done").order_by(BackupJob.created_at.desc()).all()
+        for old in jobs[retention:]:
+            old_path = config.BACKUP_DIR / old.filename
+            if old_path.exists():
+                try:
+                    old_path.unlink()
+                except Exception:
+                    pass
+            db.session.delete(old)
+        size = os.path.getsize(filepath)
+        job.size_bytes = size
+        job.status = "done"
+        job.completed_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return job
+    except Exception as e:
+        job.status = "failed"
+        job.notes = str(e)[:500]
+        db.session.commit()
+        raise
+
+
 @backup_bp.route("/trigger", methods=["POST"])
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)
@@ -69,33 +124,24 @@ def trigger_backup():
     ===
     """
     user_id = int(get_jwt_identity())
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    filename = f"holo_rtls_backup_{ts}.db"
-    filepath = config.BACKUP_DIR / filename
-
-    job = BackupJob(
-        filename=filename,
-        status="running",
-        trigger="manual",
-        created_by_id=user_id,
-    )
-    db.session.add(job)
-    db.session.commit()
-
     try:
-        db_path = config.DATA_DIR / "holo_rtls.db"
-        shutil.copy2(str(db_path), str(filepath))
-        size = os.path.getsize(filepath)
-        job.size_bytes = size
-        job.status = "done"
-        job.completed_at = datetime.now(timezone.utc)
-        db.session.commit()
+        job = _create_backup_file(trigger="manual", user_id=user_id)
         return jsonify({"job": job.to_dict()}), 200
     except Exception as e:
-        job.status = "failed"
-        job.notes = str(e)[:500]
-        db.session.commit()
-        return jsonify({"error": str(e), "job": job.to_dict()}), 500
+        job = BackupJob.query.order_by(BackupJob.id.desc()).first()
+        return jsonify({"error": str(e), "job": job.to_dict() if job else None}), 500
+
+
+@backup_bp.route("/schedule", methods=["GET"])
+@jwt_required()
+@require_permission(Permission.TRIGGER_BACKUP)
+def backup_schedule_info():
+    return jsonify({
+        "enabled": True,
+        "cron": "30 2 * * *",
+        "description": "Daily automated backup at 02:30 UTC",
+        "retention": int(getattr(config, "BACKUP_RETENTION_COUNT", 10) or 10),
+    })
 
 
 @backup_bp.route("/<int:job_id>/download", methods=["GET"])

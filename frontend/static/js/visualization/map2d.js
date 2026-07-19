@@ -572,6 +572,10 @@ function closeNodeForm() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function onMapClick(e) {
+  if (_zoneDrawMode || _mapMode === 'zone_draw') {
+    _placeZoneAt(e.latlng);
+    return;
+  }
   const px = e.containerPoint.x;
   const py = e.containerPoint.y;
   if (_mapMode === 'calibrate') handleCalibrationClick(px, py);
@@ -647,13 +651,27 @@ async function renderNodeMarkers() {
           <div class="node-label">${label}</div>
         </div>`,
       });
-      const marker = L.marker(latlng, { icon: nodeIcon, zIndexOffset: 500 });
+      const marker = L.marker(latlng, { icon: nodeIcon, zIndexOffset: 500, draggable: true });
       marker._isNodeMarker = true;
       marker._nodeId = node.id;
-      marker.bindTooltip('<b>' + label + '</b><br>' + (node.node_type || ''), { direction: 'top', offset: [0, -18], className: 'holo-tooltip' });
+      marker.bindTooltip('<b>' + label + '</b><br>' + (node.node_type || '') + '<br>Drag to reposition', { direction: 'top', offset: [0, -18], className: 'holo-tooltip' });
       marker.on('click', () => {
         if (_isNodePlacementMode) { exitPlacementMode(); return; }
         showNodeDetail(node);
+      });
+      marker.on('dragend', async (e) => {
+        const ll = e.target.getLatLng();
+        const pt = L.CRS.Simple.project(ll);
+        try {
+          const res = await API.patch('/nodes/' + node.id, { pos_x: pt.x, pos_y: pt.y });
+          if (res && res.ok) {
+            if (window.showToast) window.showToast('Anchor moved', 'success');
+            // Refresh coverage rings
+            if (window.layerState && window.layerState.coverage) renderCoverageRings();
+          } else if (window.showToast) window.showToast('Failed to save anchor position', 'error');
+        } catch (err) {
+          if (window.showToast) window.showToast('Network error saving anchor', 'error');
+        }
       });
       marker.addTo(window._map2d);
       _nodeMarkers.push(marker);
@@ -833,3 +851,112 @@ function zoomToPosition(x, y) {
 function toggleZoneLayer(show) { _zoneLayers.forEach(l => show ? l.addTo(window._map2d) : window._map2d.removeLayer(l)); }
 function toggleSectionLayer(show) { _sectionLayers.forEach(l => show ? l.addTo(window._map2d) : window._map2d.removeLayer(l)); }
 function toggleGridLayer(show) { _gridLines.forEach(l => show ? l.addTo(window._map2d) : window._map2d.removeLayer(l)); }
+
+// ── Map-native zone draw / coverage / trajectory ─────────────────────────────
+let _zoneDrawMode = false;
+let _zoneDrawRadius = 5;
+let _coverageLayers = [];
+let _trajectoryLayer = null;
+
+function enterZoneDrawMode() {
+  _zoneDrawMode = true;
+  _mapMode = 'zone_draw';
+  if (window.showToast) window.showToast('Click map to place a zone center', 'info');
+  const btn = document.getElementById('zoneDrawBtn');
+  if (btn) btn.classList.add('active');
+}
+
+function exitZoneDrawMode() {
+  _zoneDrawMode = false;
+  _mapMode = 'normal';
+  const btn = document.getElementById('zoneDrawBtn');
+  if (btn) btn.classList.remove('active');
+}
+
+async function _placeZoneAt(latlng) {
+  const pt = L.CRS.Simple.project(latlng);
+  const name = prompt('Zone name', 'New zone');
+  if (!name) { exitZoneDrawMode(); return; }
+  const type = prompt('Type: RESTRICTED | DANGER | CHECK_IN | SAFE (default RESTRICTED)', 'RESTRICTED') || 'RESTRICTED';
+  const radiusStr = prompt('Radius (meters)', String(_zoneDrawRadius));
+  const radius = parseFloat(radiusStr || _zoneDrawRadius) || 5;
+  try {
+    const res = await API.post('/zones', {
+      name,
+      zone_type: type,
+      pos_x: pt.x,
+      pos_y: pt.y,
+      pos_z: 0,
+      radius,
+    });
+    const data = await API.json(res);
+    if (res && res.ok) {
+      if (window.showToast) window.showToast('Zone created', 'success');
+      renderZones();
+    } else {
+      if (window.showToast) window.showToast((data && data.error) || 'Failed to create zone', 'error');
+    }
+  } catch (e) {
+    if (window.showToast) window.showToast('Network error creating zone', 'error');
+  }
+  exitZoneDrawMode();
+}
+
+function renderCoverageRings() {
+  _coverageLayers.forEach(l => window._map2d.removeLayer(l));
+  _coverageLayers = [];
+  _nodeMarkers.forEach(m => {
+    if (!m.getLatLng) return;
+    const ring = L.circle(m.getLatLng(), {
+      radius: 12,
+      color: '#2dd4bf',
+      fillColor: '#2dd4bf',
+      fillOpacity: 0.04,
+      weight: 1,
+      opacity: 0.35,
+      dashArray: '4,6',
+    }).addTo(window._map2d);
+    ring._isCoverage = true;
+    _coverageLayers.push(ring);
+  });
+}
+
+function toggleCoverageLayer(show) {
+  if (show === undefined) show = !(window.layerState && window.layerState.coverage);
+  if (!window.layerState) window.layerState = {};
+  window.layerState.coverage = !!show;
+  if (show) renderCoverageRings();
+  else {
+    _coverageLayers.forEach(l => window._map2d.removeLayer(l));
+    _coverageLayers = [];
+  }
+}
+
+function showTrajectory(points) {
+  if (_trajectoryLayer) {
+    window._map2d.removeLayer(_trajectoryLayer);
+    _trajectoryLayer = null;
+  }
+  if (!points || points.length < 2 || !window._map2d) return;
+  const latlngs = points.map(p => L.CRS.Simple.unproject(L.point(p.x, p.y)));
+  _trajectoryLayer = L.polyline(latlngs, {
+    color: '#f59e0b',
+    weight: 3,
+    opacity: 0.85,
+  }).addTo(window._map2d);
+  try { window._map2d.fitBounds(_trajectoryLayer.getBounds(), { padding: [40, 40] }); } catch (e) {}
+}
+
+function clearTrajectory() {
+  if (_trajectoryLayer) {
+    window._map2d.removeLayer(_trajectoryLayer);
+    _trajectoryLayer = null;
+  }
+}
+
+window.enterZoneDrawMode = enterZoneDrawMode;
+window.exitZoneDrawMode = exitZoneDrawMode;
+window.toggleCoverageLayer = toggleCoverageLayer;
+window.renderCoverageRings = renderCoverageRings;
+window.showTrajectory = showTrajectory;
+window.clearTrajectory = clearTrajectory;

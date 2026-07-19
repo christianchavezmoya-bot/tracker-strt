@@ -15,6 +15,7 @@ class AlertType(IntEnum):
     ENV_HAZARD       = 6
     NODE_OFFLINE     = 7
     MANUAL           = 8
+    PROXIMITY        = 9
 
 
 class AlertState(IntEnum):

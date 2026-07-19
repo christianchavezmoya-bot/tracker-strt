@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}HOLO-RTLS{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/shell.css">
+  <link rel="stylesheet" href="/static/css/tablet.css">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0B1220">
+  {% block head %}{% endblock %}
+</head>
+<body class="shell-page {% block body_class %}{% endblock %}">
+<header class="topbar shell-topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb">{% block breadcrumb %}{% endblock %}</div>
+  </div>
+  <div class="topbar-right">
+    {% block topbar_actions %}{% endblock %}
+  </div>
+</header>
+<main class="shell-main">
+  {% block content %}{% endblock %}
+</main>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/nav.js" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

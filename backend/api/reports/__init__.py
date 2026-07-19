@@ -570,3 +570,42 @@ def dwell_report():
     if fmt == "csv":
         return make_csv_response(rows or [{"tracker_id": "", "dwell_seconds": 0}], "dwell_report.csv")
     return jsonify({"items": rows, "total": len(rows), "start": start.isoformat(), "end": end.isoformat()})
+
+
+@reports_bp.route("/pdf", methods=["GET"])
+@jwt_required()
+@require_permission(Permission.GENERATE_REPORT)
+def pdf_report():
+    """PDF export of summary|battery|dwell|full reports."""
+    from flask import Response
+    from backend.services.report_delivery import build_report
+    report_type = request.args.get("type", "summary")
+    content, filename, mime = build_report(report_type, "pdf")
+    return Response(
+        content,
+        mimetype=mime,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@reports_bp.route("/trajectory", methods=["GET"])
+@jwt_required()
+@require_permission(Permission.GENERATE_REPORT)
+def trajectory_report():
+    """Return polyline points for a tracker over a time window (spaghetti preview)."""
+    tracker_id = request.args.get("tracker_id", type=int)
+    if not tracker_id:
+        return jsonify({"error": "tracker_id required"}), 400
+    start, end = _date_range(int(request.args.get("days", 1)))
+    if not start:
+        return jsonify({"error": "Invalid date range"}), 400
+    history = TrackingHistory.query.filter(
+        TrackingHistory.tracker_id == tracker_id,
+        TrackingHistory.timestamp >= start,
+        TrackingHistory.timestamp < end,
+    ).order_by(TrackingHistory.timestamp.asc()).limit(5000).all()
+    points = [{
+        "x": h.x, "y": h.y, "z": h.z,
+        "t": h.timestamp.isoformat() if h.timestamp else None,
+    } for h in history]
+    return jsonify({"tracker_id": tracker_id, "points": points, "total": len(points)})

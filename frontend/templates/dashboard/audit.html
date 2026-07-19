@@ -154,7 +154,7 @@ document.getElementById('filterDateFrom').value = weekAgo.toISOString().split('T
 document.getElementById('filterDateTo').value = today.toISOString().split('T')[0];
 
 async function loadUserInfo() {
-  const res = await API.get('/api/auth/me');
+  const res = await API.get('/auth/me');
   const data = await API.json(res);
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
@@ -166,7 +166,7 @@ async function loadLogs() {
   const action = document.getElementById('filterAction').value;
   const from = document.getElementById('filterDateFrom').value;
   const to = document.getElementById('filterDateTo').value;
-  let url = `/api/audit?page=${currentPage}&per_page=${PER_PAGE}`;
+  let url = `/audit?page=${currentPage}&per_page=${PER_PAGE}`;
   if (entity) url += `&entity_type=${encodeURIComponent(entity)}`;
   if (action) url += `&action=${encodeURIComponent(action)}`;
 

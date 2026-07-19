@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadUserInfo() {
-  const res = await API.get('/api/auth/me');
+  const res = await API.get('/auth/me');
   const data = await API.json(res);
   if (!res || !res.ok) return;
   const u = data.user;
@@ -276,7 +276,7 @@ async function doSearch(query) {
     return;
   }
   showState('loading');
-  const res = await API.get(`/api/search?q=${encodeURIComponent(query)}&type=${currentType}`);
+  const res = await API.get(`/search?q=${encodeURIComponent(query)}&type=${currentType}`);
   const data = await API.json(res);
   if (!res || !res.ok) { showState('empty'); return; }
   lastResults = data.results;
