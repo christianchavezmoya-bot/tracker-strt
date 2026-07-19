@@ -1,4 +1,4 @@
-"""Users Management API — Phase 8 stub."""
+"""Users Management API — Phase 7 Admin & User Management."""
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.extensions import db
@@ -7,6 +7,45 @@ from backend.utils.decorators import require_permission, admin_only
 from backend.services.rbac_service import Permission
 
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
+
+
+@users_bp.route("", methods=["POST"])
+@jwt_required()
+@admin_only
+def create_user():
+    """Create a new user account. Admin only."""
+    from backend.services.auth_service import AuthService
+    body = request.get_json() or {}
+    email = body.get("email", "").strip().lower()
+    password = body.get("password", "")
+    username = body.get("username", "").strip()
+    display_name = body.get("display_name", "").strip()
+    role = int(body.get("role", UserRole.OPERATOR))
+
+    if not email or not password:
+        return jsonify({"error": "email and password are required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "Email already registered"}), 409
+    if username and User.query.filter_by(username=username).first():
+        return jsonify({"error": "Username already taken"}), 409
+
+    svc = AuthService()
+    try:
+        user = svc.create_user(
+            email=email,
+            password=password,
+            username=username or None,
+            display_name=display_name or None,
+            role=role,
+        )
+        AuditLog.log(action="user.create", user_id=int(get_jwt_identity()),
+                     entity_type="User", entity_id=user.id,
+                     details=f'{{"email": "{email}", "role": "{UserRole(role).name}"}}')
+        return jsonify({"user": user.to_dict(include_email=True)}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @users_bp.route("", methods=["GET"])

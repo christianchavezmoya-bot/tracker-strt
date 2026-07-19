@@ -2,44 +2,357 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Audit — HOLO-RTLS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audit Log — HOLO-RTLS</title>
   <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/auth.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-<body class="auth-page">
-  <div class="auth-bg">
-    <div class="auth-grid-overlay"></div>
-    <div class="auth-glow auth-glow-1"></div>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb"><i class="fa-solid fa-chevron-right"></i><span>Audit Log</span></div>
   </div>
-  <div class="auth-container" style="max-width:700px">
-    <div class="auth-brand" style="margin-bottom:16px">
-      <div class="auth-logo">◈</div>
-      <h1 class="auth-title" style="font-size:18px">Audit</h1>
-      <p class="auth-subtitle">Implementation in progress — Phase 2+</p>
-    </div>
-    <div class="auth-card" style="text-align:center">
-      <div style="font-size:48px;color:var(--cyan);margin:20px 0">
-        <i class="fa-solid fa-hard-hat"></i>
+  <div class="topbar-right">
+    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
+    <div class="user-menu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
       </div>
-      <p style="color:var(--text-muted);margin-bottom:20px">
-        This page is a placeholder.<br>
-        It will be implemented in <strong>Phase 2–5</strong> of the build plan.
-      </p>
-      <a href="/" class="btn btn-primary">← Back to Command Center</a>
     </div>
-    <p class="auth-footer" style="margin-top:16px">
-      See <strong>BUILD_PLAN.md</strong> for the full roadmap.
-    </p>
   </div>
-  <script src="/static/js/api.js"></script>
-  <script>
-    if (!API.isLoggedIn()) window.location.href = '/login';
-    document.addEventListener('DOMContentLoaded', () => {
-      const user = API.getUser();
-      if (user) document.title = user.display_name + ' — HOLO-RTLS';
-    });
-  </script>
+</header>
+
+<div class="settings-layout">
+  <aside class="settings-sidebar">
+    <div class="settings-nav-label">SYSTEM</div>
+    <nav class="settings-nav">
+      <a href="/" class="settings-nav-item"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+      <a href="/hardware" class="settings-nav-item"><i class="fa-solid fa-microchip"></i> Hardware</a>
+      <a href="/nodes" class="settings-nav-item"><i class="fa-solid fa-anchor"></i> Nodes</a>
+      <a href="/alerts" class="settings-nav-item"><i class="fa-solid fa-bell"></i> Alerts</a>
+      <a href="/settings" class="settings-nav-item"><i class="fa-solid fa-gear"></i> Settings</a>
+    </nav>
+    <div class="settings-nav-label" style="margin-top:24px">ADMIN</div>
+    <nav class="settings-nav">
+      <a href="/users" class="settings-nav-item"><i class="fa-solid fa-users"></i> Users</a>
+      <a href="/audit" class="settings-nav-item active"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
+      <a href="/backup" class="settings-nav-item"><i class="fa-solid fa-database"></i> Backup</a>
+    </nav>
+  </aside>
+
+  <main class="settings-main">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title"><i class="fa-solid fa-clipboard-list" style="color:var(--cyan)"></i> Audit Log</h1>
+        <p class="page-subtitle">Immutable record of all system actions and configuration changes</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="exportCSV()">
+          <i class="fa-solid fa-download"></i> Export CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="audit-filters">
+      <div class="filter-group-wrap">
+        <label class="filter-label-sm">Entity Type</label>
+        <select class="filter-select" id="filterEntity" onchange="loadLogs()">
+          <option value="">All</option>
+          <option value="User">User</option>
+          <option value="Tracker">Tracker</option>
+          <option value="Alert">Alert</option>
+          <option value="Zone">Zone</option>
+          <option value="MapSection">Section</option>
+          <option value="WifiNode">Node</option>
+          <option value="HardwareConfig">Hardware</option>
+          <option value="BusinessSetting">Settings</option>
+        </select>
+      </div>
+      <div class="filter-group-wrap">
+        <label class="filter-label-sm">Action</label>
+        <select class="filter-select" id="filterAction" onchange="loadLogs()">
+          <option value="">All</option>
+          <option value="user.login">user.login</option>
+          <option value="user.logout">user.logout</option>
+          <option value="user.create">user.create</option>
+          <option value="user.update">user.update</option>
+          <option value="user.deactivate">user.deactivate</option>
+          <option value="tracker.create">tracker.create</option>
+          <option value="alert.trigger">alert.trigger</option>
+          <option value="alert.acknowledge">alert.acknowledge</option>
+          <option value="settings.update">settings.update</option>
+        </select>
+      </div>
+      <div class="filter-group-wrap">
+        <label class="filter-label-sm">Date From</label>
+        <input type="date" class="filter-input" id="filterDateFrom" onchange="loadLogs()">
+      </div>
+      <div class="filter-group-wrap">
+        <label class="filter-label-sm">Date To</label>
+        <input type="date" class="filter-input" id="filterDateTo" onchange="loadLogs()">
+      </div>
+      <button class="btn btn-secondary" onclick="clearFilters()" style="font-size:12px;padding:7px 12px;align-self:flex-end">
+        <i class="fa-solid fa-xmark"></i> Clear
+      </button>
+    </div>
+
+    <!-- Log Table -->
+    <div class="hw-config-table-wrap">
+      <table class="hw-config-table audit-table">
+        <thead>
+          <tr>
+            <th style="width:160px">Timestamp</th>
+            <th style="width:130px">User</th>
+            <th style="width:140px">Action</th>
+            <th style="width:110px">Entity</th>
+            <th>Details</th>
+            <th style="width:100px">IP Address</th>
+          </tr>
+        </thead>
+        <tbody id="auditTable">
+          <tr><td colspan="6" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="paginationBar" style="display:flex;justify-content:center;gap:6px;padding:16px 0;align-items:center"></div>
+    <div style="text-align:center;font-size:11px;color:var(--text-muted);padding-bottom:20px" id="totalLabel"></div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script>
+'use strict';
+let logs = [];
+let currentPage = 1;
+const PER_PAGE = 50;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await loadUserInfo();
+  await loadLogs();
+});
+
+// Set default date range (last 7 days)
+const today = new Date();
+const weekAgo = new Date(today);
+weekAgo.setDate(weekAgo.getDate() - 7);
+document.getElementById('filterDateFrom').value = weekAgo.toISOString().split('T')[0];
+document.getElementById('filterDateTo').value = today.toISOString().split('T')[0];
+
+async function loadUserInfo() {
+  const res = await API.get('/api/auth/me');
+  const data = await API.json(res);
+  if (!res || !res.ok) { window.location.href = '/login'; return; }
+  const u = data.user;
+  document.getElementById('userAvatar').textContent = (u.display_name || u.username || u.email || 'A').charAt(0).toUpperCase();
+}
+
+async function loadLogs() {
+  const entity = document.getElementById('filterEntity').value;
+  const action = document.getElementById('filterAction').value;
+  const from = document.getElementById('filterDateFrom').value;
+  const to = document.getElementById('filterDateTo').value;
+  let url = `/api/audit?page=${currentPage}&per_page=${PER_PAGE}`;
+  if (entity) url += `&entity_type=${encodeURIComponent(entity)}`;
+  if (action) url += `&action=${encodeURIComponent(action)}`;
+
+  const res = await API.get(url);
+  const data = await API.json(res);
+  if (res && res.ok && data.items) {
+    logs = data.items;
+    window._totalPages = data.pages || 1;
+    window._total = data.total || 0;
+
+    // Client-side date filter (if needed beyond API capability)
+    if (from) logs = logs.filter(l => new Date(l.timestamp) >= new Date(from + 'T00:00:00'));
+    if (to) logs = logs.filter(l => new Date(l.timestamp) <= new Date(to + 'T23:59:59'));
+  }
+  renderLogs();
+  renderPagination();
+  document.getElementById('totalLabel').textContent = `${window._total || 0} total entries`;
+}
+
+function renderLogs() {
+  const tbody = document.getElementById('auditTable');
+  if (!logs.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No audit entries found for the selected filters.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = logs.map(l => {
+    const actionClass = actionClassFor(l.action);
+    const details = l.details ? formatDetails(l.details) : '—';
+    const entityBadge = l.entity_type ? `<span class="entity-badge">${l.entity_type}</span>` : '—';
+    const ip = l.ip_address || '—';
+    return `<tr>
+      <td class="mono ts-cell">${fmtTs(l.timestamp)}</td>
+      <td><div class="user-cell-sm"><span class="user-dot ${l.user_id ? 'active' : 'sys'}"></span>${escapeHtml(l.user_name || 'System')}</div></td>
+      <td><span class="action-badge ${actionClass}">${l.action || '—'}</span></td>
+      <td>${entityBadge}</td>
+      <td class="details-cell">${details}</td>
+      <td class="mono" style="font-size:11px;color:var(--text-muted)">${ip}</td>
+    </tr>`;
+  }).join('');
+}
+
+function actionClassFor(action) {
+  if (!action) return '';
+  if (action.startsWith('user.login') || action.startsWith('user.logout')) return 'act-auth';
+  if (action.includes('create')) return 'act-create';
+  if (action.includes('delete') || action.includes('deactivate')) return 'act-delete';
+  if (action.includes('update') || action.includes('acknowledge')) return 'act-update';
+  return '';
+}
+
+function formatDetails(details) {
+  try {
+    const obj = typeof details === 'string' ? JSON.parse(details) : details;
+    const entries = Object.entries(obj).filter(([k]) => !['id','user_id','timestamp'].includes(k));
+    return entries.map(([k, v]) => `<span class="detail-pair"><span class="detail-key">${k}</span><span class="detail-val">${escapeHtml(String(v))}</span></span>`).join(' ');
+  } catch {
+    return escapeHtml(String(details));
+  }
+}
+
+function fmtTs(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return `<span class="ts-date">${d.toLocaleDateString()}</span><span class="ts-time">${d.toLocaleTimeString()}</span>`;
+}
+
+function renderPagination() {
+  const bar = document.getElementById('paginationBar');
+  const total = window._totalPages || 1;
+  if (total <= 1) { bar.innerHTML = ''; return; }
+  let html = '';
+  if (currentPage > 1) html += `<button class="pg-btn" onclick="goPage(${currentPage - 1})"><i class="fa-solid fa-chevron-left"></i></button>`;
+  for (let i = 1; i <= Math.min(total, 10); i++) {
+    html += `<button class="pg-btn ${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+  }
+  if (currentPage < total) html += `<button class="pg-btn" onclick="goPage(${currentPage + 1})"><i class="fa-solid fa-chevron-right"></i></button>`;
+  bar.innerHTML = html;
+}
+
+function goPage(p) { currentPage = p; loadLogs(); window.scrollTo(0, 0); }
+
+function clearFilters() {
+  document.getElementById('filterEntity').value = '';
+  document.getElementById('filterAction').value = '';
+  document.getElementById('filterDateFrom').value = weekAgo.toISOString().split('T')[0];
+  document.getElementById('filterDateTo').value = today.toISOString().split('T')[0];
+  currentPage = 1;
+  loadLogs();
+}
+
+function exportCSV() {
+  const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID', 'Details', 'IP Address'];
+  const rows = logs.map(l => [
+    l.timestamp || '',
+    l.user_name || 'System',
+    l.action || '',
+    l.entity_type || '',
+    l.entity_id || '',
+    (l.details || '').replace(/"/g, '""'),
+    l.ip_address || '',
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `audit-log-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Audit log exported');
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;
+    background:rgba(8,15,30,0.95);border:1px solid var(--cyan);color:var(--cyan);
+    border-radius:8px;font-size:13px;z-index:9999;animation:slideUp 0.2s`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(() => t.remove(), 300); }, 3000);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');
+});
+function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
+function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+</script>
+
+<style>
+.settings-layout { display:flex; min-height:100vh; background:var(--bg-primary); }
+.settings-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
+.settings-nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+.settings-nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; }
+.settings-nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+.settings-nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
+.settings-main { flex:1; padding:28px 32px; overflow-y:auto; }
+.page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+.page-title { font-size:22px; font-weight:700; color:var(--text-primary); margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+.page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+.audit-filters { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom:16px; padding:16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); }
+.filter-group-wrap { display:flex; flex-direction:column; gap:4px; }
+.filter-label-sm { font-size:10px; font-weight:700; color:var(--text-muted); letter-spacing:0.08em; text-transform:uppercase; }
+.filter-select, .filter-input { background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:7px 10px; color:var(--text-primary); font-size:12px; font-family:inherit; outline:none; transition:border-color 0.15s; }
+.filter-select:focus, .filter-input:focus { border-color:var(--cyan); }
+.filter-input[type="date"] { color-scheme: dark; }
+.hw-config-table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.hw-config-table { width:100%; border-collapse:collapse; }
+.hw-config-table th { text-align:left; font-size:10px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); padding:12px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); white-space:nowrap; }
+.hw-config-table td { padding:10px 14px; font-size:12px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:top; }
+.hw-config-table tr:hover td { background:rgba(0,229,255,0.03); }
+.table-loading, .table-empty { text-align:center; color:var(--text-muted); font-size:13px; padding:30px; }
+.table-loading i { color:var(--cyan); }
+.mono { font-family:var(--font-mono); }
+.ts-cell { white-space:nowrap; }
+.ts-date { display:block; font-size:11px; color:var(--text-secondary); }
+.ts-time { display:block; font-size:11px; color:var(--cyan); }
+.user-cell-sm { display:flex; align-items:center; gap:6px; }
+.user-dot { width:6px; height:6px; border-radius:50%; }
+.user-dot.active { background:var(--green); }
+.user-dot.sys { background:var(--text-muted); }
+.action-badge { font-size:10px; font-weight:600; padding:2px 7px; border-radius:8px; font-family:var(--font-mono); display:inline-block; }
+.act-auth { background:rgba(0,229,255,0.12); color:var(--cyan); }
+.act-create { background:rgba(105,255,71,0.12); color:var(--green); }
+.act-delete { background:rgba(255,68,68,0.12); color:var(--red); }
+.act-update { background:rgba(255,179,0,0.12); color:var(--yellow); }
+.entity-badge { font-size:10px; font-weight:600; padding:2px 7px; border-radius:8px; background:rgba(255,255,255,0.06); color:var(--text-secondary); font-family:var(--font-mono); }
+.details-cell { max-width:400px; }
+.detail-pair { display:inline-flex; align-items:center; gap:4px; margin-right:6px; }
+.detail-key { font-size:10px; color:var(--text-muted); font-family:var(--font-mono); }
+.detail-val { font-size:11px; color:var(--text-primary); font-family:var(--font-mono); }
+.breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
+.breadcrumb i { font-size:10px; }
+.breadcrumb span { color:var(--text-secondary); }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; text-decoration:none; }
+.btn-primary { background:var(--cyan); color:#000; }
+.btn-primary:hover { background:#33eeff; }
+.btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+.btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
+.pg-btn { background:rgba(255,255,255,0.04); border:1px solid var(--border); color:var(--text-secondary); font-size:12px; padding:5px 10px; border-radius:6px; cursor:pointer; font-family:var(--font-mono); transition:all 0.1s; }
+.pg-btn:hover { border-color:var(--cyan); color:var(--cyan); }
+.pg-btn.active { background:rgba(0,229,255,0.1); border-color:var(--cyan); color:var(--cyan); font-weight:600; }
+@keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+</style>
 </body>
 </html>

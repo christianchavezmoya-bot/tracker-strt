@@ -2,44 +2,647 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Zones — HOLO-RTLS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zones & Sections — HOLO-RTLS</title>
   <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/auth.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-<body class="auth-page">
-  <div class="auth-bg">
-    <div class="auth-grid-overlay"></div>
-    <div class="auth-glow auth-glow-1"></div>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb"><i class="fa-solid fa-chevron-right"></i><span>Zones & Sections</span></div>
   </div>
-  <div class="auth-container" style="max-width:700px">
-    <div class="auth-brand" style="margin-bottom:16px">
-      <div class="auth-logo">◈</div>
-      <h1 class="auth-title" style="font-size:18px">Zones</h1>
-      <p class="auth-subtitle">Implementation in progress — Phase 2+</p>
-    </div>
-    <div class="auth-card" style="text-align:center">
-      <div style="font-size:48px;color:var(--cyan);margin:20px 0">
-        <i class="fa-solid fa-hard-hat"></i>
+  <div class="topbar-right">
+    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
+    <div class="user-menu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
       </div>
-      <p style="color:var(--text-muted);margin-bottom:20px">
-        This page is a placeholder.<br>
-        It will be implemented in <strong>Phase 2–5</strong> of the build plan.
-      </p>
-      <a href="/" class="btn btn-primary">← Back to Command Center</a>
     </div>
-    <p class="auth-footer" style="margin-top:16px">
-      See <strong>BUILD_PLAN.md</strong> for the full roadmap.
-    </p>
   </div>
-  <script src="/static/js/api.js"></script>
-  <script>
-    if (!API.isLoggedIn()) window.location.href = '/login';
-    document.addEventListener('DOMContentLoaded', () => {
-      const user = API.getUser();
-      if (user) document.title = user.display_name + ' — HOLO-RTLS';
-    });
-  </script>
+</header>
+
+<div class="settings-layout">
+  <aside class="settings-sidebar">
+    <div class="settings-nav-label">SYSTEM</div>
+    <nav class="settings-nav">
+      <a href="/" class="settings-nav-item"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+      <a href="/hardware" class="settings-nav-item"><i class="fa-solid fa-microchip"></i> Hardware</a>
+      <a href="/nodes" class="settings-nav-item"><i class="fa-solid fa-anchor"></i> Nodes</a>
+      <a href="/alerts" class="settings-nav-item"><i class="fa-solid fa-bell"></i> Alerts</a>
+      <a href="/settings" class="settings-nav-item"><i class="fa-solid fa-gear"></i> Settings</a>
+    </nav>
+    <div class="settings-nav-label" style="margin-top:24px">ADMIN</div>
+    <nav class="settings-nav">
+      <a href="/users" class="settings-nav-item"><i class="fa-solid fa-users"></i> Users</a>
+      <a href="/audit" class="settings-nav-item"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
+    </nav>
+  </aside>
+
+  <main class="settings-main">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">
+          <i class="fa-solid fa-shapes" style="color:var(--cyan)"></i>
+          Zones & Sections
+        </h1>
+        <p class="page-subtitle">
+          Define restricted areas and map sections for the positioning engine
+        </p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="switchTab('zones')">
+          <i class="fa-solid fa-circle"></i> Add Zone
+        </button>
+        <button class="btn btn-primary" onclick="switchTab('sections')">
+          <i class="fa-solid fa-draw-polygon"></i> Add Section
+        </button>
+      </div>
+    </div>
+
+    <!-- Info Banner -->
+    <div class="info-banner">
+      <i class="fa-solid fa-info-circle"></i>
+      <div>
+        <strong>Sections</strong> are polygon areas on the map (e.g., longwall panels, portals).
+        <strong>Zones</strong> are circular areas used for alerting (restricted zones, check-in points).
+        Zone violations trigger alerts in real-time.
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="hw-summary-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="hw-summary-card hw-total">
+        <div class="hw-summary-icon"><i class="fa-solid fa-draw-polygon"></i></div>
+        <div class="hw-summary-num" id="statSections">—</div>
+        <div class="hw-summary-label">Sections</div>
+      </div>
+      <div class="hw-summary-card hw-connected">
+        <div class="hw-summary-icon"><i class="fa-solid fa-ban"></i></div>
+        <div class="hw-summary-num" id="statRestricted">—</div>
+        <div class="hw-summary-label">Restricted Zones</div>
+      </div>
+      <div class="hw-summary-card hw-disconnected">
+        <div class="hw-summary-icon"><i class="fa-solid fa-circle-check"></i></div>
+        <div class="hw-summary-num" id="statCheckIn">—</div>
+        <div class="hw-summary-label">Check-In Zones</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="hw-tabs">
+      <button class="hw-tab active" data-tab="sections" onclick="switchTab('sections')">
+        <i class="fa-solid fa-draw-polygon"></i> Sections (Polygon Areas)
+      </button>
+      <button class="hw-tab" data-tab="zones" onclick="switchTab('zones')">
+        <i class="fa-solid fa-circle-notch"></i> Zones (Circular Alerts)
+      </button>
+    </div>
+
+    <!-- ── Sections Tab ─────────────────────────────────────────── -->
+    <div id="tab-sections">
+      <div class="hw-config-table-wrap">
+        <table class="hw-config-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Color</th>
+              <th>Z-Index</th>
+              <th>Visible</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="sectionsTable">
+            <tr><td colspan="6" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Zones Tab ────────────────────────────────────────────── -->
+    <div id="tab-zones" style="display:none">
+      <div class="hw-config-table-wrap">
+        <table class="hw-config-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Position (X, Y, Z)</th>
+              <th>Radius</th>
+              <th>Section</th>
+              <th>Visible</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="zonesTable">
+            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── Section Modal ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="sectionModal" style="display:none" onclick="if(event.target===this)closeSectionModal()">
+  <div class="hw-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="sectionModalTitle">Add Section</h3>
+      <button class="modal-close" onclick="closeSectionModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="padding:20px">
+      <div class="form-group">
+        <label class="form-label">Name <span class="form-required">*</span></label>
+        <input class="form-input" id="secName" placeholder="e.g. Longwall Panel A">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Polygon Coordinates</label>
+        <textarea class="form-input mono" id="secPolygon" rows="4" placeholder='[[0, 0], [100, 0], [100, 50], [0, 50]]'></textarea>
+        <span class="form-hint">JSON array of [x, y] vertex coordinates in real-world meters</span>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Color</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="secColor" value="#00e5ff" style="width:40px;height:32px;border:none;cursor:pointer;border-radius:6px">
+            <input class="form-input mono" id="secColorHex" value="#00e5ff" style="width:100px" oninput="document.getElementById('secColor').value=this.value">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Z-Index</label>
+          <input class="form-input" type="number" id="secZIndex" value="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="secRestricted">
+          <span>Restricted — entry triggers an alert</span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="secVisible" checked>
+          <span>Visible on map</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeSectionModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSection()">
+        <i class="fa-solid fa-check"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Zone Modal ─────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="zoneModal" style="display:none" onclick="if(event.target===this)closeZoneModal()">
+  <div class="hw-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="zoneModalTitle">Add Zone</h3>
+      <button class="modal-close" onclick="closeZoneModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="padding:20px">
+      <div class="form-group">
+        <label class="form-label">Name <span class="form-required">*</span></label>
+        <input class="form-input" id="zoneName" placeholder="e.g. Restricted Area Alpha">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Zone Type</label>
+        <select class="form-input" id="zoneType">
+          <option value="1">Normal — tracking zone</option>
+          <option value="2">Restricted — entry triggers alert</option>
+          <option value="3">Check-In — worker must check in here</option>
+          <option value="4">Check-Out — worker must check out here</option>
+          <option value="5">Danger — environmental hazard</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Position X (m)</label>
+          <input class="form-input" type="number" step="0.1" id="zoneX" value="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Position Y (m)</label>
+          <input class="form-input" type="number" step="0.1" id="zoneY" value="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Position Z (m)</label>
+          <input class="form-input" type="number" step="0.1" id="zoneZ" value="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Radius (meters)</label>
+        <input class="form-input" type="number" step="0.1" id="zoneRadius" value="5" min="0.1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Section (optional)</label>
+        <select class="form-input" id="zoneSection">
+          <option value="">— None —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="zoneVisible" checked>
+          <span>Visible on map</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeZoneModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveZone()">
+        <i class="fa-solid fa-check"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script>
+'use strict';
+let sections = [];
+let zones = [];
+let editingSectionId = null;
+let editingZoneId = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await loadUserInfo();
+  await Promise.all([loadSections(), loadZones()]);
+  renderSections();
+  renderZones();
+  renderSummary();
+  populateSectionSelect();
+});
+
+async function loadUserInfo() {
+  const res = await API.get('/api/auth/me');
+  const data = await API.json(res);
+  if (!res || !res.ok) { window.location.href = '/login'; return; }
+  const u = data.user;
+  document.getElementById('userAvatar').textContent = (u.display_name || u.username || u.email || 'A').charAt(0).toUpperCase();
+}
+
+async function loadSections() {
+  const res = await API.get('/api/zones/sections');
+  const data = await API.json(res);
+  if (res && res.ok) sections = data.items || [];
+}
+
+async function loadZones() {
+  const res = await API.get('/api/zones');
+  const data = await API.json(res);
+  if (res && res.ok) zones = data.items || [];
+}
+
+function renderSummary() {
+  document.getElementById('statSections').textContent = sections.length;
+  document.getElementById('statRestricted').textContent =
+    zones.filter(z => z.zone_type === 'RESTRICTED').length;
+  document.getElementById('statCheckIn').textContent =
+    zones.filter(z => z.zone_type === 'CHECK_IN' || z.zone_type === 'CHECK_OUT').length;
+}
+
+function populateSectionSelect() {
+  const sel = document.getElementById('zoneSection');
+  sel.innerHTML = '<option value="">— None —</option>' +
+    sections.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+// ── Tab navigation ─────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.hw-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.hw-tab[data-tab="${tab}"]`)?.classList.add('active');
+  document.getElementById('tab-sections').style.display = tab === 'sections' ? 'block' : 'none';
+  document.getElementById('tab-zones').style.display = tab === 'zones' ? 'block' : 'none';
+}
+
+// ── Sections ─────────────────────────────────────────────────────────
+function renderSections() {
+  const tbody = document.getElementById('sectionsTable');
+  if (!sections.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No sections. <a href="#" onclick="openSectionModal();return false">Add one →</a></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = sections.map(s => {
+    const poly = s.polygon;
+    const pts = Array.isArray(poly) ? poly.length : 0;
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:12px;height:12px;border-radius:2px;background:${s.color_hex || '#00e5ff'};flex-shrink:0"></span>
+          <span style="font-weight:600">${s.name}</span>
+        </div>
+      </td>
+      <td>${s.is_restricted ? '<span class="zone-type-badge restricted">Restricted</span>' : '<span class="zone-type-badge normal">Normal</span>'}</td>
+      <td><span class="mono" style="color:${s.color_hex}">${s.color_hex}</span></td>
+      <td class="mono">${s.z_index}</td>
+      <td>${s.is_visible ? '<i class="fa-solid fa-eye" style="color:var(--green)"></i>' : '<i class="fa-solid fa-eye-slash" style="color:var(--text-muted)"></i>'}</td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn" onclick="editSection(${s.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="action-btn danger" onclick="deleteSection(${s.id}, '${escapeHtml(s.name)}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openSectionModal() {
+  editingSectionId = null;
+  document.getElementById('sectionModalTitle').textContent = 'Add Section';
+  document.getElementById('secName').value = '';
+  document.getElementById('secPolygon').value = '[[0, 0], [100, 0], [100, 50], [0, 50]]';
+  document.getElementById('secColor').value = '#00e5ff';
+  document.getElementById('secColorHex').value = '#00e5ff';
+  document.getElementById('secZIndex').value = '0';
+  document.getElementById('secRestricted').checked = false;
+  document.getElementById('secVisible').checked = true;
+  document.getElementById('sectionModal').style.display = 'flex';
+}
+
+function closeSectionModal() {
+  document.getElementById('sectionModal').style.display = 'none';
+  editingSectionId = null;
+}
+
+function editSection(id) {
+  const s = sections.find(x => x.id === id);
+  if (!s) return;
+  editingSectionId = id;
+  document.getElementById('sectionModalTitle').textContent = `Edit: ${s.name}`;
+  document.getElementById('secName').value = s.name;
+  document.getElementById('secPolygon').value = JSON.stringify(s.polygon || []);
+  document.getElementById('secColor').value = s.color_hex || '#00e5ff';
+  document.getElementById('secColorHex').value = s.color_hex || '#00e5ff';
+  document.getElementById('secZIndex').value = s.z_index || 0;
+  document.getElementById('secRestricted').checked = s.is_restricted || false;
+  document.getElementById('secVisible').checked = s.is_visible !== false;
+  document.getElementById('sectionModal').style.display = 'flex';
+}
+
+async function saveSection() {
+  const name = document.getElementById('secName').value.trim();
+  if (!name) { alert('Name is required'); return; }
+  let polygon;
+  try {
+    polygon = JSON.parse(document.getElementById('secPolygon').value || '[]');
+  } catch {
+    alert('Invalid polygon JSON. Use format: [[x1,y1], [x2,y2], ...]');
+    return;
+  }
+  const body = {
+    name,
+    polygon,
+    color_hex: document.getElementById('secColor').value,
+    z_index: parseInt(document.getElementById('secZIndex').value) || 0,
+    is_restricted: document.getElementById('secRestricted').checked,
+    is_visible: document.getElementById('secVisible').checked,
+  };
+  let res;
+  if (editingSectionId) {
+    res = await API.patch(`/api/zones/sections/${editingSectionId}`, body);
+  } else {
+    res = await API.post('/api/zones/sections', body);
+  }
+  if (res && res.ok) {
+    await loadSections();
+    renderSections();
+    renderSummary();
+    closeSectionModal();
+    showToast(editingSectionId ? 'Section updated' : 'Section created');
+  } else {
+    const d = await API.json(res);
+    alert('Error: ' + (d.error || res.statusText));
+  }
+}
+
+async function deleteSection(id, name) {
+  if (!confirm(`Delete section "${name}"?`)) return;
+  const res = await API.del(`/api/zones/sections/${id}`);
+  if (res && res.ok) {
+    await loadSections();
+    renderSections();
+    renderSummary();
+    showToast('Section deleted');
+  }
+}
+
+// ── Zones ─────────────────────────────────────────────────────────────
+function renderZones() {
+  const tbody = document.getElementById('zonesTable');
+  if (!zones.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No zones. <a href="#" onclick="openZoneModal();return false">Add one →</a></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = zones.map(z => {
+    const pos = z.position || { x: z.pos_x || 0, y: z.pos_y || 0, z: z.pos_z || 0 };
+    const typeClass = { RESTRICTED: 'restricted', CHECK_IN: 'checkin', CHECK_OUT: 'checkout', DANGER: 'danger', NORMAL: 'normal' }[z.zone_type] || 'normal';
+    return `<tr>
+      <td><span style="font-weight:600">${z.name}</span></td>
+      <td><span class="zone-type-badge ${typeClass}">${z.zone_type}</span></td>
+      <td class="mono" style="font-size:11px">${fmt(pos.x)}<span style="color:var(--text-muted)">, </span>${fmt(pos.y)}<span style="color:var(--text-muted)">, </span>${fmt(pos.z)}</td>
+      <td class="mono">${z.radius}m</td>
+      <td>${z.section_id ? (sections.find(s => s.id === z.section_id)?.name || `Section ${z.section_id}`) : '—'}</td>
+      <td>${z.is_visible ? '<i class="fa-solid fa-eye" style="color:var(--green)"></i>' : '<i class="fa-solid fa-eye-slash" style="color:var(--text-muted)"></i>'}</td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn" onclick="editZone(${z.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="action-btn danger" onclick="deleteZone(${z.id}, '${escapeHtml(z.name)}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function fmt(v) { return (v !== undefined ? Number(v).toFixed(1) : '0.0'); }
+
+function openZoneModal() {
+  editingZoneId = null;
+  document.getElementById('zoneModalTitle').textContent = 'Add Zone';
+  document.getElementById('zoneName').value = '';
+  document.getElementById('zoneX').value = '0';
+  document.getElementById('zoneY').value = '0';
+  document.getElementById('zoneZ').value = '0';
+  document.getElementById('zoneRadius').value = '5';
+  document.getElementById('zoneType').value = '2'; // Restricted default
+  document.getElementById('zoneSection').value = '';
+  document.getElementById('zoneVisible').checked = true;
+  document.getElementById('zoneModal').style.display = 'flex';
+}
+
+function closeZoneModal() {
+  document.getElementById('zoneModal').style.display = 'none';
+  editingZoneId = null;
+}
+
+function editZone(id) {
+  const z = zones.find(x => x.id === id);
+  if (!z) return;
+  editingZoneId = id;
+  document.getElementById('zoneModalTitle').textContent = `Edit: ${z.name}`;
+  document.getElementById('zoneName').value = z.name;
+  const pos = z.position || { x: z.pos_x || 0, y: z.pos_y || 0, z: z.pos_z || 0 };
+  document.getElementById('zoneX').value = pos.x;
+  document.getElementById('zoneY').value = pos.y;
+  document.getElementById('zoneZ').value = pos.z;
+  document.getElementById('zoneRadius').value = z.radius || 5;
+  const typeMap = { NORMAL: '1', RESTRICTED: '2', CHECK_IN: '3', CHECK_OUT: '4', DANGER: '5' };
+  document.getElementById('zoneType').value = typeMap[z.zone_type] || '1';
+  document.getElementById('zoneSection').value = z.section_id || '';
+  document.getElementById('zoneVisible').checked = z.is_visible !== false;
+  document.getElementById('zoneModal').style.display = 'flex';
+}
+
+async function saveZone() {
+  const name = document.getElementById('zoneName').value.trim();
+  if (!name) { alert('Name is required'); return; }
+  const typeMap = { '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+  const body = {
+    name,
+    zone_type: typeMap[document.getElementById('zoneType').value] || 1,
+    pos_x: parseFloat(document.getElementById('zoneX').value) || 0,
+    pos_y: parseFloat(document.getElementById('zoneY').value) || 0,
+    pos_z: parseFloat(document.getElementById('zoneZ').value) || 0,
+    radius: parseFloat(document.getElementById('zoneRadius').value) || 5,
+    section_id: document.getElementById('zoneSection').value ? parseInt(document.getElementById('zoneSection').value) : null,
+    is_visible: document.getElementById('zoneVisible').checked,
+  };
+  let res;
+  if (editingZoneId) {
+    res = await API.patch(`/api/zones/${editingZoneId}`, body);
+  } else {
+    res = await API.post('/api/zones', body);
+  }
+  if (res && res.ok) {
+    await loadZones();
+    renderZones();
+    renderSummary();
+    closeZoneModal();
+    showToast(editingZoneId ? 'Zone updated' : 'Zone created');
+  } else {
+    const d = await API.json(res);
+    alert('Error: ' + (d.error || res.statusText));
+  }
+}
+
+async function deleteZone(id, name) {
+  if (!confirm(`Delete zone "${name}"?`)) return;
+  const res = await API.del(`/api/zones/${id}`);
+  if (res && res.ok) {
+    await loadZones();
+    renderZones();
+    renderSummary();
+    showToast('Zone deleted');
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;
+    background:rgba(8,15,30,0.95);border:1px solid var(--cyan);color:var(--cyan);
+    border-radius:8px;font-size:13px;z-index:9999;animation:slideUp 0.2s`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(() => t.remove(), 300); }, 3000);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');
+});
+function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
+function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+</script>
+
+<style>
+.settings-layout { display:flex; min-height:100vh; background:var(--bg-primary); }
+.settings-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
+.settings-nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+.settings-nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; }
+.settings-nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+.settings-nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
+.settings-main { flex:1; padding:28px 32px; overflow-y:auto; }
+.page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+.page-title { font-size:22px; font-weight:700; color:var(--text-primary); margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+.page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+.hw-summary-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
+.hw-summary-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:18px; text-align:center; }
+.hw-summary-num { font-size:28px; font-weight:700; font-family:var(--font-mono); }
+.hw-summary-label { font-size:11px; color:var(--text-muted); margin-top:4px; letter-spacing:0.05em; }
+.hw-summary-icon { font-size:22px; margin-bottom:8px; }
+.hw-total .hw-summary-icon { color:var(--cyan); }
+.hw-connected .hw-summary-icon { color:var(--red); }
+.hw-disconnected .hw-summary-icon { color:var(--green); }
+.info-banner { background:rgba(0,229,255,0.05); border:1px solid rgba(0,229,255,0.2); border-radius:var(--radius); padding:14px 16px; font-size:13px; color:var(--text-secondary); margin-bottom:20px; display:flex; gap:10px; align-items:flex-start; }
+.info-banner i { color:var(--cyan); flex-shrink:0; margin-top:2px; }
+.hw-tabs { display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:0; }
+.hw-tab { background:none; border:none; color:var(--text-secondary); font-size:13px; font-weight:500; padding:10px 16px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; display:flex; align-items:center; gap:7px; }
+.hw-tab:hover { color:var(--text-primary); }
+.hw-tab.active { color:var(--cyan); border-bottom-color:var(--cyan); }
+.hw-config-table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.hw-config-table { width:100%; border-collapse:collapse; }
+.hw-config-table th { text-align:left; font-size:10px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); padding:12px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+.hw-config-table td { padding:12px 14px; font-size:13px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+.hw-config-table tr:last-child td { border-bottom:none; }
+.hw-config-table tr:hover td { background:rgba(0,229,255,0.03); }
+.table-loading, .table-empty { text-align:center; color:var(--text-muted); font-size:13px; padding:30px; }
+.table-loading i { color:var(--cyan); }
+.table-empty a { color:var(--cyan); }
+.mono { font-family:var(--font-mono); font-size:12px; }
+.zone-type-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:10px; font-family:var(--font-mono); }
+.zone-type-badge.restricted { background:rgba(255,68,68,0.15); color:var(--red); }
+.zone-type-badge.danger { background:rgba(255,107,53,0.15); color:#ff6b35; }
+.zone-type-badge.checkin { background:rgba(105,255,71,0.15); color:var(--green); }
+.zone-type-badge.checkout { background:rgba(0,229,255,0.15); color:var(--cyan); }
+.zone-type-badge.normal { background:rgba(255,255,255,0.06); color:var(--text-secondary); }
+.action-btns { display:flex; gap:4px; }
+.action-btn { width:28px; height:28px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:6px; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.1s; }
+.action-btn:hover { background:rgba(0,229,255,0.1); color:var(--cyan); border-color:var(--cyan); }
+.action-btn.danger:hover { background:rgba(255,68,68,0.1); color:var(--red); border-color:var(--red); }
+.breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
+.breadcrumb i { font-size:10px; }
+.breadcrumb span { color:var(--text-secondary); }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; text-decoration:none; }
+.btn-primary { background:var(--cyan); color:#000; }
+.btn-primary:hover { background:#33eeff; }
+.btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+.btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
+.hw-modal { background:var(--bg-card); border:1px solid var(--border-bright); border-radius:var(--radius); width:520px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.7); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--border); }
+.modal-header h3 { margin:0; font-size:16px; }
+.modal-close { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; }
+.modal-close:hover { color:var(--text-primary); }
+.modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:16px 20px 0; border-top:1px solid var(--border); margin-top:16px; }
+.form-group { margin-bottom:14px; }
+.form-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; }
+.form-label { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:5px; }
+.form-required { color:var(--red); }
+.form-input { width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text-primary); font-size:13px; font-family:inherit; outline:none; box-sizing:border-box; transition:border-color 0.15s; }
+.form-input:focus { border-color:var(--cyan); }
+.form-input.mono { font-family:var(--font-mono); font-size:12px; }
+textarea.form-input { resize:vertical; }
+.form-hint { display:block; font-size:11px; color:var(--text-muted); margin-top:4px; }
+.toggle-label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); cursor:pointer; }
+.toggle-label input[type=checkbox] { accent-color: var(--cyan); }
+@keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+</style>
 </body>
 </html>

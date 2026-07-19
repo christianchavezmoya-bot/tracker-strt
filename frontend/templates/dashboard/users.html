@@ -2,44 +2,558 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Users — HOLO-RTLS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management — HOLO-RTLS</title>
   <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/auth.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-<body class="auth-page">
-  <div class="auth-bg">
-    <div class="auth-grid-overlay"></div>
-    <div class="auth-glow auth-glow-1"></div>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb"><i class="fa-solid fa-chevron-right"></i><span>User Management</span></div>
   </div>
-  <div class="auth-container" style="max-width:700px">
-    <div class="auth-brand" style="margin-bottom:16px">
-      <div class="auth-logo">◈</div>
-      <h1 class="auth-title" style="font-size:18px">Users</h1>
-      <p class="auth-subtitle">Implementation in progress — Phase 2+</p>
-    </div>
-    <div class="auth-card" style="text-align:center">
-      <div style="font-size:48px;color:var(--cyan);margin:20px 0">
-        <i class="fa-solid fa-hard-hat"></i>
+  <div class="topbar-right">
+    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
+    <div class="user-menu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
       </div>
-      <p style="color:var(--text-muted);margin-bottom:20px">
-        This page is a placeholder.<br>
-        It will be implemented in <strong>Phase 2–5</strong> of the build plan.
-      </p>
-      <a href="/" class="btn btn-primary">← Back to Command Center</a>
     </div>
-    <p class="auth-footer" style="margin-top:16px">
-      See <strong>BUILD_PLAN.md</strong> for the full roadmap.
-    </p>
   </div>
-  <script src="/static/js/api.js"></script>
-  <script>
-    if (!API.isLoggedIn()) window.location.href = '/login';
-    document.addEventListener('DOMContentLoaded', () => {
-      const user = API.getUser();
-      if (user) document.title = user.display_name + ' — HOLO-RTLS';
-    });
-  </script>
+</header>
+
+<div class="settings-layout">
+  <!-- Sidebar -->
+  <aside class="settings-sidebar">
+    <div class="settings-nav-label">SYSTEM</div>
+    <nav class="settings-nav">
+      <a href="/" class="settings-nav-item"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+      <a href="/hardware" class="settings-nav-item"><i class="fa-solid fa-microchip"></i> Hardware</a>
+      <a href="/nodes" class="settings-nav-item"><i class="fa-solid fa-anchor"></i> Nodes</a>
+      <a href="/alerts" class="settings-nav-item"><i class="fa-solid fa-bell"></i> Alerts</a>
+      <a href="/settings" class="settings-nav-item"><i class="fa-solid fa-gear"></i> Settings</a>
+    </nav>
+    <div class="settings-nav-label" style="margin-top:24px">ADMIN</div>
+    <nav class="settings-nav">
+      <a href="/users" class="settings-nav-item active"><i class="fa-solid fa-users"></i> Users</a>
+      <a href="/audit" class="settings-nav-item"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
+      <a href="/backup" class="settings-nav-item"><i class="fa-solid fa-database"></i> Backup</a>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="settings-main">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title"><i class="fa-solid fa-users" style="color:var(--cyan)"></i> User Management</h1>
+        <p class="page-subtitle">Manage user accounts, roles, and access permissions</p>
+      </div>
+      <button class="btn btn-primary" onclick="openCreateModal()">
+        <i class="fa-solid fa-user-plus"></i> Add User
+      </button>
+    </div>
+
+    <!-- Summary -->
+    <div class="hw-summary-grid">
+      <div class="hw-summary-card hw-total">
+        <div class="hw-summary-icon"><i class="fa-solid fa-users"></i></div>
+        <div class="hw-summary-num" id="statTotal">—</div>
+        <div class="hw-summary-label">Total Users</div>
+      </div>
+      <div class="hw-summary-card hw-connected">
+        <div class="hw-summary-icon"><i class="fa-solid fa-user-check"></i></div>
+        <div class="hw-summary-num" id="statActive">—</div>
+        <div class="hw-summary-label">Active</div>
+      </div>
+      <div class="hw-summary-card hw-disconnected">
+        <div class="hw-summary-icon"><i class="fa-solid fa-user-lock"></i></div>
+        <div class="hw-summary-num" id="statAdmins">—</div>
+        <div class="hw-summary-label">Admins</div>
+      </div>
+      <div class="hw-summary-card hw-error">
+        <div class="hw-summary-icon"><i class="fa-solid fa-user-slash"></i></div>
+        <div class="hw-summary-num" id="statInactive">—</div>
+        <div class="hw-summary-label">Inactive</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="hw-toolbar">
+      <div class="search-input-wrap">
+        <i class="fa-solid fa-search"></i>
+        <input type="text" id="searchInput" placeholder="Search users by name or email..." oninput="debounceSearch()">
+      </div>
+      <div class="hw-filter-chips">
+        <button class="hw-chip active" data-filter="ALL" onclick="filterRole('ALL')">All Roles</button>
+        <button class="hw-chip" data-filter="ADMIN" onclick="filterRole('ADMIN')">Admin</button>
+        <button class="hw-chip" data-filter="OPERATOR" onclick="filterRole('OPERATOR')">Operator</button>
+        <button class="hw-chip" data-filter="VIEWER" onclick="filterRole('VIEWER')">Viewer</button>
+      </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="hw-config-table-wrap">
+      <table class="hw-config-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Last Login</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="usersTable">
+          <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="paginationBar" style="display:flex;justify-content:center;gap:6px;padding:16px 0;align-items:center"></div>
+  </main>
+</div>
+
+<!-- ── Create / Edit User Modal ─────────────────────────────────────── -->
+<div class="modal-overlay" id="userModal" style="display:none" onclick="if(event.target===this)closeUserModal()">
+  <div class="hw-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="userModalTitle">Add User</h3>
+      <button class="modal-close" onclick="closeUserModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="padding:20px">
+      <div class="form-group">
+        <label class="form-label">Email <span class="form-required">*</span></label>
+        <input class="form-input" type="email" id="userEmail" placeholder="operator@mine.site" autocomplete="off">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Username <span class="form-required">*</span></label>
+          <input class="form-input" id="userUsername" placeholder="jsmith">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Display Name</label>
+          <input class="form-input" id="userDisplayName" placeholder="John Smith">
+        </div>
+      </div>
+      <div class="form-group" id="passwordGroup">
+        <label class="form-label" id="passwordLabel">Password <span class="form-required">*</span></label>
+        <input class="form-input" type="password" id="userPassword" placeholder="Min. 8 characters">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select class="form-input" id="userRole">
+          <option value="1">Viewer — Read-only access</option>
+          <option value="2" selected>Operator — Manage trackers &amp; alerts</option>
+          <option value="3">Admin — Full system access</option>
+        </select>
+      </div>
+      <div class="form-group" id="activeGroup" style="display:none">
+        <label class="form-label">Status</label>
+        <select class="form-input" id="userActive">
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveUser()">
+        <i class="fa-solid fa-check"></i> <span id="saveBtnLabel">Create User</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Change Password Modal ─────────────────────────────────────────── -->
+<div class="modal-overlay" id="pwModal" style="display:none" onclick="if(event.target===this)closePwModal()">
+  <div class="hw-modal" style="width:400px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Change Password — <span id="pwUserName"></span></h3>
+      <button class="modal-close" onclick="closePwModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="padding:20px">
+      <div class="form-group">
+        <label class="form-label">New Password <span class="form-required">*</span></label>
+        <input class="form-input" type="password" id="newPassword" placeholder="Min. 8 characters">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password <span class="form-required">*</span></label>
+        <input class="form-input" type="password" id="confirmPassword" placeholder="Repeat password">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closePwModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="resetPassword()">
+        <i class="fa-solid fa-key"></i> Reset Password
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script>
+'use strict';
+let users = [];
+let currentUserId = null;
+let currentPage = 1;
+let searchTimeout = null;
+const PER_PAGE = 20;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await loadUserInfo();
+  await loadUsers();
+  renderUsers();
+});
+
+async function loadUserInfo() {
+  const res = await API.get('/api/auth/me');
+  const data = await API.json(res);
+  if (!res || !res.ok) { window.location.href = '/login'; return; }
+  const u = data.user;
+  document.getElementById('userAvatar').textContent = (u.display_name || u.username || u.email || 'A').charAt(0).toUpperCase();
+  if (u.role !== 'ADMIN') {
+    document.querySelector('[onclick="openCreateModal()"]').style.display = 'none';
+  }
+}
+
+async function loadUsers() {
+  const q = document.getElementById('searchInput')?.value || '';
+  const role = document.querySelector('.hw-chip.active')?.dataset.filter || 'ALL';
+  let url = `/api/users?page=${currentPage}&per_page=${PER_PAGE}`;
+  if (q) url += `&q=${encodeURIComponent(q)}`;
+  const res = await API.get(url);
+  const data = await API.json(res);
+  if (res && res.ok && data.items) {
+    // Client-side role filter
+    users = role === 'ALL' ? data.items : data.items.filter(u => u.role === role);
+    window._totalPages = data.pages || 1;
+    window._total = data.total || 0;
+  }
+  renderSummary();
+  renderUsers();
+  renderPagination();
+}
+
+function renderSummary() {
+  document.getElementById('statTotal').textContent = users.length || window._total || 0;
+  document.getElementById('statActive').textContent = users.filter(u => u.is_active).length;
+  document.getElementById('statAdmins').textContent = users.filter(u => u.role === 'ADMIN').length;
+  document.getElementById('statInactive').textContent = users.filter(u => !u.is_active).length;
+}
+
+function renderPagination() {
+  const bar = document.getElementById('paginationBar');
+  const total = window._totalPages || 1;
+  if (total <= 1) { bar.innerHTML = ''; return; }
+  let html = '';
+  if (currentPage > 1) html += `<button class="pg-btn" onclick="goPage(${currentPage - 1})"><i class="fa-solid fa-chevron-left"></i></button>`;
+  for (let i = 1; i <= total; i++) {
+    if (i === 1 || i === total || Math.abs(i - currentPage) <= 2) {
+      html += `<button class="pg-btn ${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+    } else if (i === 2 || i === total - 1) {
+      html += `<span style="color:var(--text-muted)">...</span>`;
+    }
+  }
+  if (currentPage < total) html += `<button class="pg-btn" onclick="goPage(${currentPage + 1})"><i class="fa-solid fa-chevron-right"></i></button>`;
+  bar.innerHTML = html;
+}
+
+function goPage(p) { currentPage = p; loadUsers(); }
+
+function filterRole(role) {
+  document.querySelectorAll('.hw-chip').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.hw-chip[data-filter="${role}"]`)?.classList.add('active');
+  currentPage = 1;
+  loadUsers();
+}
+
+function debounceSearch() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => { currentPage = 1; loadUsers(); }, 300);
+}
+
+function renderUsers() {
+  const tbody = document.getElementById('usersTable');
+  if (!users.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No users found.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = users.map(u => {
+    const roleClass = { ADMIN: 'role-admin', OPERATOR: 'role-op', VIEWER: 'role-viewer' }[u.role] || 'role-viewer';
+    const roleDesc = { ADMIN: 'Admin', OPERATOR: 'Operator', VIEWER: 'Viewer' }[u.role] || u.role;
+    const initials = (u.display_name || u.username || u.email || '?').charAt(0).toUpperCase();
+    const isCurrentUser = window._currentUserId && window._currentUserId === u.id;
+    return `<tr class="${!u.is_active ? 'row-inactive' : ''}">
+      <td>
+        <div class="user-cell">
+          <div class="user-avatar-sm">${initials}</div>
+          <div>
+            <div class="user-name">${u.display_name || u.username || '—'}${isCurrentUser ? ' <span style="color:var(--cyan);font-size:10px">(you)</span>' : ''}</div>
+            <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">${u.username || ''}</div>
+          </div>
+        </div>
+      </td>
+      <td class="mono" style="color:var(--text-secondary)">${u.email || '—'}</td>
+      <td><span class="role-badge ${roleClass}">${roleDesc}</span></td>
+      <td>
+        <label class="toggle-switch" title="${u.is_active ? 'Active' : 'Inactive'}">
+          <input type="checkbox" ${u.is_active ? 'checked' : ''} onchange="toggleActive(${u.id}, this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td class="mono" style="font-size:11px">${u.last_login ? timeAgo(u.last_login) : '<span style="color:var(--text-muted)">Never</span>'}</td>
+      <td class="mono" style="font-size:11px">${u.created_at ? fmtDate(u.created_at) : '—'}</td>
+      <td>
+        <div class="action-btns">
+          ${u.role !== 'ADMIN' || isCurrentUser ? '' : `<button class="action-btn" onclick="openEditModal(${u.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>`}
+          <button class="action-btn" onclick="openPwModal(${u.id}, '${escapeHtml(u.display_name || u.username || u.email)}')" title="Reset Password"><i class="fa-solid fa-key"></i></button>
+          ${isCurrentUser ? '' : `<button class="action-btn danger" onclick="deleteUser(${u.id}, '${escapeHtml(u.display_name || u.email)}')" title="Deactivate"><i class="fa-solid fa-user-slash"></i></button>`}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString();
+}
+
+// ── Modal ───────────────────────────────────────────────────────────────────
+function openCreateModal() {
+  currentUserId = null;
+  document.getElementById('userModalTitle').textContent = 'Add User';
+  document.getElementById('saveBtnLabel').textContent = 'Create User';
+  document.getElementById('passwordGroup').style.display = 'block';
+  document.getElementById('activeGroup').style.display = 'none';
+  document.getElementById('userEmail').value = '';
+  document.getElementById('userUsername').value = '';
+  document.getElementById('userDisplayName').value = '';
+  document.getElementById('userPassword').value = '';
+  document.getElementById('userRole').value = '2';
+  document.getElementById('userModal').style.display = 'flex';
+}
+
+function openEditModal(id) {
+  const u = users.find(x => x.id === id);
+  if (!u) return;
+  currentUserId = id;
+  document.getElementById('userModalTitle').textContent = `Edit: ${u.display_name || u.username || u.email}`;
+  document.getElementById('saveBtnLabel').textContent = 'Save Changes';
+  document.getElementById('passwordGroup').style.display = 'none';
+  document.getElementById('activeGroup').style.display = 'block';
+  document.getElementById('userEmail').value = u.email || '';
+  document.getElementById('userUsername').value = u.username || '';
+  document.getElementById('userDisplayName').value = u.display_name || '';
+  document.getElementById('userRole').value = { VIEWER: '1', OPERATOR: '2', ADMIN: '3' }[u.role] || '1';
+  document.getElementById('userActive').value = u.is_active ? 'true' : 'false';
+  document.getElementById('userModal').style.display = 'flex';
+}
+
+function closeUserModal() {
+  document.getElementById('userModal').style.display = 'none';
+  currentUserId = null;
+}
+
+function openPwModal(id, name) {
+  window._pwUserId = id;
+  document.getElementById('pwUserName').textContent = name;
+  document.getElementById('newPassword').value = '';
+  document.getElementById('confirmPassword').value = '';
+  document.getElementById('pwModal').style.display = 'flex';
+}
+
+function closePwModal() {
+  document.getElementById('pwModal').style.display = 'none';
+  window._pwUserId = null;
+}
+
+// ── Save ────────────────────────────────────────────────────────────────────
+async function saveUser() {
+  const email = document.getElementById('userEmail').value.trim();
+  const username = document.getElementById('userUsername').value.trim();
+  const display_name = document.getElementById('userDisplayName').value.trim();
+  const password = document.getElementById('userPassword').value;
+  const role = parseInt(document.getElementById('userRole').value);
+  const is_active = document.getElementById('userActive').value === 'true';
+
+  if (!email) { alert('Email is required'); return; }
+  if (!username) { alert('Username is required'); return; }
+  if (!currentUserId && !password) { alert('Password is required for new users'); return; }
+  if (password && password.length < 8) { alert('Password must be at least 8 characters'); return; }
+
+  const body = { email, username, display_name, role };
+  if (password) body.password = password;
+  if (currentUserId) {
+    body.is_active = is_active;
+    const res = await API.patch(`/api/users/${currentUserId}`, body);
+    if (res && res.ok) { closeUserModal(); await loadUsers(); showToast('User updated'); }
+    else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
+  } else {
+    const res = await API.post('/api/users', body);
+    if (res && res.ok) { closeUserModal(); await loadUsers(); showToast('User created'); }
+    else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
+  }
+}
+
+async function toggleActive(id, active) {
+  const res = await API.patch(`/api/users/${id}`, { is_active: active });
+  if (res && res.ok) {
+    const u = users.find(x => x.id === id);
+    if (u) u.is_active = active;
+    renderSummary();
+    renderUsers();
+    showToast(active ? 'User activated' : 'User deactivated');
+  } else {
+    const d = await API.json(res);
+    alert('Error: ' + (d.error || res.statusText));
+    renderUsers(); // revert toggle visually
+  }
+}
+
+async function deleteUser(id, name) {
+  if (!confirm(`Deactivate user "${name}"?\n\nThey will no longer be able to log in.`)) return;
+  const res = await API.del(`/api/users/${id}`);
+  if (res && res.ok) { await loadUsers(); showToast('User deactivated'); }
+  else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
+}
+
+async function resetPassword() {
+  const pw = document.getElementById('newPassword').value;
+  const confirm = document.getElementById('confirmPassword').value;
+  if (!pw || pw.length < 8) { alert('Password must be at least 8 characters'); return; }
+  if (pw !== confirm) { alert('Passwords do not match'); return; }
+  const res = await API.patch(`/api/users/${window._pwUserId}`, { password: pw });
+  if (res && res.ok) { closePwModal(); showToast('Password reset successfully'); }
+  else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return d.toLocaleDateString();
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;
+    background:rgba(8,15,30,0.95);border:1px solid var(--cyan);color:var(--cyan);
+    border-radius:8px;font-size:13px;z-index:9999;animation:slideUp 0.2s`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(() => t.remove(), 300); }, 3000);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');
+});
+function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
+function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+</script>
+
+<style>
+.settings-layout { display:flex; min-height:100vh; background:var(--bg-primary); }
+.settings-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
+.settings-nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+.settings-nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; }
+.settings-nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+.settings-nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
+.settings-main { flex:1; padding:28px 32px; overflow-y:auto; }
+.page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+.page-title { font-size:22px; font-weight:700; color:var(--text-primary); margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+.page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+.hw-summary-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+.hw-summary-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:18px; text-align:center; }
+.hw-summary-num { font-size:28px; font-weight:700; font-family:var(--font-mono); }
+.hw-summary-label { font-size:11px; color:var(--text-muted); margin-top:4px; letter-spacing:0.05em; }
+.hw-total .hw-summary-icon { color:var(--cyan); }
+.hw-connected .hw-summary-icon { color:var(--green); }
+.hw-disconnected .hw-summary-icon { color:var(--yellow); }
+.hw-error .hw-summary-icon { color:var(--red); }
+.hw-summary-icon { font-size:22px; margin-bottom:8px; }
+.hw-toolbar { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+.search-input-wrap { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:8px 12px; flex:1; min-width:200px; }
+.search-input-wrap i { color:var(--text-muted); }
+.search-input-wrap input { background:none; border:none; outline:none; color:var(--text-primary); font-size:13px; font-family:inherit; flex:1; }
+.hw-filter-chips { display:flex; gap:6px; }
+.hw-chip { background:none; border:1px solid var(--border); color:var(--text-secondary); font-size:11px; font-weight:600; padding:5px 12px; border-radius:20px; cursor:pointer; transition:all 0.1s; font-family:var(--font-mono); }
+.hw-chip:hover { border-color:var(--cyan); color:var(--cyan); }
+.hw-chip.active { background:rgba(0,229,255,0.1); border-color:var(--cyan); color:var(--cyan); }
+.hw-config-table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.hw-config-table { width:100%; border-collapse:collapse; }
+.hw-config-table th { text-align:left; font-size:10px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); padding:12px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+.hw-config-table td { padding:10px 14px; font-size:13px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+.hw-config-table tr:last-child td { border-bottom:none; }
+.hw-config-table tr:hover td { background:rgba(0,229,255,0.03); }
+.row-inactive td { opacity: 0.5; }
+.table-loading, .table-empty { text-align:center; color:var(--text-muted); font-size:13px; padding:30px; }
+.table-loading i { color:var(--cyan); }
+.mono { font-family:var(--font-mono); font-size:12px; }
+.user-cell { display:flex; align-items:center; gap:10px; }
+.user-avatar-sm { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--cyan),var(--magenta)); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#000; flex-shrink:0; }
+.user-name { font-weight:600; }
+.role-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:10px; font-family:var(--font-mono); }
+.role-admin { background:rgba(255,68,68,0.15); color:var(--red); }
+.role-op { background:rgba(255,179,0,0.15); color:var(--yellow); }
+.role-viewer { background:rgba(0,229,255,0.12); color:var(--cyan); }
+.toggle-switch { display:inline-flex; cursor:pointer; }
+.toggle-switch input { display:none; }
+.toggle-slider { width:36px; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; position:relative; transition:background 0.2s; }
+.toggle-slider::after { content:''; width:16px; height:16px; border-radius:50%; background:#fff; position:absolute; top:2px; left:2px; transition:transform 0.2s; }
+.toggle-switch input:checked ~ .toggle-slider { background:var(--cyan); }
+.toggle-switch input:checked ~ .toggle-slider::after { transform:translateX(16px); }
+.action-btns { display:flex; gap:4px; }
+.action-btn { width:28px; height:28px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:6px; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.1s; }
+.action-btn:hover { background:rgba(0,229,255,0.1); color:var(--cyan); border-color:var(--cyan); }
+.action-btn.danger:hover { background:rgba(255,68,68,0.1); color:var(--red); border-color:var(--red); }
+.breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
+.breadcrumb i { font-size:10px; }
+.breadcrumb span { color:var(--text-secondary); }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; text-decoration:none; }
+.btn-primary { background:var(--cyan); color:#000; }
+.btn-primary:hover { background:#33eeff; }
+.btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+.btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
+.hw-modal { background:var(--bg-card); border:1px solid var(--border-bright); border-radius:var(--radius); width:520px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.7); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--border); }
+.modal-header h3 { margin:0; font-size:16px; }
+.modal-close { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; }
+.modal-close:hover { color:var(--text-primary); }
+.modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:16px 20px 0; border-top:1px solid var(--border); margin-top:16px; }
+.modal-body { padding:0; }
+.form-group { margin-bottom:14px; }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.form-label { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:5px; }
+.form-required { color:var(--red); }
+.form-input { width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text-primary); font-size:13px; font-family:inherit; outline:none; box-sizing:border-box; transition:border-color 0.15s; }
+.form-input:focus { border-color:var(--cyan); }
+.pg-btn { background:rgba(255,255,255,0.04); border:1px solid var(--border); color:var(--text-secondary); font-size:12px; padding:5px 10px; border-radius:6px; cursor:pointer; font-family:var(--font-mono); transition:all 0.1s; }
+.pg-btn:hover { border-color:var(--cyan); color:var(--cyan); }
+.pg-btn.active { background:rgba(0,229,255,0.1); border-color:var(--cyan); color:var(--cyan); font-weight:600; }
+@keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+</style>
 </body>
 </html>
