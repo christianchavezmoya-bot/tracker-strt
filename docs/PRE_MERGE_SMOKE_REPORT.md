@@ -130,9 +130,12 @@ error in PyBluez setup command: use_2to3 is invalid.
 
 **Root cause:** `pybluez==0.23` is incompatible with Python 3.12 / modern setuptools; not required for web app or pytest.
 
-**Remediation (same branch, not on `master`):** Move `pybluez` / `bluepy` to optional `requirements-hardware.txt`; CI installs `requirements.txt` only.
+**Remediation (same branch, not on `master`):**
 
-**E2E job:** Skipped because `test` failed (`needs: test`).
+1. Move `pybluez` / `bluepy` to optional `requirements-hardware.txt` — **pytest job now passes in CI**
+2. Replace Playwright `wait_for_function` (blocked by CSP `unsafe-eval`) with `wait_for_url` regex in `tests/e2e/conftest.py` — **E2E fix pushed; awaiting CI re-run**
+
+**E2E job:** Previously skipped/failed; re-run pending after CSP fix push.
 
 ---
 
