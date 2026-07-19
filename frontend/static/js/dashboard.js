@@ -15,9 +15,10 @@ let filters = { people: true, machines: true, sensors: true, offline: true, aler
 
 // ── Layer panel state ───────────────────────────────────────────────────────
 let layerPanelOpen = false;
-let layerState = { zones: true, sections: true, grid: true, trackers: true, heatmap: true };
+let layerState = { zones: true, sections: true, grid: true, trackers: true, heatmap: true, proximity: true };
 // Expose globally so map2d.js / map3d.js can read it
 window.layerState = layerState;
+window.proximityMeters = 2.0;
 
 // ── Gas history buffer ─────────────────────────────────────────────────────
 const GAS_HISTORY_MAX = 60;  // Keep last 60 readings
@@ -45,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   await loadUserInfo();
-  await Promise.all([loadTrackers(), loadAlerts(), loadNodes(), loadZones()]);
+  await Promise.all([loadTrackers(), loadAlerts(), loadNodes(), loadZones(), loadProximitySetting()]);
   updateStats();
   updateDashboardKPIs();
   initHeatmapCanvas();
@@ -209,6 +210,18 @@ async function loadZones() {
   // Zones are loaded by map2d.js / map3d.js
 }
 
+async function loadProximitySetting() {
+  try {
+    const res = await API.get('/settings/proximity_meters');
+    const data = await API.json(res);
+    const val = data?.setting?.value ?? data?.value;
+    const n = parseFloat(val);
+    if (Number.isFinite(n) && n > 0) window.proximityMeters = n;
+  } catch (e) {
+    window.proximityMeters = 2.0;
+  }
+}
+
 // ── Tag List ─────────────────────────────────────────────────────────────────
 function renderTagList() {
   const list = document.getElementById('tagList');
@@ -321,6 +334,7 @@ function selectTracker(id) {
     if (currentView === '2d' && window.zoomToPosition) window.zoomToPosition(t.pos_x, t.pos_y);
     if (currentView === '3d' && window.focus3DTracker) window.focus3DTracker(id);
   }
+  if (window.renderProximityLines) window.renderProximityLines();
 }
 
 function showTagCard(t) {
@@ -370,6 +384,7 @@ function closeTagCard() {
   document.getElementById('tagCard').style.display = 'none';
   selectedTrackerId = null;
   renderTagList();
+  if (window.clearProximityLines) window.clearProximityLines();
 }
 
 // ── Filters ──────────────────────────────────────────────────────────────────
@@ -491,7 +506,7 @@ function toggleLayers() {
 
 // Sync layer checkboxes with current state
 function syncLayerCheckboxes() {
-  const checks = ['zones', 'sections', 'grid', 'trackers', 'heatmap'];
+  const checks = ['zones', 'sections', 'grid', 'trackers', 'heatmap', 'proximity'];
   checks.forEach(name => {
     const el = document.getElementById('layer' + name.charAt(0).toUpperCase() + name.slice(1));
     if (el) el.checked = layerState[name];
@@ -529,6 +544,16 @@ function toggleTrackerLayer() {
 function toggleHeatmapLayer() {
   layerState.heatmap = !layerState.heatmap;
   if (heatmapVisible !== layerState.heatmap) toggleHeatmap();  // sync canvas + button
+  syncLayerCheckboxes();
+}
+
+function toggleProximityLayer() {
+  layerState.proximity = !layerState.proximity;
+  if (layerState.proximity && window.renderProximityLines) {
+    window.renderProximityLines();
+  } else if (window.clearProximityLines) {
+    window.clearProximityLines();
+  }
   syncLayerCheckboxes();
 }
 
@@ -703,6 +728,9 @@ function handlePositionUpdate(data) {
   // Update map dots (both 2D and 3D)
   if (window.updateTrackerDot) window.updateTrackerDot(tid, data);
   if (window.updateTrackerDot3D) window.updateTrackerDot3D(tid, data);
+  if (selectedTrackerId && (selectedTrackerId === tid || window.renderProximityLines)) {
+    if (window.renderProximityLines) window.renderProximityLines();
+  }
   updateStats();
 }
 

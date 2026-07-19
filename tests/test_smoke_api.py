@@ -166,3 +166,43 @@ def test_create_report_schedule(client, auth_headers):
     sch = data.get("schedule") or data
     assert sch.get("name") == "Smoke Daily"
     assert sch.get("format") == "pdf"
+
+
+def test_integrations_status(client, admin_headers):
+    res = client.get("/api/settings/integrations/status", headers=admin_headers)
+    assert res.status_code == 200
+    data = res.get_json() or {}
+    assert "mail_enabled" in data
+    assert "mail_can_send" in data
+    assert "twilio_configured" in data
+
+
+def test_integrations_test_email(client, admin_headers):
+    res = client.post("/api/settings/integrations/test-email", headers=admin_headers, json={})
+    assert res.status_code == 200
+    data = res.get_json() or {}
+    assert data.get("to") == "admin@example.com"
+    assert "message" in data
+
+
+def test_proximity_alert_engine(app, db_session):
+    from backend.models import Tracker, Setting
+    from backend.services.alert_service import AlertService
+
+    with app.app_context():
+        t1 = Tracker(hardware_id="HW-PROX-1", assigned_name="Alpha", pos_x=0.0, pos_y=0.0, pos_z=0.0)
+        t2 = Tracker(hardware_id="HW-PROX-2", assigned_name="Beta", pos_x=1.0, pos_y=0.0, pos_z=0.0)
+        db_session.add_all([t1, t2])
+        db_session.commit()
+        db_session.add(Setting(key="proximity_meters", value="2.0"))
+        db_session.commit()
+
+        svc = AlertService.__new__(AlertService)
+        svc._app = app
+        alerts = svc._check_proximity(t1.id, 0.0, 0.0, 0.0)
+        assert len(alerts) == 1
+        assert alerts[0].alert_type == 9
+        assert "Beta" in alerts[0].message
+
+        far = svc._check_proximity(t1.id, 100.0, 100.0, 0.0)
+        assert len(far) == 0

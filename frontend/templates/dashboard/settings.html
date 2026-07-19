@@ -97,6 +97,9 @@
       <button class="hw-tab" data-tab="location" onclick="switchTab('location'); loadLocationCore()">
         <i class="fa-solid fa-location-crosshairs"></i> Location Core
       </button>
+      <button class="hw-tab" data-tab="integrations" onclick="switchTab('integrations'); loadIntegrationsStatus()">
+        <i class="fa-solid fa-plug"></i> Integrations
+      </button>
     </div>
 
     <!-- ── Location Core ─────────────────────────────────────────── -->
@@ -115,6 +118,29 @@
             <button type="button" class="btn btn-ghost" onclick="enableDesktopAlerts()"><i class="fa-solid fa-bell"></i> Enable desktop alerts</button>
           </div>
           <p id="notifPermStatus" style="font-size:12px;color:var(--text-muted);margin-top:10px"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Integrations (SMTP / SMS) ─────────────────────────────── -->
+    <div class="settings-section" id="section-integrations" style="display:none">
+      <div class="settings-card">
+        <div class="settings-card-header"><i class="fa-solid fa-envelope"></i> Email (SMTP)</div>
+        <div style="padding:16px">
+          <div id="mailStatusGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px"></div>
+          <p class="page-subtitle" style="margin-bottom:12px">Configure via environment: <code>MAIL_SERVER</code>, <code>MAIL_USERNAME</code>, <code>MAIL_PASSWORD</code>, <code>MAIL_ENABLED=1</code>. Use <code>FLASK_MAIL_SUPPRESS_SEND=1</code> in dev.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button type="button" class="btn btn-primary" onclick="sendTestEmail()"><i class="fa-solid fa-paper-plane"></i> Send test email</button>
+            <a class="btn btn-secondary" href="/integrations"><i class="fa-solid fa-key"></i> API keys & webhooks</a>
+          </div>
+          <p id="mailTestResult" style="font-size:12px;margin-top:10px;color:var(--text-muted)"></p>
+        </div>
+      </div>
+      <div class="settings-card" style="margin-top:16px">
+        <div class="settings-card-header"><i class="fa-solid fa-comment-sms"></i> SMS (Twilio)</div>
+        <div style="padding:16px">
+          <div id="smsStatusGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px"></div>
+          <p class="page-subtitle">Set <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>, <code>TWILIO_FROM_NUMBER</code>. Users add phone in Profile & Sessions.</p>
         </div>
       </div>
     </div>
@@ -404,6 +430,64 @@ function switchTab(tab) {
   document.querySelector(`.hw-tab[data-tab="${tab}"]`)?.classList.add('active');
   document.querySelectorAll('.settings-section').forEach(s => s.style.display = 'none');
   document.getElementById(`section-${tab}`).style.display = 'block';
+}
+
+async function loadIntegrationsStatus() {
+  const mailGrid = document.getElementById('mailStatusGrid');
+  const smsGrid = document.getElementById('smsStatusGrid');
+  const testEl = document.getElementById('mailTestResult');
+  if (testEl) testEl.textContent = '';
+  if (mailGrid) mailGrid.innerHTML = '<div style="color:var(--text-muted)">Loading…</div>';
+  try {
+    const res = await API.get('/settings/integrations/status');
+    const data = await API.json(res);
+    if (!res || !res.ok) {
+      if (mailGrid) mailGrid.textContent = 'Failed to load status';
+      return;
+    }
+    const chip = (label, ok, detail) =>
+      `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div style="font-size:12px;font-weight:600;color:${ok ? 'var(--green)' : 'var(--yellow)'}">${ok ? '●' : '○'} ${label}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${detail || '—'}</div>
+      </div>`;
+    if (mailGrid) {
+      mailGrid.innerHTML = [
+        chip('Mail enabled', data.mail_enabled, data.mail_server || 'Not configured'),
+        chip('Can send', data.mail_can_send, data.mail_suppressed ? 'Suppressed (dev mode)' : 'Ready'),
+        chip('Default sender', !!data.mail_default_sender, data.mail_default_sender || '—'),
+      ].join('');
+    }
+    if (smsGrid) {
+      smsGrid.innerHTML = [
+        chip('Twilio configured', data.twilio_configured, data.twilio_from || 'Missing credentials'),
+        chip('SMS available', data.sms_available, data.sms_available ? 'Can dispatch SMS alerts' : 'Install twilio + env vars'),
+      ].join('');
+    }
+  } catch (e) {
+    if (mailGrid) mailGrid.textContent = 'Error loading integrations';
+  }
+}
+
+async function sendTestEmail() {
+  const el = document.getElementById('mailTestResult');
+  if (el) { el.textContent = 'Sending…'; el.style.color = 'var(--text-muted)'; }
+  try {
+    const res = await API.post('/settings/integrations/test-email', {});
+    const data = await API.json(res);
+    if (res && res.ok) {
+      if (el) {
+        el.textContent = data.message || 'Test email sent (or logged in dev mode).';
+        el.style.color = 'var(--green)';
+      }
+    } else {
+      if (el) {
+        el.textContent = data.error || 'Send failed';
+        el.style.color = 'var(--red)';
+      }
+    }
+  } catch (e) {
+    if (el) { el.textContent = 'Request failed'; el.style.color = 'var(--red)'; }
+  }
 }
 
 async function loadLocationCore() {

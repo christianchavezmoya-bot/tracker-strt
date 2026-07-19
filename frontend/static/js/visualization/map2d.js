@@ -816,6 +816,54 @@ async function renderZones() {
 //  TRACKER DOTS
 // ══════════════════════════════════════════════════════════════════════════════
 
+let _proximityLayers = [];
+let _nearbyTrackerIds = new Set();
+
+function _proximityThresholdM() {
+  const v = window.proximityMeters;
+  const n = parseFloat(v);
+  return Number.isFinite(n) && n > 0 ? n : 2.0;
+}
+
+function clearProximityLines() {
+  _nearbyTrackerIds = new Set();
+  if (window._map2d) {
+    _proximityLayers.forEach(l => {
+      try { window._map2d.removeLayer(l); } catch (e) {}
+    });
+  }
+  _proximityLayers = [];
+}
+
+function renderProximityLines() {
+  clearProximityLines();
+  if (!window._map2d || !window.selectedTrackerId) return;
+  if (window.layerState && window.layerState.proximity === false) return;
+  const sel = (window.trackers || {})[window.selectedTrackerId];
+  if (!sel || sel.pos_x === undefined || sel.pos_y === undefined) return;
+  const threshold = _proximityThresholdM();
+  const selPt = L.CRS.Simple.unproject(L.point(sel.pos_x, sel.pos_y));
+  Object.values(window.trackers || {}).forEach(t => {
+    if (t.id === sel.id || t.pos_x === undefined || t.pos_y === undefined) return;
+    const dist = Math.hypot(sel.pos_x - t.pos_x, sel.pos_y - t.pos_y);
+    if (dist > threshold) return;
+    _nearbyTrackerIds.add(t.id);
+    const otherPt = L.CRS.Simple.unproject(L.point(t.pos_x, t.pos_y));
+    const line = L.polyline([selPt, otherPt], {
+      color: '#ffffff',
+      weight: 2,
+      opacity: 0.55,
+      dashArray: '6,8',
+      className: 'proximity-line-leaflet',
+    }).addTo(window._map2d);
+    line._isProximity = true;
+    const name = t.assigned_name || t.hardware_id || '#' + t.id;
+    line.bindTooltip(`${dist.toFixed(1)}m · ${name}`, { sticky: true, className: 'holo-tooltip' });
+    _proximityLayers.push(line);
+  });
+  renderTrackerDots();
+}
+
 function renderTrackerDots() {
   if (!window._map2d) return;
   window._map2d.eachLayer(l => { if (l._isTrackerDot) window._map2d.removeLayer(l); });
@@ -830,7 +878,8 @@ function addTrackerDot(t) {
   const latlng = L.CRS.Simple.unproject(L.point(t.pos_x, t.pos_y));
   const dotClass = dotClassForTracker(t);
   const isSelected = window.selectedTrackerId === t.id;
-  const icon = L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="tracker-dot ' + dotClass + (isSelected ? ' selected' : '') + '" id="dot-' + t.id + '" style="position:relative"></div>' });
+  const isNearby = _nearbyTrackerIds.has(t.id);
+  const icon = L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="tracker-dot ' + dotClass + (isSelected ? ' selected' : '') + (isNearby ? ' nearby' : '') + '" id="dot-' + t.id + '" style="position:relative"></div>' });
   const marker = L.marker(latlng, { icon, zIndexOffset: isSelected ? 1000 : 0 });
   marker._isTrackerDot = true;
   marker.addTo(window._map2d);
@@ -852,6 +901,9 @@ function updateTrackerDot(tid, pos) {
   const latlng = L.CRS.Simple.unproject(L.point(pos.x, pos.y));
   if (existing) existing.setLatLng(latlng);
   else addTrackerDot({ ...tracker, pos_x: pos.x, pos_y: pos.y, pos_z: pos.z });
+  if (window.selectedTrackerId === tid && window.renderProximityLines) {
+    window.renderProximityLines();
+  }
 }
 
 function dotClassForTracker(t) {
@@ -1371,3 +1423,5 @@ window.toggleCoverageLayer = toggleCoverageLayer;
 window.renderCoverageRings = renderCoverageRings;
 window.showTrajectory = showTrajectory;
 window.clearTrajectory = clearTrajectory;
+window.renderProximityLines = renderProximityLines;
+window.clearProximityLines = clearProximityLines;

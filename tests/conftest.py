@@ -28,6 +28,8 @@ def app():
     app = create_app(test_config)
     with app.app_context():
         from backend.extensions import db
+        from backend.services.notification_service import init_notification_service
+        init_notification_service(db.session, app)
         db.create_all()
         yield app
         db.drop_all()

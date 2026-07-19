@@ -25,8 +25,13 @@
   width: 16px; height: 16px;
   box-shadow: 0 0 0 3px var(--cyan), 0 0 12px var(--cyan);
 }
+.tracker-dot.nearby {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 10px rgba(255, 255, 255, 0.35);
+  animation: pulse-glow 2s infinite;
+}
 
-/* Proximity lines */
+/* Proximity lines (Leaflet polyline uses .proximity-line-leaflet) */
+.proximity-line-leaflet { pointer-events: none; }
 .proximity-line {
   position: absolute; height: 1px;
   background: linear-gradient(90deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05));

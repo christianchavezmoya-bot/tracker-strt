@@ -399,3 +399,70 @@ def system_status():
             "buffer_size": hist_stats.get("buffer_size", 0),
         },
     })
+
+
+@settings_bp.route("/integrations/status", methods=["GET"])
+@jwt_required()
+@require_permission(Permission.EDIT_SETTINGS)
+def integrations_status():
+    """SMTP / Twilio configuration summary for Settings → Integrations tab."""
+    twilio_ok = bool(config.TWILIO_ACCOUNT_SID and config.TWILIO_AUTH_TOKEN and config.TWILIO_FROM_NUMBER)
+    mail_server = config.MAIL_SERVER or ""
+    mail_enabled = bool(getattr(config, "MAIL_ENABLED", False) or mail_server)
+    suppressed = bool(config.FLASK_MAIL_SUPPRESS_SEND)
+    can_send = mail_enabled and mail_server and not suppressed
+    sms_available = False
+    try:
+        import twilio  # noqa: F401
+        sms_available = twilio_ok
+    except ImportError:
+        sms_available = False
+
+    return jsonify({
+        "mail_enabled": mail_enabled,
+        "mail_server": mail_server,
+        "mail_can_send": can_send,
+        "mail_suppressed": suppressed,
+        "mail_default_sender": config.MAIL_DEFAULT_SENDER,
+        "twilio_configured": twilio_ok,
+        "twilio_from": config.TWILIO_FROM_NUMBER if twilio_ok else None,
+        "sms_available": sms_available,
+    })
+
+
+@settings_bp.route("/integrations/test-email", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.EDIT_SETTINGS)
+def integrations_test_email():
+    """Send a test email to the current admin/operator."""
+    from backend.models import User
+    from backend.services.notification_service import get_notification_service
+
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    if not user or not user.email:
+        return jsonify({"error": "No email on current user"}), 400
+
+    notif = get_notification_service()
+    if not notif:
+        return jsonify({"error": "Notification service unavailable"}), 503
+
+    subject = "HOLO-RTLS test email"
+    body = (
+        "This is a test message from HOLO-RTLS.\n\n"
+        "If you received this, SMTP (or dev suppress logging) is working.\n"
+    )
+    ok = notif.send_email(user.email, subject, body)
+    if ok:
+        AuditLog.log(
+            action="integrations.test_email",
+            user_id=user_id,
+            entity_type="User",
+            entity_id=user.id,
+            details=f'{{"to": "{user.email}"}}',
+        )
+        msg = "Test email sent"
+        if config.FLASK_MAIL_SUPPRESS_SEND:
+            msg = "Test email logged (FLASK_MAIL_SUPPRESS_SEND=1)"
+        return jsonify({"message": msg, "to": user.email})
+    return jsonify({"error": "Email send failed — check MAIL_* env vars"}), 502
