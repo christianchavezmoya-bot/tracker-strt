@@ -2,36 +2,30 @@
 
 **Branch:** `cursor/holo-rtls-execute-plan-af22` (not merged to `master`)  
 **Date:** 2026-07-19  
-**Tests:** `pytest` → **100 passed** (4 Playwright E2E optional locally)
+**Tests:** `pytest` → **100 passed** + **4 Playwright E2E** (required in CI)
 
 ---
 
 ## This pass
 
-### Accessible confirm dialogs (Phase B UX / a11y)
-- **`window.holoConfirm()`** — modal `alertdialog` replaces native `confirm()` everywhere (admin UI + map zone delete)
-- Danger styling for delete/deactivate/revoke actions
-- Regression: `tests/test_a11y_smoke.py` (no native `confirm()`)
+### Playwright CI required gate (Phase D §8)
+- Removed `continue-on-error` from **`e2e-smoke`** job — PRs fail if browser smoke fails
+- **`scripts/run_e2e_ci.sh`** — starts app, waits for `/health`, runs E2E, cleans up
+- **`requirements-e2e.txt`** — pinned `playwright` + `pytest-playwright`
+- **`tests/e2e/conftest.py`** — shared `logged_in_page` fixture (login once per module)
+- CI uses `playwright install --with-deps chromium`
 
-### A11y polish (Phase D)
-- Toast host: **`aria-live="polite"`**
-- **`prefers-reduced-motion`** in shell.css
-
-### Playwright E2E
-- Fixed login selectors (`#emailInput`, `#passwordInput`, `#loginBtn`)
-- Added alerts page smoke test
-- CI e2e job waits for `/health` before running tests
+E2E coverage: login → Live Map, trackers, settings integrations tab, alerts.
 
 ---
 
 ## Prior passes (summary)
-- No `alert()` in admin UI, global toast, remember-me, Web Push, proximity viz, CI pytest
+- holoConfirm modal, no alert/confirm, a11y smoke, Web Push, proximity viz, global toast
 
 ---
 
-## Still intentionally thin / later
-- Delete `/tracking` template (legacy lab)
-- Full automated a11y audit (axe-core)
-- Playwright E2E required gate (still `continue-on-error` in CI)
+## CI gates (both required)
+1. `pytest tests/ -q --ignore=tests/e2e`
+2. `./scripts/run_e2e_ci.sh`
 
 Default login: `admin@holo-rtls.local` / `ChangeMe123!`

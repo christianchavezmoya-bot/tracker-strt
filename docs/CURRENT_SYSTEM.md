@@ -52,4 +52,15 @@ Progress log: **`docs/EXECUTION_REPORT.md`**
 pytest tests/ -q --ignore=tests/e2e
 ```
 
-Optional browser smoke: `PLAYWRIGHT_E2E=1 pytest tests/e2e/` with app on port 8080.
+E2E browser smoke (also runs as **required** CI job `e2e-smoke`):
+
+```bash
+pip install -r requirements-e2e.txt && playwright install chromium
+./scripts/run_e2e_ci.sh
+```
+
+Optional with app already running:
+
+```bash
+PLAYWRIGHT_E2E=1 pytest tests/e2e/ -q
+```
