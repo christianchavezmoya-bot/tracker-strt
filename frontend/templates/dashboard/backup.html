@@ -2,44 +2,441 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Backup — HOLO-RTLS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backup & Restore — HOLO-RTLS</title>
   <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/auth.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    :root {
+      --cyan: #00e5ff; --red: #ff4444; --green: #69ff47; --yellow: #ffdd57;
+      --bg-primary: #080f1e; --bg-card: #0d1526; --bg-row: #111d33;
+      --border: rgba(255,255,255,0.07); --border-bright: rgba(0,229,255,0.25);
+      --text-primary: #e8f4f8; --text-secondary: #8ba3b8; --text-muted: #4a6070;
+      --font-mono: 'JetBrains Mono', monospace; --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); font-size: 13px; }
+    a { color: inherit; text-decoration: none; }
+
+    .topbar { display:flex; align-items:center; justify-content:space-between; height:52px; padding:0 20px; background:rgba(13,21,38,0.95); border-bottom:1px solid var(--border); backdrop-filter:blur(12px); position:sticky; top:0; z-index:100; }
+    .topbar-left, .topbar-right { display:flex; align-items:center; gap:12px; }
+    .brand { display:flex; align-items:center; gap:8px; text-decoration:none; }
+    .brand-icon { font-size:20px; color:var(--cyan); }
+    .brand-name { font-size:15px; font-weight:700; letter-spacing:0.05em; color:var(--text-primary); }
+    .breadcrumb { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); }
+    .breadcrumb span { color:var(--text-secondary); }
+    .icon-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:6px; border-radius:6px; transition:all 0.15s; }
+    .icon-btn:hover { background:rgba(255,255,255,0.06); color:var(--text-primary); }
+    .user-menu { position:relative; }
+    .user-btn { background:none; border:none; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:8px; transition:all 0.15s; }
+    .user-btn:hover { background:rgba(255,255,255,0.06); }
+    .user-avatar { width:28px; height:28px; background:linear-gradient(135deg,#00e5ff,#0066ff); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#000; }
+    .user-dropdown { position:absolute; top:calc(100% + 8px); right:0; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:6px; min-width:160px; display:none; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
+    .user-dropdown.open { display:block; }
+    .user-dropdown a { display:flex; align-items:center; gap:8px; padding:8px 10px; color:var(--text-secondary); font-size:13px; border-radius:6px; transition:all 0.1s; }
+    .user-dropdown a:hover { background:rgba(255,255,255,0.06); color:var(--text-primary); }
+    .dropdown-divider { height:1px; background:var(--border); margin:4px 0; }
+
+    .page-layout { display:flex; min-height:calc(100vh - 52px); }
+    .page-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
+    .page-main { flex:1; padding:28px 32px; overflow-y:auto; }
+
+    .nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; }
+    .nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+    .nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
+
+    .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+    .page-title { font-size:22px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+    .page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; }
+    .btn-primary { background:var(--cyan); color:#000; }
+    .btn-primary:hover { background:#33eeff; }
+    .btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+    .btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
+    .btn-danger { background:rgba(255,68,68,0.15); color:var(--red); border:1px solid rgba(255,68,68,0.3); }
+    .btn-danger:hover { background:rgba(255,68,68,0.25); }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+    /* Info Banner */
+    .info-banner { background:rgba(255,221,87,0.06); border:1px solid rgba(255,221,87,0.2); border-radius:var(--radius); padding:14px 16px; font-size:13px; color:var(--text-secondary); margin-bottom:20px; display:flex; gap:10px; align-items:flex-start; }
+    .info-banner i { color:var(--yellow); flex-shrink:0; margin-top:2px; }
+
+    /* Summary Cards */
+    .summary-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
+    .summary-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; display:flex; align-items:center; gap:14px; }
+    .summary-card .sc-icon { font-size:24px; flex-shrink:0; }
+    .summary-card .sc-num { font-size:24px; font-weight:700; font-family:var(--font-mono); line-height:1; }
+    .summary-card .sc-label { font-size:11px; color:var(--text-muted); margin-top:4px; letter-spacing:0.05em; }
+
+    /* Table */
+    .table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+    .data-table { width:100%; border-collapse:collapse; }
+    .data-table th { text-align:left; font-size:10px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); padding:12px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+    .data-table td { padding:12px 14px; font-size:13px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+    .data-table tr:last-child td { border-bottom:none; }
+    .data-table tr:hover td { background:rgba(0,229,255,0.03); }
+    .table-empty { text-align:center; color:var(--text-muted); padding:28px; }
+    .table-loading { text-align:center; color:var(--text-muted); padding:28px; }
+    .table-loading i { color:var(--cyan); }
+
+    /* Status badges */
+    .status-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:10px; font-size:10px; font-weight:700; font-family:var(--font-mono); }
+    .status-done { background:rgba(105,255,71,0.12); color:var(--green); }
+    .status-running { background:rgba(0,229,255,0.12); color:var(--cyan); }
+    .status-failed { background:rgba(255,68,68,0.12); color:var(--red); }
+    .status-pending { background:rgba(255,221,87,0.12); color:var(--yellow); }
+
+    .action-btns { display:flex; gap:6px; }
+    .action-btn { padding:6px 10px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:6px; color:var(--text-muted); cursor:pointer; font-size:11px; transition:all 0.1s; display:inline-flex; align-items:center; gap:5px; }
+    .action-btn:hover { background:rgba(0,229,255,0.1); color:var(--cyan); border-color:var(--cyan); }
+    .action-btn.danger:hover { background:rgba(255,68,68,0.1); color:var(--red); border-color:var(--red); }
+    .action-btn.restore:hover { background:rgba(255,221,87,0.1); color:var(--yellow); border-color:var(--yellow); }
+    .action-btn i { font-size:10px; }
+
+    .mono { font-family:var(--font-mono); font-size:12px; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:200; backdrop-filter:blur(4px); }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--bg-card); border:1px solid var(--border-bright); border-radius:var(--radius); width:440px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,0.7); }
+    .modal-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+    .modal-header .mi-icon { font-size:22px; }
+    .modal-header h3 { font-size:16px; font-weight:700; margin:0; }
+    .modal-body { font-size:13px; color:var(--text-secondary); line-height:1.6; margin-bottom:20px; }
+    .modal-body strong { color:var(--text-primary); }
+    .modal-confirm { font-size:13px; color:var(--text-muted); background:rgba(255,68,68,0.08); border:1px solid rgba(255,68,68,0.2); border-radius:8px; padding:12px; margin-bottom:16px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+
+    .spinner { animation:spin 0.8s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    @keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+  </style>
 </head>
-<body class="auth-page">
-  <div class="auth-bg">
-    <div class="auth-grid-overlay"></div>
-    <div class="auth-glow auth-glow-1"></div>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb"><i class="fa-solid fa-chevron-right"></i><span>Backup & Restore</span></div>
   </div>
-  <div class="auth-container" style="max-width:700px">
-    <div class="auth-brand" style="margin-bottom:16px">
-      <div class="auth-logo">◈</div>
-      <h1 class="auth-title" style="font-size:18px">Backup</h1>
-      <p class="auth-subtitle">Implementation in progress — Phase 2+</p>
-    </div>
-    <div class="auth-card" style="text-align:center">
-      <div style="font-size:48px;color:var(--cyan);margin:20px 0">
-        <i class="fa-solid fa-hard-hat"></i>
+  <div class="topbar-right">
+    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
+    <div class="user-menu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
       </div>
-      <p style="color:var(--text-muted);margin-bottom:20px">
-        This page is a placeholder.<br>
-        It will be implemented in <strong>Phase 2–5</strong> of the build plan.
-      </p>
-      <a href="/" class="btn btn-primary">← Back to Command Center</a>
     </div>
-    <p class="auth-footer" style="margin-top:16px">
-      See <strong>BUILD_PLAN.md</strong> for the full roadmap.
-    </p>
   </div>
-  <script src="/static/js/api.js"></script>
-  <script>
-    if (!API.isLoggedIn()) window.location.href = '/login';
-    document.addEventListener('DOMContentLoaded', () => {
-      const user = API.getUser();
-      if (user) document.title = user.display_name + ' — HOLO-RTLS';
-    });
-  </script>
+</header>
+
+<div class="page-layout">
+  <aside class="page-sidebar">
+    <div class="nav-label">SYSTEM</div>
+    <nav>
+      <a href="/" class="nav-item"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+      <a href="/reports" class="nav-item"><i class="fa-solid fa-chart-line"></i> Reports</a>
+    </nav>
+    <div class="nav-label" style="margin-top:24px">ADMIN</div>
+    <nav>
+      <a href="/users" class="nav-item"><i class="fa-solid fa-users"></i> Users</a>
+      <a href="/audit" class="nav-item"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
+      <a href="/backup" class="nav-item active"><i class="fa-solid fa-database"></i> Backup</a>
+    </nav>
+  </aside>
+
+  <main class="page-main">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">
+          <i class="fa-solid fa-database" style="color:var(--cyan)"></i>
+          Backup & Restore
+        </h1>
+        <p class="page-subtitle">Manage HOLO-RTLS database snapshots — create, download, and restore backups</p>
+      </div>
+      <button class="btn btn-primary" id="createBtn" onclick="createBackup()">
+        <i class="fa-solid fa-plus"></i> Create Backup
+      </button>
+    </div>
+
+    <div class="info-banner">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <div>
+        <strong>Restore is destructive.</strong> Restoring a backup will replace the current database with the backup file.
+        Active tracking sessions will be interrupted. Schedule restores during maintenance windows.
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="sc-icon" style="color:var(--cyan)"><i class="fa-solid fa-database"></i></div>
+        <div>
+          <div class="sc-num" id="statTotal">—</div>
+          <div class="sc-label">TOTAL BACKUPS</div>
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="sc-icon" style="color:var(--green)"><i class="fa-solid fa-circle-check"></i></div>
+        <div>
+          <div class="sc-num" id="statDone">—</div>
+          <div class="sc-label">SUCCESSFUL</div>
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="sc-icon" style="color:var(--red)"><i class="fa-solid fa-circle-xmark"></i></div>
+        <div>
+          <div class="sc-num" id="statFailed">—</div>
+          <div class="sc-label">FAILED</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Backup Table -->
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Filename</th>
+            <th>Status</th>
+            <th>Trigger</th>
+            <th>Created By</th>
+            <th>Created At</th>
+            <th>Size</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="backupTable">
+          <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading backups…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- Restore Confirmation Modal -->
+<div class="modal-overlay" id="restoreModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="mi-icon" style="color:var(--yellow)"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <h3>Restore from Backup?</h3>
+    </div>
+    <div class="modal-body">
+      This will replace the <strong>current database</strong> with
+      <strong id="restoreFilename"></strong>.
+      <br><br>
+      The application may need to restart. All active tracking sessions will be interrupted.
+    </div>
+    <div class="modal-confirm">
+      Type <strong>RESTORE</strong> to confirm:
+      <input type="text" id="restoreConfirmInput" class="modal-input" placeholder="RESTORE" autocomplete="off"
+        style="width:100%;margin-top:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text-primary);font-family:var(--font-mono);font-size:13px;outline:none">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeRestoreModal()">Cancel</button>
+      <button class="btn btn-danger" id="confirmRestoreBtn" onclick="confirmRestore()" disabled>
+        <i class="fa-solid fa-rotate"></i> Restore Now
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script>
+'use strict';
+let backups = [];
+let restoringJobId = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await loadUserInfo();
+  await loadBackups();
+
+  // Confirm input watcher
+  const inp = document.getElementById('restoreConfirmInput');
+  inp.addEventListener('input', () => {
+    document.getElementById('confirmRestoreBtn').disabled = inp.value !== 'RESTORE';
+  });
+});
+
+async function loadUserInfo() {
+  const res = await API.get('/api/auth/me');
+  const data = await API.json(res);
+  if (!res || !res.ok) { window.location.href = '/login'; return; }
+  const u = data.user;
+  document.getElementById('userAvatar').textContent = (u.display_name || u.username || u.email || 'A').charAt(0).toUpperCase();
+}
+
+async function loadBackups() {
+  const tbody = document.getElementById('backupTable');
+  const res = await API.get('/api/backup');
+  const data = await API.json(res);
+  if (!res || !res.ok) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Failed to load backups</td></tr>`;
+    return;
+  }
+  backups = data.items || [];
+  renderBackups();
+}
+
+function renderBackups() {
+  const tbody = document.getElementById('backupTable');
+  const total = backups.length;
+  const done = backups.filter(b => b.status === 'done').length;
+  const failed = backups.filter(b => b.status === 'failed').length;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statFailed').textContent = failed;
+
+  if (!backups.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">
+      No backups yet. Click <strong>Create Backup</strong> to snapshot the database.
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = backups.map(b => {
+    const statusMap = { done: 'done', running: 'running', failed: 'failed', pending: 'pending' };
+    const iconMap = { done: 'fa-check-circle', running: 'fa-circle-notch fa-spin', failed: 'fa-xmark-circle', pending: 'fa-clock' };
+    const statusHtml = `<span class="status-badge status-${statusMap[b.status] || 'pending'}">
+      <i class="fa-solid ${iconMap[b.status] || 'fa-clock'}"></i> ${b.status?.toUpperCase() || 'PENDING'}
+    </span>`;
+    const size = b.size_bytes ? formatBytes(b.size_bytes) : '—';
+    const trigger = b.trigger === 'manual' ? 'Manual' : (b.trigger || '—');
+    const createdBy = b.created_by_name || b.created_by_id || 'System';
+    const date = b.created_at ? fmtDT(b.created_at) : '—';
+    const isDone = b.status === 'done';
+    return `<tr>
+      <td><span class="mono" style="font-size:11px">${b.filename}</span></td>
+      <td>${statusHtml}</td>
+      <td><span style="color:var(--text-secondary)">${trigger}</span></td>
+      <td><span style="color:var(--text-secondary)">${createdBy}</span></td>
+      <td style="font-size:11px;color:var(--text-muted)">${date}</td>
+      <td><span class="mono">${size}</span></td>
+      <td>
+        <div class="action-btns">
+          ${isDone ? `<button class="action-btn" onclick="downloadBackup(${b.id}, '${escapeHtml(b.filename)}')" title="Download">
+            <i class="fa-solid fa-download"></i> Download
+          </button>
+          <button class="action-btn restore" onclick="openRestoreModal(${b.id}, '${escapeHtml(b.filename)}')" title="Restore">
+            <i class="fa-solid fa-rotate"></i> Restore
+          </button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function createBackup() {
+  const btn = document.getElementById('createBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin spinner"></i> Creating…';
+  const res = await API.post('/api/backup/trigger', {});
+  const data = await API.json(res);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-plus"></i> Create Backup';
+  if (res && res.ok) {
+    showToast(`Backup created: ${data.job?.filename}`);
+    await loadBackups();
+  } else {
+    alert('Failed to create backup: ' + (data.error || res.statusText));
+  }
+}
+
+function downloadBackup(id, filename) {
+  const token = localStorage.getItem('holo_access_token');
+  fetch(`/api/backup/${id}/download`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(r => r.blob())
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(err => alert('Download failed: ' + err));
+}
+
+function openRestoreModal(id, filename) {
+  restoringJobId = id;
+  document.getElementById('restoreFilename').textContent = filename;
+  document.getElementById('restoreConfirmInput').value = '';
+  document.getElementById('confirmRestoreBtn').disabled = true;
+  document.getElementById('restoreModal').classList.add('open');
+  document.getElementById('restoreConfirmInput').focus();
+}
+
+function closeRestoreModal() {
+  document.getElementById('restoreModal').classList.remove('open');
+  restoringJobId = null;
+}
+
+async function confirmRestore() {
+  if (restoringJobId === null) return;
+  const btn = document.getElementById('confirmRestoreBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin spinner"></i> Restoring…';
+  const res = await API.post(`/api/backup/${restoringJobId}/restore`, { confirm: true });
+  const data = await API.json(res);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Restore Now';
+  if (res && res.ok) {
+    closeRestoreModal();
+    showToast(data.message || 'Restore complete — restart may be required');
+  } else {
+    alert('Restore failed: ' + (data.error || res.statusText));
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+function formatBytes(bytes) {
+  if (!bytes) return '—';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function fmtDT(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('en-AU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;
+    background:rgba(8,15,30,0.95);border:1px solid var(--cyan);color:var(--cyan);
+    border-radius:8px;font-size:13px;z-index:9999;animation:slideUp 0.2s`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(() => t.remove(), 300); }, 3500);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');
+  if (e.target === document.getElementById('restoreModal')) closeRestoreModal();
+});
+function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
+function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+</script>
 </body>
 </html>

@@ -2,44 +2,491 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Search — HOLO-RTLS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global Search — HOLO-RTLS</title>
   <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/auth.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    :root {
+      --cyan: #00e5ff; --red: #ff4444; --green: #69ff47; --yellow: #ffdd57;
+      --bg-primary: #080f1e; --bg-card: #0d1526; --bg-row: #111d33;
+      --border: rgba(255,255,255,0.07); --border-bright: rgba(0,229,255,0.25);
+      --text-primary: #e8f4f8; --text-secondary: #8ba3b8; --text-muted: #4a6070;
+      --font-mono: 'JetBrains Mono', monospace; --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); font-size: 13px; }
+    a { color: inherit; text-decoration: none; }
+
+    .topbar { display:flex; align-items:center; justify-content:space-between; height:52px; padding:0 20px; background:rgba(13,21,38,0.95); border-bottom:1px solid var(--border); backdrop-filter:blur(12px); position:sticky; top:0; z-index:100; }
+    .topbar-left, .topbar-right { display:flex; align-items:center; gap:12px; }
+    .brand { display:flex; align-items:center; gap:8px; }
+    .brand-icon { font-size:20px; color:var(--cyan); }
+    .brand-name { font-size:15px; font-weight:700; letter-spacing:0.05em; color:var(--text-primary); }
+    .breadcrumb { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); }
+    .breadcrumb span { color:var(--text-secondary); }
+    .icon-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:6px; border-radius:6px; transition:all 0.15s; }
+    .icon-btn:hover { background:rgba(255,255,255,0.06); color:var(--text-primary); }
+    .user-menu { position:relative; }
+    .user-btn { background:none; border:none; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:8px; }
+    .user-avatar { width:28px; height:28px; background:linear-gradient(135deg,#00e5ff,#0066ff); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#000; }
+    .user-dropdown { position:absolute; top:calc(100% + 8px); right:0; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:6px; min-width:160px; display:none; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
+    .user-dropdown.open { display:block; }
+    .user-dropdown a { display:flex; align-items:center; gap:8px; padding:8px 10px; color:var(--text-secondary); font-size:13px; border-radius:6px; transition:all 0.1s; }
+    .user-dropdown a:hover { background:rgba(255,255,255,0.06); color:var(--text-primary); }
+    .dropdown-divider { height:1px; background:var(--border); margin:4px 0; }
+
+    .page-layout { display:flex; min-height:calc(100vh - 52px); }
+    .page-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
+    .page-main { flex:1; padding:28px 32px; overflow-y:auto; }
+
+    .nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; border-left:2px solid transparent; transition:all 0.15s; }
+    .nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+
+    .page-header { margin-bottom:20px; }
+    .page-title { font-size:22px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+    .page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+
+    /* Search Box */
+    .search-box-wrap { position:relative; margin-bottom:20px; }
+    .search-box { width:100%; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:0; display:flex; overflow:hidden; transition:border-color 0.15s; }
+    .search-box:focus-within { border-color:var(--cyan); }
+    .search-icon { display:flex; align-items:center; justify-content:center; width:48px; flex-shrink:0; color:var(--text-muted); font-size:16px; }
+    .search-input { flex:1; background:none; border:none; outline:none; padding:14px 0; color:var(--text-primary); font-size:15px; font-family:inherit; }
+    .search-input::placeholder { color:var(--text-muted); }
+    .search-clear { display:flex; align-items:center; justify-content:center; width:40px; flex-shrink:0; color:var(--text-muted); cursor:pointer; font-size:13px; transition:color 0.1s; }
+    .search-clear:hover { color:var(--text-primary); }
+    .search-hint { font-size:11px; color:var(--text-muted); margin-top:6px; padding-left:4px; }
+
+    /* Filter Chips */
+    .filter-chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+    .chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.03); color:var(--text-secondary); transition:all 0.15s; user-select:none; }
+    .chip:hover { border-color:var(--cyan); color:var(--text-primary); }
+    .chip.active { background:rgba(0,229,255,0.1); border-color:var(--cyan); color:var(--cyan); }
+    .chip .chip-count { background:rgba(255,255,255,0.08); border-radius:10px; padding:1px 6px; font-size:10px; font-family:var(--font-mono); }
+    .chip.active .chip-count { background:rgba(0,229,255,0.2); }
+
+    /* Result Section */
+    .result-section { margin-bottom:24px; }
+    .result-section-header { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); margin-bottom:8px; }
+    .result-section-title { font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px; }
+    .result-section-count { font-size:11px; font-weight:600; color:var(--text-muted); background:rgba(255,255,255,0.06); padding:2px 7px; border-radius:10px; font-family:var(--font-mono); }
+    .result-section-count.has-results { background:rgba(0,229,255,0.12); color:var(--cyan); }
+
+    /* Result Cards */
+    .result-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; }
+    .result-card { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:14px; transition:all 0.15s; cursor:pointer; }
+    .result-card:hover { border-color:var(--cyan); background:rgba(0,229,255,0.03); }
+    .result-card .rc-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:8px; }
+    .result-card .rc-title { font-weight:700; font-size:13px; }
+    .result-card .rc-sub { font-size:11px; color:var(--text-muted); margin-top:3px; font-family:var(--font-mono); }
+    .result-card .rc-body { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .result-card .rc-meta { font-size:11px; color:var(--text-secondary); display:flex; align-items:center; gap:4px; }
+    .result-card .rc-link { font-size:11px; color:var(--cyan); opacity:0; transition:opacity 0.15s; margin-left:auto; }
+    .result-card:hover .rc-link { opacity:1; }
+
+    /* Tags */
+    .tag { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:700; }
+    .tag-cyan { background:rgba(0,229,255,0.12); color:var(--cyan); }
+    .tag-green { background:rgba(105,255,71,0.12); color:var(--green); }
+    .tag-red { background:rgba(255,68,68,0.12); color:var(--red); }
+    .tag-yellow { background:rgba(255,221,87,0.12); color:var(--yellow); }
+    .tag-purple { background:rgba(167,139,250,0.12); color:#a78bfa; }
+    .tag-gray { background:rgba(255,255,255,0.06); color:var(--text-secondary); }
+    .tag-orange { background:rgba(255,107,53,0.12); color:#ff6b35; }
+
+    .mono { font-family:var(--font-mono); font-size:12px; }
+
+    /* Empty / Initial State */
+    .state-center { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; text-align:center; }
+    .state-icon { font-size:48px; color:var(--text-muted); margin-bottom:16px; }
+    .state-title { font-size:16px; font-weight:700; margin-bottom:8px; }
+    .state-desc { color:var(--text-muted); font-size:13px; max-width:380px; line-height:1.5; }
+
+    .quick-links { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:20px; }
+    .quick-link { padding:7px 14px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; color:var(--text-secondary); font-size:12px; cursor:pointer; transition:all 0.1s; }
+    .quick-link:hover { border-color:var(--cyan); color:var(--cyan); }
+  </style>
 </head>
-<body class="auth-page">
-  <div class="auth-bg">
-    <div class="auth-grid-overlay"></div>
-    <div class="auth-glow auth-glow-1"></div>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb"><i class="fa-solid fa-chevron-right"></i><span>Global Search</span></div>
   </div>
-  <div class="auth-container" style="max-width:700px">
-    <div class="auth-brand" style="margin-bottom:16px">
-      <div class="auth-logo">◈</div>
-      <h1 class="auth-title" style="font-size:18px">Search</h1>
-      <p class="auth-subtitle">Implementation in progress — Phase 2+</p>
-    </div>
-    <div class="auth-card" style="text-align:center">
-      <div style="font-size:48px;color:var(--cyan);margin:20px 0">
-        <i class="fa-solid fa-hard-hat"></i>
+  <div class="topbar-right">
+    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
+    <div class="user-menu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
       </div>
-      <p style="color:var(--text-muted);margin-bottom:20px">
-        This page is a placeholder.<br>
-        It will be implemented in <strong>Phase 2–5</strong> of the build plan.
-      </p>
-      <a href="/" class="btn btn-primary">← Back to Command Center</a>
     </div>
-    <p class="auth-footer" style="margin-top:16px">
-      See <strong>BUILD_PLAN.md</strong> for the full roadmap.
-    </p>
   </div>
-  <script src="/static/js/api.js"></script>
-  <script>
-    if (!API.isLoggedIn()) window.location.href = '/login';
-    document.addEventListener('DOMContentLoaded', () => {
-      const user = API.getUser();
-      if (user) document.title = user.display_name + ' — HOLO-RTLS';
+</header>
+
+<div class="page-layout">
+  <aside class="page-sidebar">
+    <div class="nav-label">SYSTEM</div>
+    <nav>
+      <a href="/" class="nav-item"><i class="fa-solid fa-gauge"></i> Dashboard</a>
+      <a href="/reports" class="nav-item"><i class="fa-solid fa-chart-line"></i> Reports</a>
+      <a href="/alerts" class="nav-item"><i class="fa-solid fa-bell"></i> Alerts</a>
+      <a href="/zones" class="nav-item"><i class="fa-solid fa-shapes"></i> Zones</a>
+      <a href="/hardware" class="nav-item"><i class="fa-solid fa-microchip"></i> Hardware</a>
+    </nav>
+    <div class="nav-label" style="margin-top:24px">ADMIN</div>
+    <nav>
+      <a href="/users" class="nav-item"><i class="fa-solid fa-users"></i> Users</a>
+      <a href="/audit" class="nav-item"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
+      <a href="/backup" class="nav-item"><i class="fa-solid fa-database"></i> Backup</a>
+    </nav>
+  </aside>
+
+  <main class="page-main">
+    <div class="page-header">
+      <h1 class="page-title">
+        <i class="fa-solid fa-magnifying-glass" style="color:var(--cyan)"></i>
+        Global Search
+      </h1>
+      <p class="page-subtitle">Search across trackers, users, zones, sections, and alerts</p>
+    </div>
+
+    <!-- Search -->
+    <div class="search-box-wrap">
+      <div class="search-box">
+        <div class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+        <input class="search-input" id="searchInput" type="text" placeholder="Search by name, hardware ID, email, zone…" autocomplete="off" spellcheck="false">
+        <div class="search-clear" id="searchClear" style="display:none" onclick="clearSearch()">
+          <i class="fa-solid fa-xmark"></i>
+        </div>
+      </div>
+      <div class="search-hint">Press Enter or type 2+ characters to search · Use <kbd style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;font-family:var(--font-mono);font-size:10px">Tab</kbd> to cycle entity types</div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-chips" id="filterChips">
+      <div class="chip active" data-type="all" onclick="setType('all')">
+        <i class="fa-solid fa-globe"></i> All <span class="chip-count" id="count-all">—</span>
+      </div>
+      <div class="chip" data-type="tracker" onclick="setType('tracker')">
+        <i class="fa-solid fa-crosshairs"></i> Trackers <span class="chip-count" id="count-tracker">—</span>
+      </div>
+      <div class="chip" data-type="user" onclick="setType('user')">
+        <i class="fa-solid fa-user"></i> Users <span class="chip-count" id="count-user">—</span>
+      </div>
+      <div class="chip" data-type="zone" onclick="setType('zone')">
+        <i class="fa-solid fa-circle-notch"></i> Zones <span class="chip-count" id="count-zone">—</span>
+      </div>
+      <div class="chip" data-type="section" onclick="setType('section')">
+        <i class="fa-solid fa-draw-polygon"></i> Sections <span class="chip-count" id="count-section">—</span>
+      </div>
+      <div class="chip" data-type="alert" onclick="setType('alert')">
+        <i class="fa-solid fa-bell"></i> Alerts <span class="chip-count" id="count-alert">—</span>
+      </div>
+    </div>
+
+    <!-- Results Container -->
+    <div id="resultsContainer">
+
+      <!-- Initial / Empty State -->
+      <div id="state-empty" class="state-center">
+        <div class="state-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+        <div class="state-title">Search HOLO-RTLS</div>
+        <div class="state-desc">Find trackers by name or hardware ID, locate workers, check zone configurations, and more — all in one place.</div>
+        <div class="quick-links">
+          <div class="quick-link" onclick="quickSearch('offline')"><i class="fa-solid fa-wifi-slash"></i> Offline trackers</div>
+          <div class="quick-link" onclick="quickSearch('restricted')"><i class="fa-solid fa-ban"></i> Restricted zones</div>
+          <div class="quick-link" onclick="quickSearch('low battery')"><i class="fa-solid fa-battery-quarter"></i> Low battery</div>
+          <div class="quick-link" onclick="quickSearch('active')"><i class="fa-solid fa-signal"></i> Active trackers</div>
+        </div>
+      </div>
+
+      <!-- No Results -->
+      <div id="state-noresults" class="state-center" style="display:none">
+        <div class="state-icon"><i class="fa-solid fa-ghost"></i></div>
+        <div class="state-title">No results found</div>
+        <div class="state-desc" id="noresultsMsg">Try a different search term or remove entity type filters.</div>
+      </div>
+
+      <!-- Loading -->
+      <div id="state-loading" class="state-center" style="display:none">
+        <div class="state-icon" style="color:var(--cyan);animation:pulse 1s infinite"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+        <div class="state-title">Searching…</div>
+      </div>
+
+      <!-- Results -->
+      <div id="state-results" style="display:none">
+        <div id="resultsList"></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script>
+'use strict';
+let currentQuery = '';
+let currentType = 'all';
+let debounceTimer = null;
+let lastResults = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await loadUserInfo();
+  const inp = document.getElementById('searchInput');
+  inp.addEventListener('input', e => {
+    document.getElementById('searchClear').style.display = e.target.value ? 'flex' : 'none';
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => doSearch(e.target.value), 250);
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch(inp.value);
+    if (e.key === 'Tab') { e.preventDefault(); cycleType(); }
+  });
+  inp.focus();
+});
+
+async function loadUserInfo() {
+  const res = await API.get('/api/auth/me');
+  const data = await API.json(res);
+  if (!res || !res.ok) return;
+  const u = data.user;
+  document.getElementById('userAvatar').textContent = (u.display_name || u.username || u.email || 'A').charAt(0).toUpperCase();
+}
+
+async function doSearch(query) {
+  currentQuery = query;
+  if (!query || query.length < 2) {
+    showState('empty');
+    updateCounts(null);
+    return;
+  }
+  showState('loading');
+  const res = await API.get(`/api/search?q=${encodeURIComponent(query)}&type=${currentType}`);
+  const data = await API.json(res);
+  if (!res || !res.ok) { showState('empty'); return; }
+  lastResults = data.results;
+  updateCounts(data.results);
+  renderResults(data.results, query);
+}
+
+function quickSearch(term) {
+  document.getElementById('searchInput').value = term;
+  document.getElementById('searchClear').style.display = 'flex';
+  doSearch(term);
+}
+
+function setType(type) {
+  currentType = type;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.type === type));
+  if (currentQuery) doSearch(currentQuery);
+}
+
+function cycleType() {
+  const types = ['all', 'tracker', 'user', 'zone', 'section', 'alert'];
+  const idx = types.indexOf(currentType);
+  setType(types[(idx + 1) % types.length]);
+}
+
+function showState(state) {
+  ['empty', 'noresults', 'loading', 'results'].forEach(s => {
+    document.getElementById('state-' + s).style.display = s === state ? 'flex' : 'none';
+  });
+  document.getElementById('state-' + state).style.display =
+    state === 'results' ? 'block' :
+    state === 'noresults' || state === 'empty' || state === 'loading'
+      ? 'flex' : 'none';
+}
+
+function updateCounts(results) {
+  if (!results) {
+    ['all', 'tracker', 'user', 'zone', 'section', 'alert'].forEach(t => {
+      document.getElementById('count-' + t).textContent = '—';
     });
-  </script>
+    return;
+  }
+  const r = results;
+  const total = r.trackers.length + r.users.length + r.zones.length + r.sections.length + r.alerts.length;
+  document.getElementById('count-all').textContent = total;
+  document.getElementById('count-tracker').textContent = r.trackers.length || '—';
+  document.getElementById('count-user').textContent = r.users.length || '—';
+  document.getElementById('count-zone').textContent = r.zones.length || '—';
+  document.getElementById('count-section').textContent = r.sections.length || '—';
+  document.getElementById('count-alert').textContent = r.alerts.length || '—';
+}
+
+function renderResults(results, query) {
+  const total = results.trackers.length + results.users.length + results.zones.length + results.sections.length + results.alerts.length;
+  if (total === 0) {
+    document.getElementById('noresultsMsg').textContent = `No results for "${query}" — try different keywords`;
+    showState('noresults');
+    return;
+  }
+  showState('results');
+  const list = document.getElementById('resultsList');
+  let html = '';
+  if (results.trackers.length) html += renderSection('Trackers', 'tracker', results.trackers, renderTrackerCard);
+  if (results.users.length) html += renderSection('Users', 'user', results.users, renderUserCard);
+  if (results.zones.length) html += renderSection('Zones', 'zone', results.zones, renderZoneCard);
+  if (results.sections.length) html += renderSection('Sections', 'section', results.sections, renderSectionCard);
+  if (results.alerts.length) html += renderSection('Alerts', 'alert', results.alerts, renderAlertCard);
+  list.innerHTML = html;
+}
+
+function renderSection(title, key, items, renderFn) {
+  return `<div class="result-section">
+    <div class="result-section-header">
+      <div class="result-section-title">${title}</div>
+      <span class="result-section-count has-results">${items.length}</span>
+    </div>
+    <div class="result-cards">${items.map(item => renderFn(item)).join('')}</div>
+  </div>`;
+}
+
+function highlight(text, query) {
+  if (!query || !text) return escapeHtml(text || '');
+  const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  return escapeHtml(text).replace(re, '<mark style="background:rgba(0,229,255,0.2);color:var(--cyan);border-radius:2px;padding:0 2px">$1</mark>');
+}
+
+function renderTrackerCard(t) {
+  const stateColor = { ACTIVE: 'green', OFFLINE: 'red', MAINTENANCE: 'yellow', DECOMMISSIONED: 'gray' }[t.asset_state] || 'gray';
+  const stateIcon = { ACTIVE: 'fa-signal', OFFLINE: 'fa-wifi-slash', MAINTENANCE: 'fa-wrench', DECOMMISSIONED: 'fa-ban' }[t.asset_state] || 'fa-circle';
+  const alertMap = { 0: null, 1: 'tag-yellow No Movement', 2: 'tag-red No Signal', 3: 'tag-red Restricted Zone', 4: 'tag-yellow Low Battery', 5: 'tag-red Critical', 6: 'tag-orange Hazard' };
+  const alertTag = alertMap[t.alert_status] ? `<span class="tag ${alertMap[t.alert_status].split(' ')[0]}">${alertMap[t.alert_status].split(' ').slice(1).join(' ')}</span>` : '';
+  const batteryColor = t.battery_level < 20 ? 'tag-red' : t.battery_level < 50 ? 'tag-yellow' : 'tag-green';
+  const batteryIcon = t.battery_level < 20 ? 'fa-battery-quarter' : t.battery_level < 80 ? 'fa-battery-half' : 'fa-battery-full';
+  return `<div class="result-card" onclick="navigateTo('/?tracker=${t.id}')">
+    <div class="rc-top">
+      <div>
+        <div class="rc-title">${highlight(t.assigned_name || 'Unnamed', currentQuery)}</div>
+        <div class="rc-sub">${highlight(t.hardware_id, currentQuery)}</div>
+      </div>
+      <span class="tag tag-${stateColor}"><i class="fa-solid ${stateIcon}"></i> ${t.asset_state}</span>
+    </div>
+    <div class="rc-body">
+      <span class="tag tag-cyan">${t.category}</span>
+      ${alertTag}
+      <span class="tag ${batteryColor}"><i class="fa-solid ${batteryIcon}"></i> ${t.battery_level}%</span>
+      <span class="rc-link">View →</span>
+    </div>
+  </div>`;
+}
+
+function renderUserCard(u) {
+  const roleClass = { ADMIN: 'tag-red', OPERATOR: 'tag-cyan', VIEWER: 'tag-gray' }[u.role] || 'tag-gray';
+  const initials = (u.display_name || u.username || u.email || '?').charAt(0).toUpperCase();
+  const status = u.is_active !== false ? 'tag-green' : 'tag-gray';
+  return `<div class="result-card" onclick="navigateTo('/users')">
+    <div class="rc-top">
+      <div>
+        <div class="rc-title">${highlight(u.display_name || u.username, currentQuery)}</div>
+        <div class="rc-sub">${highlight(u.email, currentQuery)}</div>
+      </div>
+      <span class="tag ${roleClass}">${u.role || 'VIEWER'}</span>
+    </div>
+    <div class="rc-body">
+      <span class="tag ${status}"><i class="fa-solid fa-circle"></i> ${u.is_active !== false ? 'Active' : 'Inactive'}</span>
+      ${u.last_login ? `<span class="tag tag-gray"><i class="fa-solid fa-clock"></i> ${fmtDT(u.last_login)}</span>` : ''}
+      <span class="rc-link">Manage →</span>
+    </div>
+  </div>`;
+}
+
+function renderZoneCard(z) {
+  const typeClass = { RESTRICTED: 'tag-red', CHECK_IN: 'tag-green', CHECK_OUT: 'tag-cyan', DANGER: 'tag-orange', NORMAL: 'tag-gray' }[z.zone_type] || 'tag-gray';
+  const pos = z.position || {};
+  return `<div class="result-card" onclick="navigateTo('/zones')">
+    <div class="rc-top">
+      <div>
+        <div class="rc-title">${highlight(z.name, currentQuery)}</div>
+        <div class="rc-sub">${z.radius}m radius · [${pos.x ?? 0}, ${pos.y ?? 0}, ${pos.z ?? 0}]</div>
+      </div>
+      <span class="tag ${typeClass}">${z.zone_type}</span>
+    </div>
+    <div class="rc-body">
+      <span class="tag tag-purple" style="background:${z.color_hex}22;color:${z.color_hex}"><i class="fa-solid fa-droplet"></i> ${z.color_hex}</span>
+      ${z.is_visible ? '<span class="tag tag-green"><i class="fa-solid fa-eye"></i> Visible</span>' : '<span class="tag tag-gray"><i class="fa-solid fa-eye-slash"></i> Hidden</span>'}
+      <span class="rc-link">Edit →</span>
+    </div>
+  </div>`;
+}
+
+function renderSectionCard(s) {
+  return `<div class="result-card" onclick="navigateTo('/zones')">
+    <div class="rc-top">
+      <div>
+        <div class="rc-title">${highlight(s.name, currentQuery)}</div>
+        <div class="rc-sub">${s.polygon?.length || 0} vertices · z-index: ${s.z_index}</div>
+      </div>
+      <span style="width:14px;height:14px;border-radius:2px;background:${s.color_hex || '#00e5ff'};flex-shrink:0"></span>
+    </div>
+    <div class="rc-body">
+      ${s.is_restricted ? '<span class="tag tag-red"><i class="fa-solid fa-ban"></i> Restricted</span>' : '<span class="tag tag-green"><i class="fa-solid fa-check"></i> Open</span>'}
+      ${s.is_visible ? '' : '<span class="tag tag-gray"><i class="fa-solid fa-eye-slash"></i> Hidden</span>'}
+      <span class="rc-link">Edit →</span>
+    </div>
+  </div>`;
+}
+
+function renderAlertCard(a) {
+  const stateClass = { ACTIVE: 'tag-red', ACKNOWLEDGED: 'tag-yellow', RESOLVED: 'tag-green' }[a.state] || 'tag-gray';
+  const stateIcon = { ACTIVE: 'fa-bell', ACKNOWLEDGED: 'fa-hand', RESOLVED: 'fa-check' }[a.state] || 'fa-circle';
+  return `<div class="result-card" onclick="navigateTo('/alerts')">
+    <div class="rc-top">
+      <div>
+        <div class="rc-title">${highlight(a.message || a.alert_type, currentQuery)}</div>
+        <div class="rc-sub">${a.tracker_name || a.hardware_id || '—'}</div>
+      </div>
+      <span class="tag ${stateClass}"><i class="fa-solid ${stateIcon}"></i> ${a.state}</span>
+    </div>
+    <div class="rc-body">
+      <span class="tag tag-cyan">${a.alert_type}</span>
+      ${a.triggered_at ? `<span class="tag tag-gray"><i class="fa-solid fa-clock"></i> ${fmtDT(a.triggered_at)}</span>` : ''}
+      <span class="rc-link">View →</span>
+    </div>
+  </div>`;
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  showState('empty');
+  updateCounts(null);
+  document.getElementById('searchInput').focus();
+}
+
+function navigateTo(path) { window.location.href = path; }
+
+function fmtDT(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');
+});
+function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
+function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+</script>
 </body>
 </html>

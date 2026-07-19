@@ -2,44 +2,674 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Reports — HOLO-RTLS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports & Analytics — HOLO-RTLS</title>
   <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/auth.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    :root {
+      --cyan: #00e5ff; --red: #ff4444; --green: #69ff47; --yellow: #ffdd57;
+      --bg-primary: #080f1e; --bg-card: #0d1526; --bg-row: #111d33;
+      --border: rgba(255,255,255,0.07); --border-bright: rgba(0,229,255,0.25);
+      --text-primary: #e8f4f8; --text-secondary: #8ba3b8; --text-muted: #4a6070;
+      --font-mono: 'JetBrains Mono', monospace; --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); font-size: 13px; }
+    a { color: inherit; text-decoration: none; }
+
+    .topbar { display:flex; align-items:center; justify-content:space-between; height:52px; padding:0 20px; background:rgba(13,21,38,0.95); border-bottom:1px solid var(--border); backdrop-filter:blur(12px); position:sticky; top:0; z-index:100; }
+    .topbar-left, .topbar-right { display:flex; align-items:center; gap:12px; }
+    .brand { display:flex; align-items:center; gap:8px; text-decoration:none; }
+    .brand-icon { font-size:20px; color:var(--cyan); }
+    .brand-name { font-size:15px; font-weight:700; letter-spacing:0.05em; color:var(--text-primary); }
+    .breadcrumb { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); }
+    .breadcrumb span { color:var(--text-secondary); }
+    .icon-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:6px; border-radius:6px; transition:all 0.15s; }
+    .icon-btn:hover { background:rgba(255,255,255,0.06); color:var(--text-primary); }
+    .user-menu { position:relative; }
+    .user-btn { background:none; border:none; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:8px; transition:all 0.15s; }
+    .user-btn:hover { background:rgba(255,255,255,0.06); }
+    .user-avatar { width:28px; height:28px; background:linear-gradient(135deg,#00e5ff,#0066ff); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#000; }
+    .user-dropdown { position:absolute; top:calc(100% + 8px); right:0; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:6px; min-width:160px; display:none; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
+    .user-dropdown.open { display:block; }
+    .user-dropdown a { display:flex; align-items:center; gap:8px; padding:8px 10px; color:var(--text-secondary); font-size:13px; border-radius:6px; transition:all 0.1s; }
+    .user-dropdown a:hover { background:rgba(255,255,255,0.06); color:var(--text-primary); }
+    .dropdown-divider { height:1px; background:var(--border); margin:4px 0; }
+
+    .reports-layout { display:flex; min-height:calc(100vh - 52px); }
+    .reports-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
+    .reports-nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+    .reports-nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; cursor:pointer; }
+    .reports-nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+    .reports-nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
+    .reports-main { flex:1; padding:28px 32px; overflow-y:auto; }
+
+    .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+    .page-title { font-size:22px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+    .page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+
+    /* Controls */
+    .controls-row { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+    .control-group { display:flex; align-items:center; gap:6px; }
+    .control-label { font-size:12px; color:var(--text-muted); font-weight:600; }
+    .control-input { background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:7px 12px; color:var(--text-primary); font-size:12px; font-family:inherit; outline:none; }
+    .control-input:focus { border-color:var(--cyan); }
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; white-space:nowrap; }
+    .btn-primary { background:var(--cyan); color:#000; }
+    .btn-primary:hover { background:#33eeff; }
+    .btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+    .btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
+    .btn-danger { background:rgba(255,68,68,0.15); color:var(--red); border:1px solid rgba(255,68,68,0.3); }
+    .btn-danger:hover { background:rgba(255,68,68,0.25); }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+    /* KPI Cards */
+    .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:14px; margin-bottom:24px; }
+    .kpi-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; }
+    .kpi-card .kpi-num { font-size:28px; font-weight:700; font-family:var(--font-mono); line-height:1; }
+    .kpi-card .kpi-label { font-size:11px; color:var(--text-muted); margin-top:6px; letter-spacing:0.05em; font-weight:600; }
+    .kpi-card .kpi-icon { font-size:18px; margin-bottom:10px; }
+
+    /* Chart */
+    .chart-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:20px; }
+    .chart-card .chart-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .chart-card .chart-title { font-size:14px; font-weight:700; }
+    .chart-wrap { position:relative; height:240px; }
+
+    /* Two-column panels */
+    .panels-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+    @media(max-width:900px) { .panels-2 { grid-template-columns:1fr; } }
+
+    /* Tables */
+    .data-table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+    .data-table { width:100%; border-collapse:collapse; }
+    .data-table th { text-align:left; font-size:10px; font-weight:700; letter-spacing:0.1em; color:var(--text-muted); padding:11px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+    .data-table td { padding:11px 14px; font-size:12px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.04); }
+    .data-table tr:last-child td { border-bottom:none; }
+    .data-table tr:hover td { background:rgba(0,229,255,0.03); }
+    .table-empty { text-align:center; color:var(--text-muted); padding:24px; }
+    .mono { font-family:var(--font-mono); font-size:12px; }
+
+    /* Export buttons grid */
+    .export-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px; }
+    .export-card { background:var(--bg-row); border:1px solid var(--border); border-radius:8px; padding:16px; display:flex; flex-direction:column; gap:10px; }
+    .export-card .export-title { font-weight:700; font-size:13px; }
+    .export-card .export-desc { font-size:11px; color:var(--text-muted); line-height:1.4; }
+    .export-card .export-actions { display:flex; gap:8px; margin-top:auto; }
+
+    /* Breakdown */
+    .breakdown-list { display:flex; flex-direction:column; gap:10px; }
+    .breakdown-item { display:flex; align-items:center; gap:12px; }
+    .breakdown-bar-wrap { flex:1; background:rgba(255,255,255,0.05); border-radius:4px; height:8px; overflow:hidden; }
+    .breakdown-bar { height:100%; border-radius:4px; transition:width 0.6s ease; }
+    .breakdown-count { font-family:var(--font-mono); font-size:12px; font-weight:700; min-width:36px; text-align:right; }
+    .breakdown-label { min-width:160px; font-size:12px; color:var(--text-secondary); }
+
+    .loading { display:flex; align-items:center; justify-content:center; gap:8px; color:var(--text-muted); padding:40px; }
+    .loading i { color:var(--cyan); }
+
+    .tab-bar { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:20px; }
+    .tab-btn { background:none; border:none; color:var(--text-secondary); font-size:13px; font-weight:500; padding:10px 16px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; }
+    .tab-btn:hover { color:var(--text-primary); }
+    .tab-btn.active { color:var(--cyan); border-bottom-color:var(--cyan); }
+
+    .stat-row { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary); margin-bottom:6px; }
+    .stat-row .stat-val { font-weight:700; font-family:var(--font-mono); color:var(--text-primary); }
+
+    .tag { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; }
+    .tag-cyan { background:rgba(0,229,255,0.12); color:var(--cyan); }
+    .tag-green { background:rgba(105,255,71,0.12); color:var(--green); }
+    .tag-red { background:rgba(255,68,68,0.12); color:var(--red); }
+    .tag-yellow { background:rgba(255,221,87,0.12); color:var(--yellow); }
+  </style>
 </head>
-<body class="auth-page">
-  <div class="auth-bg">
-    <div class="auth-grid-overlay"></div>
-    <div class="auth-glow auth-glow-1"></div>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb"><i class="fa-solid fa-chevron-right"></i><span>Reports & Analytics</span></div>
   </div>
-  <div class="auth-container" style="max-width:700px">
-    <div class="auth-brand" style="margin-bottom:16px">
-      <div class="auth-logo">◈</div>
-      <h1 class="auth-title" style="font-size:18px">Reports</h1>
-      <p class="auth-subtitle">Implementation in progress — Phase 2+</p>
-    </div>
-    <div class="auth-card" style="text-align:center">
-      <div style="font-size:48px;color:var(--cyan);margin:20px 0">
-        <i class="fa-solid fa-hard-hat"></i>
+  <div class="topbar-right">
+    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
+    <div class="user-menu">
+      <button class="user-btn" onclick="toggleUserMenu()">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
       </div>
-      <p style="color:var(--text-muted);margin-bottom:20px">
-        This page is a placeholder.<br>
-        It will be implemented in <strong>Phase 2–5</strong> of the build plan.
-      </p>
-      <a href="/" class="btn btn-primary">← Back to Command Center</a>
     </div>
-    <p class="auth-footer" style="margin-top:16px">
-      See <strong>BUILD_PLAN.md</strong> for the full roadmap.
-    </p>
   </div>
-  <script src="/static/js/api.js"></script>
-  <script>
-    if (!API.isLoggedIn()) window.location.href = '/login';
-    document.addEventListener('DOMContentLoaded', () => {
-      const user = API.getUser();
-      if (user) document.title = user.display_name + ' — HOLO-RTLS';
-    });
-  </script>
+</header>
+
+<div class="reports-layout">
+  <aside class="reports-sidebar">
+    <div class="reports-nav-label">ANALYTICS</div>
+    <nav>
+      <div class="reports-nav-item active" data-tab="overview" onclick="switchTab('overview')">
+        <i class="fa-solid fa-chart-line"></i> Overview
+      </div>
+      <div class="reports-nav-item" data-tab="activity" onclick="switchTab('activity')">
+        <i class="fa-solid fa-route"></i> Tracker Activity
+      </div>
+      <div class="reports-nav-item" data-tab="alerts" onclick="switchTab('alerts')">
+        <i class="fa-solid fa-bell"></i> Alert Breakdown
+      </div>
+      <div class="reports-nav-item" data-tab="export" onclick="switchTab('export')">
+        <i class="fa-solid fa-file-export"></i> Export Data
+      </div>
+    </nav>
+    <div class="reports-nav-label" style="margin-top:24px">NAVIGATE</div>
+    <nav>
+      <a href="/users" class="reports-nav-item"><i class="fa-solid fa-users"></i> Users</a>
+      <a href="/audit" class="reports-nav-item"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
+      <a href="/backup" class="reports-nav-item"><i class="fa-solid fa-database"></i> Backup</a>
+    </nav>
+  </aside>
+
+  <main class="reports-main">
+
+    <!-- Overview Tab -->
+    <div id="tab-overview">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title"><i class="fa-solid fa-chart-line" style="color:var(--cyan)"></i> System Overview</h1>
+          <p class="page-subtitle">Aggregate stats for the selected period</p>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <div class="control-group">
+          <span class="control-label">PERIOD</span>
+          <select class="control-input" id="periodSelect" onchange="changePeriod(this.value)">
+            <option value="7">Last 7 days</option>
+            <option value="14">Last 14 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <span class="control-label">START</span>
+          <input type="date" class="control-input" id="startDate">
+        </div>
+        <div class="control-group">
+          <span class="control-label">END</span>
+          <input type="date" class="control-input" id="endDate">
+        </div>
+        <button class="btn btn-secondary" onclick="loadOverview()">
+          <i class="fa-solid fa-rotate"></i> Refresh
+        </button>
+      </div>
+
+      <div class="kpi-grid" id="kpiGrid">
+        <div class="kpi-card">
+          <div class="kpi-icon" style="color:var(--cyan)"><i class="fa-solid fa-crosshairs"></i></div>
+          <div class="kpi-num" id="kpiTrackers">—</div>
+          <div class="kpi-label">TOTAL TRACKERS</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="color:var(--green)"><i class="fa-solid fa-signal"></i></div>
+          <div class="kpi-num" id="kpiActive">—</div>
+          <div class="kpi-label">ACTIVE NOW</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="color:var(--red)"><i class="fa-solid fa-bell"></i></div>
+          <div class="kpi-num" id="kpiAlerts">—</div>
+          <div class="kpi-label">TOTAL ALERTS</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="color:var(--yellow)"><i class="fa-solid fa-clock"></i></div>
+          <div class="kpi-num" id="kpiResponse">—</div>
+          <div class="kpi-label">AVG RESP. (MIN)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="color:#ff6b35"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <div class="kpi-num" id="kpiUnresolved">—</div>
+          <div class="kpi-label">UNRESOLVED</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="color:#a78bfa"><i class="fa-solid fa-check-circle"></i></div>
+          <div class="kpi-num" id="kpiResolved">—</div>
+          <div class="kpi-label">ACKNOWLEDGED</div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Alert Activity — Daily Count</div>
+          <button class="btn btn-secondary" onclick="downloadChartCSV()" style="padding:5px 10px;font-size:11px">
+            <i class="fa-solid fa-download"></i> CSV
+          </button>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="alertChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tracker Activity Tab -->
+    <div id="tab-activity" style="display:none">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title"><i class="fa-solid fa-route" style="color:var(--cyan)"></i> Tracker Activity</h1>
+          <p class="page-subtitle">Movement distance, position records, and alerts per active tracker</p>
+        </div>
+        <div class="controls-row">
+          <select class="control-input" id="activityDays" onchange="loadActivity()">
+            <option value="3">Last 3 days</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="14">Last 14 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <button class="btn btn-secondary" onclick="loadActivity()">
+            <i class="fa-solid fa-rotate"></i> Refresh
+          </button>
+        </div>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tracker</th>
+              <th>Category</th>
+              <th>Records</th>
+              <th>Distance</th>
+              <th>Alerts</th>
+              <th>First Seen</th>
+              <th>Last Seen</th>
+            </tr>
+          </thead>
+          <tbody id="activityTable">
+            <tr><td colspan="7" class="loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading activity data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Alert Breakdown Tab -->
+    <div id="tab-alerts" style="display:none">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title"><i class="fa-solid fa-bell" style="color:var(--red)"></i> Alert Breakdown</h1>
+          <p class="page-subtitle">Alert count by type over the selected period</p>
+        </div>
+        <div class="controls-row">
+          <select class="control-input" id="alertDays" onchange="loadBreakdown()">
+            <option value="7">Last 7 days</option>
+            <option value="14">Last 14 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <button class="btn btn-secondary" onclick="loadBreakdown()">
+            <i class="fa-solid fa-rotate"></i> Refresh
+          </button>
+        </div>
+      </div>
+      <div class="panels-2">
+        <div class="chart-card">
+          <div class="chart-title" style="margin-bottom:16px">Alert Type Distribution</div>
+          <div class="chart-wrap" style="height:260px">
+            <canvas id="breakdownDoughnut"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title" style="margin-bottom:16px">Alert Type Rankings</div>
+          <div class="breakdown-list" id="breakdownList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Tab -->
+    <div id="tab-export" style="display:none">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title"><i class="fa-solid fa-file-export" style="color:var(--cyan)"></i> Export Data</h1>
+          <p class="page-subtitle">Download CSVs for external analysis and compliance reporting</p>
+        </div>
+      </div>
+      <div class="export-grid">
+        <div class="export-card">
+          <div class="export-title"><i class="fa-solid fa-calendar-day" style="color:var(--cyan);margin-right:6px"></i> Daily Summary</div>
+          <div class="export-desc">Tracker count, active trackers, alert count for a specific date.</div>
+          <div class="export-actions">
+            <input type="date" class="control-input" id="exportDate" style="flex:1">
+            <button class="btn btn-primary" onclick="exportDaily()"><i class="fa-solid fa-download"></i> Export</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-title"><i class="fa-solid fa-battery-full" style="color:var(--yellow);margin-right:6px"></i> Battery Report</div>
+          <div class="export-desc">All trackers with battery level below 100%, sorted by level.</div>
+          <div class="export-actions">
+            <button class="btn btn-primary" onclick="exportBattery()"><i class="fa-solid fa-download"></i> Export CSV</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-title"><i class="fa-solid fa-route" style="color:var(--green);margin-right:6px"></i> Distance History</div>
+          <div class="export-desc">Raw position history for all trackers in the last 24 hours.</div>
+          <div class="export-actions">
+            <button class="btn btn-primary" onclick="exportDistance()"><i class="fa-solid fa-download"></i> Export CSV</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <div class="export-title"><i class="fa-solid fa-file-lines" style="color:#a78bfa;margin-right:6px"></i> Full Report</div>
+          <div class="export-desc">Comprehensive export: all trackers with distance, alerts, and time range.</div>
+          <div class="export-actions">
+            <div style="display:flex;gap:8px;flex:1">
+              <select class="control-input" id="exportDays" style="flex:1">
+                <option value="7">Last 7 days</option>
+                <option value="14">Last 14 days</option>
+                <option value="30" selected>Last 30 days</option>
+              </select>
+              <button class="btn btn-primary" onclick="exportFull()"><i class="fa-solid fa-download"></i> Export</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script>
+'use strict';
+let alertChart = null;
+let breakdownChart = null;
+let currentOverviewData = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  await loadUserInfo();
+  initDateDefaults();
+  await loadOverview();
+  setActiveNav();
+});
+
+async function loadUserInfo() {
+  const res = await API.get('/api/auth/me');
+  const data = await API.json(res);
+  if (!res || !res.ok) { window.location.href = '/login'; return; }
+  const u = data.user;
+  document.getElementById('userAvatar').textContent = (u.display_name || u.username || u.email || 'A').charAt(0).toUpperCase();
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('exportDate').value = today;
+}
+
+function initDateDefaults() {
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  document.getElementById('endDate').value = fmt(today);
+  const start = new Date(today);
+  start.setDate(start.getDate() - 30);
+  document.getElementById('startDate').value = fmt(start);
+}
+
+function setActiveNav() {
+  document.querySelectorAll('.reports-nav-item').forEach(el => {
+    if (el.dataset.tab) el.classList.remove('active');
+  });
+  document.querySelector('.reports-nav-item[data-tab="overview"]')?.classList.add('active');
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn, .reports-nav-item[data-tab]').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+  document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+  const target = document.getElementById('tab-' + tab);
+  if (target) target.style.display = 'block';
+  if (tab === 'activity') loadActivity();
+  if (tab === 'alerts') loadBreakdown();
+}
+
+function changePeriod(days) {
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  document.getElementById('endDate').value = fmt(today);
+  const start = new Date(today);
+  start.setDate(start.getDate() - parseInt(days));
+  document.getElementById('startDate').value = fmt(start);
+  loadOverview();
+}
+
+// ── Overview ─────────────────────────────────────────────────────────
+async function loadOverview() {
+  const start = document.getElementById('startDate').value;
+  const end = document.getElementById('endDate').value;
+  const url = `/api/reports/summary?start=${start}&end=${end}`;
+  const res = await API.get(url);
+  const data = await API.json(res);
+  if (!res || !res.ok) { console.error(data); return; }
+  currentOverviewData = data;
+
+  const t = data.totals;
+  document.getElementById('kpiTrackers').textContent = t.total_trackers;
+  document.getElementById('kpiActive').textContent = t.active_trackers;
+  document.getElementById('kpiAlerts').textContent = t.total_alerts;
+  document.getElementById('kpiResponse').textContent = t.avg_response_minutes != null ? t.avg_response_minutes : '—';
+  document.getElementById('kpiUnresolved').textContent = t.unresolved_alerts;
+  document.getElementById('kpiResolved').textContent = t.acknowledged_alerts;
+
+  renderAlertChart(data.alert_series);
+}
+
+function renderAlertChart(series) {
+  const ctx = document.getElementById('alertChart');
+  if (!ctx) return;
+  if (alertChart) alertChart.destroy();
+  alertChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: series.map(d => d.date),
+      datasets: [{
+        label: 'Alerts',
+        data: series.map(d => d.count),
+        backgroundColor: 'rgba(0, 229, 255, 0.5)',
+        borderColor: '#00e5ff',
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(8,15,30,0.95)',
+          borderColor: '#00e5ff',
+          borderWidth: 1,
+          titleColor: '#e8f4f8',
+          bodyColor: '#8ba3b8',
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#4a6070', font: { size: 11, family: "'JetBrains Mono'" }, maxTicksLimit: 15 }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#4a6070', font: { size: 11, family: "'JetBrains Mono'" }, stepSize: 1 },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+}
+
+function downloadChartCSV() {
+  if (!currentOverviewData) return;
+  const rows = [['date', 'alert_count']];
+  for (const d of currentOverviewData.alert_series) {
+    rows.push([d.date, d.count]);
+  }
+  downloadCSV(rows, 'alert_activity.csv');
+}
+
+// ── Activity ─────────────────────────────────────────────────────────
+async function loadActivity() {
+  const days = document.getElementById('activityDays').value;
+  const tbody = document.getElementById('activityTable');
+  tbody.innerHTML = `<tr><td colspan="7" class="loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading…</td></tr>`;
+  const res = await API.get(`/api/reports/tracker-activity?days=${days}`);
+  const data = await API.json(res);
+  if (!res || !res.ok) { tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Failed to load data</td></tr>`; return; }
+  const trackers = data.trackers || [];
+  if (!trackers.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No activity data for this period</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = trackers.map(t => {
+    const first = t.first_seen ? fmtDT(t.first_seen) : '—';
+    const last = t.last_seen ? fmtDT(t.last_seen) : '—';
+    const dist = t.distance_m > 1000
+      ? `${(t.distance_m / 1000).toFixed(1)} km`
+      : `${t.distance_m.toFixed(1)} m`;
+    return `<tr>
+      <td><span style="font-weight:600">${t.assigned_name || t.hardware_id}</span><br><span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">${t.hardware_id}</span></td>
+      <td><span class="tag tag-cyan">${t.category}</span></td>
+      <td class="mono">${t.position_count.toLocaleString()}</td>
+      <td class="mono" style="color:var(--green)">${dist}</td>
+      <td class="mono">${t.alert_count > 0 ? `<span style="color:var(--red)">${t.alert_count}</span>` : '0'}</td>
+      <td style="font-size:11px;color:var(--text-muted)">${first}</td>
+      <td style="font-size:11px;color:var(--text-muted)">${last}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Alert Breakdown ─────────────────────────────────────────────────
+const BREAKDOWN_COLORS = [
+  '#ff4444','#00e5ff','#69ff47','#ffdd57','#a78bfa','#ff6b35','#e879f9','#34d399','#fbbf24','#60a5fa'
+];
+
+async function loadBreakdown() {
+  const days = document.getElementById('alertDays').value;
+  const res = await API.get(`/api/reports/alert-breakdown?days=${days}`);
+  const data = await API.json(res);
+  if (!res || !res.ok) return;
+  const breakdown = data.breakdown || [];
+  if (!breakdown.length) {
+    document.getElementById('breakdownList').innerHTML = '<div class="table-empty">No alerts in this period</div>';
+    if (breakdownChart) { breakdownChart.destroy(); breakdownChart = null; }
+    return;
+  }
+  const max = Math.max(...breakdown.map(b => b.count));
+  const colors = BREAKDOWN_COLORS;
+
+  document.getElementById('breakdownList').innerHTML = breakdown.map((b, i) => {
+    const pct = max > 0 ? (b.count / max * 100).toFixed(1) : 0;
+    const color = colors[i % colors.length];
+    return `<div class="breakdown-item">
+      <span class="breakdown-label">${b.type.replace(/_/g, ' ')}</span>
+      <div class="breakdown-bar-wrap">
+        <div class="breakdown-bar" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <span class="breakdown-count" style="color:${color}">${b.count}</span>
+    </div>`;
+  }).join('');
+
+  const ctx = document.getElementById('breakdownDoughnut');
+  if (breakdownChart) breakdownChart.destroy();
+  breakdownChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: breakdown.map(b => b.type.replace(/_/g, ' ')),
+      datasets: [{
+        data: breakdown.map(b => b.count),
+        backgroundColor: colors.slice(0, breakdown.length),
+        borderWidth: 0,
+        hoverOffset: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { color: '#8ba3b8', font: { size: 11, family: "'JetBrains Mono'" }, boxWidth: 12, padding: 8 }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(8,15,30,0.95)',
+          borderColor: '#00e5ff',
+          borderWidth: 1,
+          titleColor: '#e8f4f8',
+          bodyColor: '#8ba3b8',
+        }
+      },
+      cutout: '60%',
+    }
+  });
+}
+
+// ── Exports ──────────────────────────────────────────────────────────
+function doDownload(url, filename) {
+  fetch(url, { headers: { 'Authorization': `Bearer ${localStorage.getItem('holo_access_token')}` } })
+    .then(r => r.blob())
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(err => alert('Export failed: ' + err));
+}
+
+function exportDaily() {
+  const date = document.getElementById('exportDate').value;
+  if (!date) { alert('Please select a date'); return; }
+  doDownload(`/api/reports/daily?date=${date}`, `daily_summary_${date}.csv`);
+}
+
+function exportBattery() {
+  doDownload('/api/reports/battery', 'battery_report.csv');
+}
+
+function exportDistance() {
+  doDownload('/api/reports/distance', 'distance_history.csv');
+}
+
+function exportFull() {
+  const days = document.getElementById('exportDays').value;
+  doDownload(`/api/reports/full-export?days=${days}`, `full_report_${new Date().toISOString().split('T')[0]}.csv`);
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+function fmtDT(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function downloadCSV(rows, filename) {
+  const text = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([text], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');
+});
+function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
+function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+</script>
 </body>
 </html>
