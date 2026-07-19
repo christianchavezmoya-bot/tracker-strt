@@ -25,11 +25,18 @@ def deliver_due_schedules():
             if (now - last).total_seconds() < 3500:
                 continue
         try:
-            _deliver_one(row)
-            row.last_run_at = now
+            deliver_schedule_now(row)
             db.session.commit()
         except Exception as e:
             logger.error("Report schedule %s failed: %s", row.id, e)
+
+
+def deliver_schedule_now(row) -> None:
+    """Force-deliver one schedule and stamp last_run_at."""
+    from backend.extensions import db
+    _deliver_one(row)
+    row.last_run_at = datetime.now(timezone.utc)
+    db.session.commit()
 
 
 def _cron_due(cron: str, now: datetime) -> bool:
@@ -73,7 +80,20 @@ def build_report(report_type: str, fmt: str = "csv"):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
     if (fmt or "csv").lower() == "pdf":
         from backend.services.pdf_report import rows_to_pdf
-        pdf = rows_to_pdf(f"HOLO-RTLS {report_type} report", rows)
+        site = None
+        try:
+            from backend.models import Setting
+            row = Setting.query.filter_by(key="site_name").first()
+            if row and row.value:
+                site = row.value
+        except Exception:
+            pass
+        pdf = rows_to_pdf(
+            f"HOLO-RTLS {report_type.title()} Report",
+            rows,
+            subtitle=f"Report type: {report_type}",
+            site_name=site,
+        )
         return pdf, f"{report_type}_{stamp}.pdf", "application/pdf"
     buf = io.StringIO()
     if rows:

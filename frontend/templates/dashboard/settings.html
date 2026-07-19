@@ -112,7 +112,9 @@
             <a class="btn btn-secondary" href="/?mode=setup"><i class="fa-solid fa-wrench"></i> Map Setup</a>
             <a class="btn btn-ghost" href="/tracking?legacy=1"><i class="fa-solid fa-satellite-dish"></i> Scanner lab</a>
             <a class="btn btn-ghost" href="/hardware"><i class="fa-solid fa-microchip"></i> Hardware</a>
+            <button type="button" class="btn btn-ghost" onclick="enableDesktopAlerts()"><i class="fa-solid fa-bell"></i> Enable desktop alerts</button>
           </div>
+          <p id="notifPermStatus" style="font-size:12px;color:var(--text-muted);margin-top:10px"></p>
         </div>
       </div>
     </div>
@@ -429,6 +431,31 @@ async function loadLocationCore() {
     ).join('');
   } catch (e) {
     stats.textContent = 'Network error';
+  }
+  updateNotifPermStatus();
+}
+
+function updateNotifPermStatus() {
+  const el = document.getElementById('notifPermStatus');
+  if (!el) return;
+  if (!('Notification' in window)) {
+    el.textContent = 'Desktop notifications not supported in this browser.';
+    return;
+  }
+  el.textContent = 'Notification permission: ' + Notification.permission;
+}
+
+async function enableDesktopAlerts() {
+  if (!('Notification' in window)) {
+    alert('Notifications not supported');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  updateNotifPermStatus();
+  if (perm === 'granted') {
+    try {
+      new Notification('HOLO-RTLS', { body: 'Desktop alerts enabled for this browser.', icon: '/static/assets/icon-192.png' });
+    } catch (e) {}
   }
 }
 

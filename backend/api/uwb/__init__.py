@@ -21,6 +21,20 @@ from uwb_serial_reader import create_mock_reader
 
 uwb_bp = Blueprint("uwb", __name__, url_prefix="/api/uwb")
 
+# Set HOLO_ENABLE_UWB_DEMO=0 to hard-disable legacy demo (410 Gone)
+_UWB_ENABLED = os.getenv("HOLO_ENABLE_UWB_DEMO", "1").strip() not in ("0", "false", "False", "no")
+
+
+@uwb_bp.before_request
+def _uwb_gate():
+    if not _UWB_ENABLED:
+        return jsonify({
+            "error": "gone",
+            "deprecated": True,
+            "message": "Legacy /api/uwb demo disabled. Use /api/positioning/*",
+            "successor": "/api/positioning/live",
+        }), 410
+
 # ── Singleton UWB engine ──────────────────────────────────────────────────────
 _uwb_pos = UWBPositioning(num_anchors=4)
 _uwb_pos.add_anchor("anchor_0", 0.0, 0.0, 0.0)

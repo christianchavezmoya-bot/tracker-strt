@@ -28,6 +28,28 @@
   --topbar-h: 56px;
 }
 
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100000;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: #041416;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  border-radius: 0 0 8px 0;
+}
+.skip-link:focus {
+  left: 0;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 html, body.shell-page {
   height: 100%;
   margin: 0;

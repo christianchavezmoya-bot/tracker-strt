@@ -134,3 +134,35 @@ def test_settings_status_has_bridge_flag(client, auth_headers):
     assert "bridge_online" in data
     assert "ingestion_running" in data
     assert data.get("ok") is True
+
+
+def test_pdf_bytes_are_valid_pdf():
+    from backend.services.pdf_report import rows_to_pdf
+    pdf = rows_to_pdf(
+        "Smoke Report",
+        [{"id": 1, "name": "Tag A", "battery": 88}],
+        subtitle="unit test",
+        site_name="Test Site",
+    )
+    assert pdf.startswith(b"%PDF")
+    assert b"%%EOF" in pdf
+    assert b"HOLO-RTLS" in pdf
+
+
+def test_create_report_schedule(client, auth_headers):
+    res = client.post(
+        "/api/reports/schedules",
+        headers=auth_headers,
+        json={
+            "name": "Smoke Daily",
+            "recipients": "ops@example.com",
+            "report_type": "summary",
+            "format": "pdf",
+            "cron": "0 7 * * *",
+        },
+    )
+    assert res.status_code in (200, 201), res.get_data(as_text=True)
+    data = res.get_json() or {}
+    sch = data.get("schedule") or data
+    assert sch.get("name") == "Smoke Daily"
+    assert sch.get("format") == "pdf"

@@ -353,7 +353,7 @@
           <h1 class="page-title"><i class="fa-solid fa-clock" style="color:var(--cyan)"></i> Scheduled Email Reports</h1>
           <p class="page-subtitle">Deliver CSV/PDF reports to operators on a cron schedule</p>
         </div>
-        <button class="btn btn-primary" onclick="createSchedule()"><i class="fa-solid fa-plus"></i> Add schedule</button>
+        <button class="btn btn-primary" type="button" onclick="openScheduleModal()"><i class="fa-solid fa-plus"></i> Add schedule</button>
       </div>
       <div class="data-table-wrap">
         <table class="data-table">
@@ -364,6 +364,54 @@
     </div>
 
   </main>
+</div>
+
+<!-- Schedule modal -->
+<div class="modal-overlay" id="scheduleModal" style="display:none" onclick="if(event.target===this)closeScheduleModal()">
+  <div class="hw-modal" style="max-width:480px;width:92vw;background:var(--bg-card,#0d1526);border:1px solid var(--border);border-radius:12px;padding:0" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border)">
+      <h3 style="margin:0;font-size:16px">Add report schedule</h3>
+      <button type="button" class="icon-btn" onclick="closeScheduleModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="scheduleForm" style="padding:18px;display:flex;flex-direction:column;gap:12px">
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted)">
+        Name
+        <input id="schName" required class="control-input" value="Daily summary" style="width:100%">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted)">
+        Recipients (comma-separated emails)
+        <input id="schRecipients" required class="control-input" placeholder="ops@example.com" style="width:100%">
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted)">
+          Report type
+          <select id="schType" class="control-input">
+            <option value="summary">summary</option>
+            <option value="battery">battery</option>
+            <option value="dwell">dwell</option>
+            <option value="full">full</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted)">
+          Format
+          <select id="schFormat" class="control-input">
+            <option value="csv">csv</option>
+            <option value="pdf">pdf</option>
+          </select>
+        </label>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted)">
+        Cron (minute hour * * *)
+        <input id="schCron" class="control-input" value="0 6 * * *" style="width:100%;font-family:var(--font-mono)">
+        <span style="font-size:11px;opacity:.7">Example: 0 6 * * * = daily 06:00 UTC</span>
+      </label>
+      <p id="schError" style="color:var(--red);font-size:12px;display:none"></p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button type="button" class="btn btn-secondary" onclick="closeScheduleModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="schSaveBtn"><i class="fa-solid fa-check"></i> Save</button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -680,18 +728,58 @@ async function loadSchedules() {
     <td>${s.format}</td>
     <td>${s.recipients || '—'}</td>
     <td>${s.last_run_at ? fmtDT(s.last_run_at) : '—'}</td>
-    <td><button class="btn btn-danger" onclick="deleteSchedule(${s.id})">Delete</button></td>
+    <td style="display:flex;gap:6px">
+      <button class="btn btn-secondary btn-sm" type="button" onclick="runSchedule(${s.id})" title="Run now"><i class="fa-solid fa-play"></i></button>
+      <button class="btn btn-danger btn-sm" type="button" onclick="deleteSchedule(${s.id})">Delete</button>
+    </td>
   </tr>`).join('');
 }
 
-async function createSchedule() {
-  const name = prompt('Schedule name', 'Daily summary');
-  if (!name) return;
-  const recipients = prompt('Recipient emails (comma-separated)', API.getUser()?.email || '');
-  const report_type = prompt('Type: summary|battery|dwell|full', 'summary') || 'summary';
-  const format = prompt('Format: csv|pdf', 'csv') || 'csv';
-  const cron = prompt('Cron (m h * * *)', '0 6 * * *') || '0 6 * * *';
-  await API.post('/reports/schedules', { name, recipients, report_type, format, cron });
+function openScheduleModal() {
+  const email = (API.getUser() && API.getUser().email) || '';
+  document.getElementById('schName').value = 'Daily summary';
+  document.getElementById('schRecipients').value = email;
+  document.getElementById('schType').value = 'summary';
+  document.getElementById('schFormat').value = 'csv';
+  document.getElementById('schCron').value = '0 6 * * *';
+  document.getElementById('schError').style.display = 'none';
+  document.getElementById('scheduleModal').style.display = 'flex';
+  document.getElementById('schName').focus();
+}
+function closeScheduleModal() {
+  document.getElementById('scheduleModal').style.display = 'none';
+}
+
+document.getElementById('scheduleForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = document.getElementById('schError');
+  err.style.display = 'none';
+  const btn = document.getElementById('schSaveBtn');
+  btn.disabled = true;
+  const body = {
+    name: document.getElementById('schName').value.trim(),
+    recipients: document.getElementById('schRecipients').value.trim(),
+    report_type: document.getElementById('schType').value,
+    format: document.getElementById('schFormat').value,
+    cron: document.getElementById('schCron').value.trim() || '0 6 * * *',
+  };
+  const res = await API.post('/reports/schedules', body);
+  const data = await API.json(res);
+  btn.disabled = false;
+  if (!res || !res.ok) {
+    err.textContent = (data && data.error) || 'Save failed';
+    err.style.display = 'block';
+    return;
+  }
+  closeScheduleModal();
+  loadSchedules();
+});
+
+async function runSchedule(id) {
+  const res = await API.post('/reports/schedules/' + id + '/run', {});
+  const data = await API.json(res);
+  if (res && res.ok) alert('Report delivery triggered');
+  else alert((data && data.error) || 'Run failed — check SMTP settings');
   loadSchedules();
 }
 

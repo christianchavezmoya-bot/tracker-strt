@@ -51,6 +51,15 @@ export BACKUP_ENCRYPT_KEY='long-random-passphrase'
 
 Backups are written as `*.db.enc` (Fernet). Restore requires the same key and the `cryptography` package.
 
+## Legacy UWB demo
+
+```bash
+# Hard-disable deprecated /api/uwb (returns 410)
+export HOLO_ENABLE_UWB_DEMO=0
+```
+
+Default is enabled for lab compatibility. Prefer `/api/positioning/*`.
+
 ## Checklist
 
 | Item | Dev (SQLite) | Prod (Postgres) |

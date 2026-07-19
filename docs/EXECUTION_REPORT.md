@@ -2,36 +2,32 @@
 
 **Branch:** `cursor/holo-rtls-execute-plan-af22` (not merged to `master`)  
 **Date:** 2026-07-19  
-**Tests:** `pytest` → **80 passed**
+**Tests:** `pytest` → **82 passed**
 
 ---
 
 ## This pass
 
-### Functional fixes
-- Live Map system KPI uses `/api/stream/status` + `ingestion_running` (was always OFFLINE via missing `bridge_online`)
-- `/api/settings/status` now returns `bridge_online` / `ingestion_running`
-- Public `/health` + `/api/health` probes
-- Password reset email includes clickable `/reset-password?token=…` URL
-- Alert deep-link `?alert=` toast on Live Map
+### Reports
+- Schedule create UI is a **modal form** (no `prompt()`)
+- Manual **Run now** for schedules (`POST /api/reports/schedules/:id/run`)
+- Branded multi-page PDF (HOLO-RTLS header, site name, metadata, confidential footer)
 
-### Map-native editing
-- Click existing **zone** → edit form (PATCH + delete)
-- Click existing **section** → edit name/restricted/color
-- Operators get `DELETE_ZONE`
+### Location Core / legacy
+- `HOLO_ENABLE_UWB_DEMO=0` hard-disables `/api/uwb` with **410 Gone**
 
-### Settings / UX
-- **Proximity Alert (m)** in Alert Thresholds (`proximity_meters`)
-- Live Map zero-tracker empty state with CTAs
-- backup/reports/search drop Inter → IBM Plex design tokens
+### Shell / a11y / PWA
+- Skip link + `:focus-visible` in shell
+- Map toolbar `aria-label`s
+- SW registered once from `base.html`; cache bumped to v2
+- Settings → Location Core: **Enable desktop alerts** (Notification API)
 
 ---
 
 ## Still intentionally thin / later
-- Full remove of `/api/uwb` + `/tracking` templates
-- PWA push subscription (handler only)
-- Playwright / stress / a11y suite
-- Branded PDF polish; schedule UI without `prompt()`
+- Delete `/tracking` template + UWB code entirely (env gate is enough for prod)
+- Full Web Push (VAPID) server + subscribe
+- Playwright / stress suite
 - LLM / Unity / multi-tenant (non-goals)
 
 Default login: `admin@holo-rtls.local` / `ChangeMe123!`

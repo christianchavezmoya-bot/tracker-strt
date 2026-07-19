@@ -14,20 +14,26 @@
   {% block head %}{% endblock %}
 </head>
 <body class="shell-page {% block body_class %}{% endblock %}">
+<a class="skip-link" href="#main-content">Skip to content</a>
 <header class="topbar shell-topbar">
   <div class="topbar-left">
-    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <a href="/" class="brand"><div class="brand-icon" aria-hidden="true">◈</div><span class="brand-name">HOLO-RTLS</span></a>
     <div class="breadcrumb">{% block breadcrumb %}{% endblock %}</div>
   </div>
   <div class="topbar-right">
     {% block topbar_actions %}{% endblock %}
   </div>
 </header>
-<main class="shell-main">
+<main class="shell-main" id="main-content" tabindex="-1">
   {% block content %}{% endblock %}
 </main>
 <script src="/static/js/api.js"></script>
 <script src="/static/js/nav.js" defer></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/static/sw.js').catch(() => {}));
+}
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

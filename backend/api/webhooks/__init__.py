@@ -191,6 +191,20 @@ def update_schedule(sid):
     return jsonify({"schedule": row.to_dict()})
 
 
+@schedules_bp.route("/<int:sid>/run", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.GENERATE_REPORT)
+def run_schedule_now(sid):
+    """Deliver a schedule immediately (manual run)."""
+    from backend.services.report_delivery import deliver_schedule_now
+    row = ReportSchedule.query.get_or_404(sid)
+    try:
+        deliver_schedule_now(row)
+        return jsonify({"message": "Report delivered", "schedule": row.to_dict()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @schedules_bp.route("/<int:sid>", methods=["DELETE"])
 @jwt_required()
 @require_permission(Permission.GENERATE_REPORT)

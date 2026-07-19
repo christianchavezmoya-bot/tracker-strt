@@ -203,33 +203,33 @@
     </div>
 
     <!-- Map Toolbar -->
-    <div class="map-toolbar">
-      <button class="tool-btn" onclick="toggleFullscreen()" title="Fullscreen">
-        <i class="fa-regular fa-expand"></i>
+    <div class="map-toolbar" role="toolbar" aria-label="Map tools">
+      <button class="tool-btn" onclick="toggleFullscreen()" title="Fullscreen" aria-label="Fullscreen">
+        <i class="fa-regular fa-expand" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn active" onclick="toggleLayers()" title="Layers" id="layersBtn">
-        <i class="fa-solid fa-layer-group"></i>
+      <button class="tool-btn active" onclick="toggleLayers()" title="Layers" id="layersBtn" aria-label="Toggle layers">
+        <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn" onclick="resetCamera()" title="Reset View">
-        <i class="fa-solid fa-crosshairs"></i>
+      <button class="tool-btn" onclick="resetCamera()" title="Reset View" aria-label="Reset view">
+        <i class="fa-solid fa-crosshairs" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn" onclick="toggleHeatmap()" title="Heatmap" id="heatmapBtn">
-        <i class="fa-solid fa-fire"></i>
+      <button class="tool-btn" onclick="toggleHeatmap()" title="Heatmap" id="heatmapBtn" aria-label="Toggle heatmap">
+        <i class="fa-solid fa-fire" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn" onclick="window.enterNodePlacementMode()" title="Place Nodes" id="nodePlacementBtn">
-        <i class="fa-solid fa-microchip"></i>
+      <button class="tool-btn" onclick="window.enterNodePlacementMode()" title="Place Nodes" id="nodePlacementBtn" aria-label="Place anchors">
+        <i class="fa-solid fa-microchip" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn" onclick="window.enterZoneDrawMode && window.enterZoneDrawMode()" title="Draw circle zone" id="zoneDrawBtn">
-        <i class="fa-solid fa-circle"></i>
+      <button class="tool-btn" onclick="window.enterZoneDrawMode && window.enterZoneDrawMode()" title="Draw circle zone" id="zoneDrawBtn" aria-label="Draw circle zone">
+        <i class="fa-solid fa-circle" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn" onclick="window.enterSectionDrawMode && window.enterSectionDrawMode()" title="Draw section polygon" id="sectionDrawBtn">
-        <i class="fa-solid fa-draw-polygon"></i>
+      <button class="tool-btn" onclick="window.enterSectionDrawMode && window.enterSectionDrawMode()" title="Draw section polygon" id="sectionDrawBtn" aria-label="Draw section polygon">
+        <i class="fa-solid fa-draw-polygon" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn" onclick="window.toggleCoverageLayer && window.toggleCoverageLayer()" title="Coverage rings" id="coverageBtn">
-        <i class="fa-solid fa-circle-nodes"></i>
+      <button class="tool-btn" onclick="window.toggleCoverageLayer && window.toggleCoverageLayer()" title="Coverage rings" id="coverageBtn" aria-label="Toggle coverage">
+        <i class="fa-solid fa-circle-nodes" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn" onclick="focusSelectedTracker3D()" title="Focus Selected">
-        <i class="fa-solid fa-bullseye"></i>
+      <button class="tool-btn" onclick="focusSelectedTracker3D()" title="Focus Selected" aria-label="Focus selected tracker">
+        <i class="fa-solid fa-bullseye" aria-hidden="true"></i>
       </button>
     </div>
 
