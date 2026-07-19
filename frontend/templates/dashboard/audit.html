@@ -304,15 +304,6 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function showToast(msg) {
-  const t = document.createElement('div');
-  t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;
-    background:rgba(8,15,30,0.95);border:1px solid var(--cyan);color:var(--cyan);
-    border-radius:8px;font-size:13px;z-index:9999;animation:slideUp 0.2s`;
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => { t.style.opacity='0'; setTimeout(() => t.remove(), 300); }, 3000);
-}
 
 document.addEventListener('click', e => {
   if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');

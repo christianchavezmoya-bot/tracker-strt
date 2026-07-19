@@ -333,8 +333,8 @@ document.getElementById('importFile').onchange = async (e) => {
   const text = await file.text();
   const res = await API.post('/trackers/import', { csv: text });
   const data = await res.json();
-  if (res.ok) alert(`Imported ${data.created} (skipped ${data.skipped})`);
-  else alert(data.error || 'Import failed');
+  if (res.ok) showToast(`Imported ${data.created} (skipped ${data.skipped})`, 'success');
+  else showToast(data.error || 'Import failed', 'error');
   e.target.value = '';
   loadTrackers();
 };

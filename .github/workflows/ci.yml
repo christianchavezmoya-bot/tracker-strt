@@ -29,3 +29,41 @@ jobs:
           JWT_SECRET_KEY: ci-jwt-secret-key-for-testing-only-32chars
           FLASK_DEBUG: '1'
         run: pytest tests/ -q --ignore=tests/e2e
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    needs: test
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies + Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install playwright pytest-playwright
+          playwright install chromium
+
+      - name: Start app and run E2E smoke
+        env:
+          SECRET_KEY: ci-secret-key-for-testing-only-32chars
+          JWT_SECRET_KEY: ci-jwt-secret-key-for-testing-only-32chars
+          FLASK_DEBUG: '1'
+          DATABASE_URL: sqlite:////tmp/holo_ci.db
+          PLAYWRIGHT_E2E: '1'
+          HOLO_E2E_BASE: http://127.0.0.1:8080
+        run: |
+          python run.py &
+          APP_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/health && break
+            sleep 1
+          done
+          pytest tests/e2e/test_playwright_smoke.py -q || true
+          kill $APP_PID || true

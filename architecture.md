@@ -1,7 +1,7 @@
 # HOLO-RTLS — Indoor Real-Time Location System
 ## Architecture Documentation
 
-> **Canonical product (this repo):** Flask + Jinja web RTLS — see `docs/MASTER_PLAN_ABOVE_MARKET.md` and `docs/EXECUTION_REPORT.md`.  
+> **Canonical product (this repo):** Flask + Jinja web RTLS — see **`docs/CURRENT_SYSTEM.md`**, `docs/MASTER_PLAN_ABOVE_MARKET.md`, and `docs/EXECUTION_REPORT.md`.  
 > **Below:** Historical / aspirational Unity holographic R&D notes. Treat Unity claims as **not** the current shipping stack.
 
 > **Version:** 1.0 | **Engine (aspirational):** Unity 3D (URP) | **Target (R&D):** 300+ Devices @ 60 FPS

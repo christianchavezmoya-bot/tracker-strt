@@ -118,7 +118,7 @@ async function rotateKey(id) {
 async function testHook(id) {
   const res = await API.post('/webhooks/' + id + '/test', {});
   const data = await res.json();
-  alert(data.ok ? 'Delivery OK (' + data.status + ')' : 'Delivery failed: ' + data.status);
+  showToast(data.ok ? 'Delivery OK (' + data.status + ')' : 'Delivery failed: ' + data.status, data.ok ? 'success' : 'error');
   loadHooks();
 }
 async function delHook(id) {

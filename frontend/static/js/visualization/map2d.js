@@ -281,7 +281,7 @@ function enterCalibrationMode() {
         real_y: parseFloat(document.getElementById('calY2').value),
       };
       const p1 = _calibrationPoints[0], p2 = _calibrationPoints[1];
-      if (!p1._px || !p2._px) { alert('Click both points on the map before saving.'); return; }
+      if (!p1._px || !p2._px) { showToast('Click both points on the map before saving.', 'error'); return; }
       p1.pixel_x = p1._px; p1.pixel_y = p1._py;
       p2.pixel_x = p2._px; p2.pixel_y = p2._py;
       computeAffineTransform(_calibrationPoints);
@@ -336,7 +336,7 @@ async function loadUnplacedNodes() {
 
 async function enterNodePlacementMode() {
   if (!_isCalibrated) {
-    alert('Please calibrate the map first (2 reference points).');
+    showToast('Please calibrate the map first (2 reference points).', 'error');
     enterCalibrationMode();
     return;
   }
@@ -351,7 +351,7 @@ async function enterNodePlacementMode() {
   await loadUnplacedNodes();
 
   if (_unplacedNodes.length === 0) {
-    alert('No unplaced nodes found.\n\nGo to Hardware Setup → Anchors / Nodes → Add Node to register a node first.');
+    showToast('No unplaced nodes found.\n\nGo to Hardware Setup → Anchors / Nodes → Add Node to register a node first.', 'error');
     _isNodePlacementMode = false;
     _mapMode = 'normal';
     return;
@@ -544,12 +544,12 @@ function showNodeForm(realX, realY, pixelX, pixelY) {
         }
       } else {
         const err = await API.json(res);
-        alert('Failed: ' + (err?.error || res.statusText));
+        showToast('Failed: ' + (err?.error || res.statusText), 'error');
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Position';
       }
     } catch (e) {
-      alert('Error: ' + e.message);
+      showToast('Error: ' + e.message, 'error');
       btn.disabled = false;
       btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Position';
     }

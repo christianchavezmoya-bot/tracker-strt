@@ -2,35 +2,34 @@
 
 **Branch:** `cursor/holo-rtls-execute-plan-af22` (not merged to `master`)  
 **Date:** 2026-07-19  
-**Tests:** `pytest` → **95 passed** (3 optional Playwright E2E skipped)
+**Tests:** `pytest` → **96 passed** (3 optional Playwright E2E skipped locally)
 
 ---
 
 ## This pass
 
-### UX polish (Phase B §2.3 / §4.1)
-- **Global `showToast`** in `api.js` — all shell/admin pages share toast notifications
-- **Settings**: replaced all `alert()` calls with toasts (floor plans, 2FA, logo, save)
-- **Remember me** works: checked → `localStorage`; unchecked → `sessionStorage` (cleared on browser close)
+### UX — eliminate `alert()` (Phase B §2.3)
+- Replaced **all `alert()` calls** in admin templates and `map2d.js` with global **`showToast`**
+- Removed duplicate local `showToast` implementations (users, zones, backup, nodes, hardware, audit)
+- New regression test: `tests/test_ui_no_alerts.py`
 
-### Reports (Phase C R07)
-- PDF **summary bar chart** (ASCII `#` bars for metric rows in summary reports)
+### CI (Phase D)
+- Optional **Playwright E2E job** in GitHub Actions (`e2e-smoke`, `continue-on-error`)
 
-### Documentation (Phase D §10)
-- **`docs/CURRENT_SYSTEM.md`** — canonical description of the shipped web product (supersedes Unity-era docs for ops)
+### Docs
+- `architecture.md` now points to **`docs/CURRENT_SYSTEM.md`**
 
 ---
 
 ## Prior passes (summary)
-- Web Push VAPID, proximity map viz, integrations tab, CI workflow, stress tests
-- Location Core, shell, trackers, muster, API keys, branded PDF, login reset banner
+- Global toast, remember-me, PDF bar chart, Web Push VAPID, proximity viz, CI pytest job
+- Location Core, shell, trackers, muster, integrations, stress tests
 
 ---
 
 ## Still intentionally thin / later
-- Playwright in CI (optional `PLAYWRIGHT_E2E=1`)
-- Delete `/tracking` template entirely
+- Delete `/tracking` template entirely (legacy lab mode kept)
 - Full a11y audit suite
-- Remaining `alert()` on hardware/zones/users pages
+- Playwright E2E required (currently optional in CI)
 
 Default login: `admin@holo-rtls.local` / `ChangeMe123!`
