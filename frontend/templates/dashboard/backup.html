@@ -178,6 +178,18 @@
       </div>
     </div>
 
+    <div class="summary-card" style="margin-bottom:16px;padding:14px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div>
+        <div class="sc-label">SCHEDULED BACKUP</div>
+        <div id="schedInfo" style="font-size:13px;color:var(--text-secondary)">Loading…</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px">
+        Retention
+        <input type="number" id="retentionInput" min="1" max="100" value="10" style="width:64px;padding:6px 8px;background:var(--bg-input,#0b1220);border:1px solid var(--border);color:inherit;border-radius:6px">
+      </label>
+      <button class="btn btn-secondary" onclick="saveRetention()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+    </div>
+
     <!-- Summary -->
     <div class="summary-grid">
       <div class="summary-card">
@@ -263,6 +275,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
   await loadUserInfo();
   await loadBackups();
+  await loadSchedule();
 
   // Confirm input watcher
   const inp = document.getElementById('restoreConfirmInput');
@@ -270,6 +283,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('confirmRestoreBtn').disabled = inp.value !== 'RESTORE';
   });
 });
+
+async function loadSchedule() {
+  try {
+    const res = await API.get('/backup/schedule');
+    const data = await API.json(res);
+    const el = document.getElementById('schedInfo');
+    if (el) el.textContent = (data.description || 'Daily backup') + ` · keep ${data.retention}`;
+    const inp = document.getElementById('retentionInput');
+    if (inp && data.retention) inp.value = data.retention;
+  } catch (e) {}
+}
+async function saveRetention() {
+  const retention = Number(document.getElementById('retentionInput').value);
+  const res = await API.patch('/backup/schedule', { retention });
+  if (res && res.ok) { await loadSchedule(); alert('Retention saved'); }
+  else alert('Save failed');
+}
 
 async function loadUserInfo() {
   const res = await API.get('/auth/me');

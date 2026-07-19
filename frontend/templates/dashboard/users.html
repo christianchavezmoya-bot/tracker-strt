@@ -326,6 +326,8 @@ function renderUsers() {
         <div class="action-btns">
           ${u.role !== 'ADMIN' || isCurrentUser ? '' : `<button class="action-btn" onclick="openEditModal(${u.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>`}
           <button class="action-btn" onclick="openPwModal(${u.id}, '${escapeHtml(u.display_name || u.username || u.email)}')" title="Reset Password"><i class="fa-solid fa-key"></i></button>
+          <button class="action-btn" onclick="openSessionsModal(${u.id}, '${escapeHtml(u.display_name || u.username || u.email)}')" title="Sessions"><i class="fa-solid fa-laptop"></i></button>
+          ${u.is_2fa_enabled ? '<span class="role-badge" title="2FA on" style="margin-left:4px">2FA</span>' : ''}
           ${isCurrentUser ? '' : `<button class="action-btn danger" onclick="deleteUser(${u.id}, '${escapeHtml(u.display_name || u.email)}')" title="Deactivate"><i class="fa-solid fa-user-slash"></i></button>`}
         </div>
       </td>
@@ -448,6 +450,21 @@ async function resetPassword() {
   const res = await API.patch(`/users/${window._pwUserId}`, { password: pw });
   if (res && res.ok) { closePwModal(); showToast('Password reset successfully'); }
   else { const d = await API.json(res); alert('Error: ' + (d.error || res.statusText)); }
+}
+
+async function openSessionsModal(userId, name) {
+  const res = await API.get('/sessions/user/' + userId);
+  const data = await API.json(res);
+  const items = data.items || [];
+  let html = `Sessions for ${name}:\n\n`;
+  if (!items.length) html += '(none tracked)';
+  else items.forEach(s => {
+    html += `#${s.id} ${s.ip_address || '?'} ${s.is_revoked ? '[revoked]' : ''} ${(s.created_at||'').slice(0,19)}\n`;
+  });
+  const id = prompt(html + '\nEnter session id to force-revoke (or Cancel):');
+  if (!id) return;
+  await API.post('/sessions/' + id + '/revoke', {});
+  showToast('Session revoked');
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

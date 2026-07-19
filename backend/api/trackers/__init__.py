@@ -14,6 +14,9 @@ trackers_bp = Blueprint("trackers", __name__, url_prefix="/api/trackers")
 def list_trackers():
     """List all trackers with optional filters."""
     query = Tracker.query
+    include_decommissioned = request.args.get("include_decommissioned", "false").lower() == "true"
+    if not include_decommissioned and not request.args.get("asset_state"):
+        query = query.filter(Tracker.asset_state != int(AssetState.DECOMMISSIONED))
     # Filters
     if request.args.get("category"):
         query = query.filter_by(category=int(request.args["category"]))
@@ -110,12 +113,64 @@ def update_tracker(tracker_id):
 @jwt_required()
 @require_permission(Permission.MANAGE_TRACKER)
 def delete_tracker(tracker_id):
+    """Soft-delete: set DECOMMISSIONED. Pass ?hard=true for permanent delete (admin)."""
     tracker = Tracker.query.get_or_404(tracker_id)
-    AuditLog.log(action="tracker.delete", user_id=int(get_jwt_identity()),
-                 entity_type="Tracker", entity_id=tracker.id)
-    db.session.delete(tracker)
+    hard = request.args.get("hard", "false").lower() == "true"
+    if hard:
+        AuditLog.log(action="tracker.delete", user_id=int(get_jwt_identity()),
+                     entity_type="Tracker", entity_id=tracker.id)
+        db.session.delete(tracker)
+        db.session.commit()
+        return jsonify({"message": "Permanently deleted"}), 200
+    tracker.asset_state = int(AssetState.DECOMMISSIONED)
     db.session.commit()
-    return jsonify({"message": "Deleted"}), 200
+    AuditLog.log(action="tracker.decommission", user_id=int(get_jwt_identity()),
+                 entity_type="Tracker", entity_id=tracker.id)
+    return jsonify({"message": "Decommissioned", "tracker": tracker.to_dict()}), 200
+
+
+@trackers_bp.route("/import", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.MANAGE_TRACKER)
+def import_trackers_csv():
+    """Bulk CSV import. Body: { csv: "hardware_id,assigned_name,category\\n..." } or multipart file."""
+    import csv
+    import io
+    text = None
+    if request.files.get("file"):
+        text = request.files["file"].read().decode("utf-8", errors="replace")
+    else:
+        body = request.get_json(silent=True) or {}
+        text = body.get("csv") or body.get("content")
+    if not text:
+        return jsonify({"error": "Provide csv text or file"}), 400
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        return jsonify({"error": "CSV has no header row"}), 400
+    created, skipped, errors = 0, 0, []
+    for i, row in enumerate(reader, start=2):
+        hid = str(row.get("hardware_id") or row.get("mac") or "").strip()
+        if not hid:
+            errors.append(f"row {i}: missing hardware_id")
+            continue
+        if Tracker.query.filter_by(hardware_id=hid).first():
+            skipped += 1
+            continue
+        name = (row.get("assigned_name") or row.get("name") or "").strip() or None
+        cat_raw = row.get("category") or "1"
+        try:
+            cat = int(cat_raw) if str(cat_raw).isdigit() else int(DeviceCategory[str(cat_raw).upper()])
+        except Exception:
+            cat = int(DeviceCategory.PERSONNEL_TAG)
+        t = Tracker(hardware_id=hid, assigned_name=name, category=cat)
+        db.session.add(t)
+        created += 1
+    db.session.commit()
+    AuditLog.log(action="tracker.import", user_id=int(get_jwt_identity()),
+                 entity_type="Tracker", entity_id=None,
+                 details=f'{{"created": {created}, "skipped": {skipped}}}')
+    return jsonify({"created": created, "skipped": skipped, "errors": errors[:20]}), 200
 
 
 @trackers_bp.route("/<int:tracker_id>/reassign", methods=["POST"])

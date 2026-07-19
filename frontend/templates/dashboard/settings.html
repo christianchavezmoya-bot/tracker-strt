@@ -101,6 +101,22 @@
         </div>
       </div>
       <div class="settings-card" style="margin-top:16px">
+        <div class="settings-card-header"><i class="fa-solid fa-shield-halved"></i> Two-factor authentication</div>
+        <div style="padding:16px">
+          <p id="tfaStatus" style="color:var(--text-muted);margin-bottom:12px">Checking…</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-secondary" onclick="setupProfile2FA()"><i class="fa-solid fa-qrcode"></i> Setup 2FA</button>
+            <button class="btn btn-danger" onclick="disableProfile2FA()"><i class="fa-solid fa-ban"></i> Disable 2FA</button>
+          </div>
+          <div id="tfaSetupBox" style="display:none;margin-top:14px">
+            <img id="tfaQr" alt="QR" style="max-width:180px;background:#fff;padding:8px;border-radius:8px">
+            <p style="font-size:12px;color:var(--text-muted);margin:8px 0">Scan with authenticator, then confirm:</p>
+            <input class="form-input" id="tfaCode" placeholder="6-digit code" style="max-width:160px">
+            <button class="btn btn-primary" onclick="confirmProfile2FA()" style="margin-left:8px">Confirm</button>
+          </div>
+        </div>
+      </div>
+      <div class="settings-card" style="margin-top:16px">
         <div class="settings-card-header"><i class="fa-solid fa-laptop"></i> Active sessions</div>
         <div style="padding:12px">
           <button class="btn btn-secondary" style="margin-bottom:10px" onclick="revokeAllSessions()">Revoke other sessions</button>
@@ -843,6 +859,8 @@ async function loadProfileSecurity() {
     const prefs = u.notify_prefs || {};
     document.getElementById('prefEmail').checked = prefs.email_alerts !== false;
     document.getElementById('prefSms').checked = !!prefs.sms_alerts;
+    const st = document.getElementById('tfaStatus');
+    if (st) st.textContent = u.is_2fa_enabled ? '2FA is enabled on your account.' : '2FA is not enabled.';
   } catch (e) {}
   try {
     const data = await API.json(await API.get('/sessions'));
@@ -862,6 +880,31 @@ async function loadProfileSecurity() {
   } catch (e) {
     document.getElementById('sessionsBody').innerHTML = '<tr><td colspan="5">Could not load sessions</td></tr>';
   }
+}
+async function setupProfile2FA() {
+  const res = await API.post('/auth/2fa/setup', {});
+  const data = await API.json(res);
+  if (!res.ok) { alert(data.error || 'Setup failed'); return; }
+  document.getElementById('tfaSetupBox').style.display = 'block';
+  if (data.qr_code) document.getElementById('tfaQr').src = data.qr_code;
+  else if (data.qr) document.getElementById('tfaQr').src = data.qr;
+}
+async function confirmProfile2FA() {
+  const code = document.getElementById('tfaCode').value.trim();
+  const res = await API.post('/auth/2fa/confirm', { totp_code: code, code });
+  const data = await API.json(res);
+  if (res.ok) { alert('2FA enabled'); document.getElementById('tfaSetupBox').style.display = 'none'; loadProfileSecurity(); }
+  else alert(data.error || 'Confirm failed');
+}
+async function disableProfile2FA() {
+  const password = prompt('Enter your password to disable 2FA');
+  if (!password) return;
+  const code = prompt('Enter current 2FA code');
+  if (!code) return;
+  const res = await API.post('/auth/2fa/disable', { password, totp_code: code });
+  const data = await API.json(res);
+  if (res.ok) { alert('2FA disabled'); loadProfileSecurity(); }
+  else alert(data.error || 'Disable failed');
 }
 async function saveNotifyPrefs() {
   const phone = document.getElementById('prefPhone').value.trim();

@@ -194,6 +194,8 @@ def login():
     )
 
     if err:
+        if isinstance(err, dict):
+            return jsonify(err), 401
         return jsonify({"error": err}), 401
 
     if result.get("requires_2fa"):

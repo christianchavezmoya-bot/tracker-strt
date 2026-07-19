@@ -144,6 +144,34 @@ def backup_schedule_info():
     })
 
 
+@backup_bp.route("/schedule", methods=["PUT", "PATCH"])
+@jwt_required()
+@require_permission(Permission.TRIGGER_BACKUP)
+def update_backup_schedule():
+    """Update retention count (schedule time remains daily 02:30 UTC for now)."""
+    body = request.get_json() or {}
+    if "retention" in body:
+        try:
+            ret = max(1, min(100, int(body["retention"])))
+        except (TypeError, ValueError):
+            return jsonify({"error": "retention must be an integer 1–100"}), 400
+        # Persist via Setting table when available
+        try:
+            from backend.models import Setting
+            row = Setting.query.filter_by(key="backup_retention_count").first()
+            if not row:
+                row = Setting(key="backup_retention_count", value=str(ret), value_type="int",
+                              label="Backup retention count", scope=1)
+                db.session.add(row)
+            else:
+                row.value = str(ret)
+            db.session.commit()
+            config.BACKUP_RETENTION_COUNT = ret
+        except Exception:
+            config.BACKUP_RETENTION_COUNT = ret
+    return backup_schedule_info()
+
+
 @backup_bp.route("/<int:job_id>/download", methods=["GET"])
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)

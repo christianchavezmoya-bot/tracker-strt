@@ -48,7 +48,12 @@ async function handleLogin(event) {
       }
       onLoginSuccess(data);
     } else {
-      showError(data.error || 'Login failed');
+      if (data.code === 'account_locked' && data.retry_after_seconds != null) {
+        const mins = Math.ceil(data.retry_after_seconds / 60);
+        showError(`Account locked. Try again in ${mins} min (${data.retry_after_seconds}s).`);
+      } else {
+        showError(data.error || 'Login failed');
+      }
     }
   } catch (err) {
     showError('Connection error. Please try again.');

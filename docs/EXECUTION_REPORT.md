@@ -1,71 +1,48 @@
-# Execution Report — Full Master Plan Implementation
+# Execution Report — Above-Market Continuation
 
 **Branch:** `cursor/holo-rtls-execute-plan-af22` (not merged to `master`)  
 **Date:** 2026-07-19  
 **Tests:** `pytest` → **67 passed**  
-**Plan:** `docs/MASTER_PLAN_ABOVE_MARKET.md` Phases A–D (software parity)
+**Smoke:** pages + CSV import, audit export, backup retention, soft decommission verified
 
 ---
 
-## What changed (this pass)
+## This pass (remaining plan depth)
 
-### Identity & security
-- **Sessions:** `UserSession` model + `/api/sessions` list/revoke/revoke-all; JWT blocklist; login registers JTI; logout revokes current
-- **Password reset:** signed JWT tokens + SMTP when enabled; debug token/`reset_url` in response; `/reset-password` page
-- **Profile:** `User.phone`, `notify_prefs`; `PATCH /api/auth/me`; Settings → Profile & Sessions UI
-- **Users:** phone field; password update on PATCH; `AuthService.create_user` fixed
+### Trackers
+- Soft **decommission** (default DELETE) instead of hard delete; `?hard=true` for permanent
+- Default list hides decommissioned; `include_decommissioned=true` for export
+- **CSV import** `POST /api/trackers/import`
+- Detail **drawer** + numeric enum IDs in `to_dict`
 
-### Alerts & notifications
-- **Proximity alerts** (tag-to-tag distance, configurable via `PROXIMITY_ALERT_METERS` / setting)
-- **Webhooks** on `alert.created`
-- **Notify prefs** honored for email/SMS
-- **Downlink:** alarm trigger returns `downlink_available`; UI explains MQTT offline
-- **Alerts UI:** Map deep-link
+### Auth / RBAC / Admin
+- Lockout returns `retry_after_seconds` + UI countdown copy
+- Permissions: `manage_hardware`, `manage_integrations`
+- Settings: **2FA setup/confirm/disable** in Profile & Sessions
+- Users: sessions force-revoke + 2FA badge
+- Viewer nav hides Site/Insights manage links; Live Map hides setup tools
 
-### Reports & ops
-- **Dwell** UI + **PDF** export (`/api/reports/pdf`) + **trajectory** API
-- **Report schedules** CRUD + APScheduler hourly delivery
-- **Scheduled backups** via APScheduler (daily 02:30 UTC)
-- Fixed double `/api/api` client paths on admin pages
+### Shell / UX
+- Font Awesome icons in nav (no emoji/Unicode primary)
+- Global **Ctrl+K** command palette (`shell.js`)
+- Tablet alert sheet wired on Live Map
+- Commissioning page CTA → Live Map Setup
+- Muster **kiosk mode** + missing-personnel banner
 
-### Map / Location Core
-- Map-native **zone draw**, **draggable anchors**, **coverage rings**, **trajectory** polyline
-- Playback DOM IDs fixed; `window.trackers` exposed to map2d
-- External **position inject** `POST /api/integrations/positions` (JWT or `X-API-Key`)
-
-### Shell / polish
-- Shared `base.html` + `tablet.css`; Integrations page uses base
-- Orphan `dashboard/hardware.html` removed
-- API key middleware (`X-API-Key`) + Integrations webhooks UI
+### Ops / Phase D slices
+- `GET /api/audit/export` server CSV
+- Backup **retention** PATCH + UI
+- `zone.enter` webhook alongside `alert.created`
+- Docs banners on `architecture.md` / `roadmap.md` (Unity = R&D, not shipping)
 
 ---
 
-## How it works (operator path)
+## Still intentionally thin / later
+- Full `base.html` migration of every page  
+- Polygon zone editor / advanced zone rules UI  
+- Encrypted + remote backups  
+- Postgres production default + 300+ stress / Playwright  
+- Complete Location Core merge (retire `/tracking` / `/api/uwb` entirely)  
+- LLM / Unity / multi-tenant (plan non-goals)
 
-1. `python run.py` → seeds demo mock + tags + anchors  
-2. Login `admin@holo-rtls.local` / `ChangeMe123!`  
-3. Live Map SSE + moving tags; Setup tools: place nodes, draw zones, coverage  
-4. Trackers / Muster / Integrations (keys + webhooks) / Reports (dwell, PDF, schedules)  
-5. Settings → Profile & Sessions for notify prefs + revoke  
-6. Backup schedule runs automatically; manual backup still on `/backup`
-
----
-
-## Market-readiness impact
-
-| Mid-market RTLS expectation | Status |
-|---|---|
-| First-boot live tags | Yes (mock seed) |
-| Asset registry UI | Yes |
-| Map-native geofence / anchors | Yes |
-| Alerts + proximity + notify prefs | Yes |
-| Dwell analytics + PDF + email schedule | Yes |
-| Muster / check-in | Yes |
-| API keys + webhooks + inject | Yes |
-| Sessions revoke | Yes |
-| Scheduled backups | Yes |
-| Professional shell (no emoji nav) | Yes |
-| Tablet live view CSS | Yes (responsive sheet) |
-| Hardware UWB cm accuracy | Depends on deployed radios (out of software scope) |
-
-Deferred / R&D (explicit non-goals in plan): LLM assistant, multi-tenant SaaS, Unity holographic client.
+Default login: `admin@holo-rtls.local` / `ChangeMe123!`

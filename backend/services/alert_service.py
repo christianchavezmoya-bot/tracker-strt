@@ -454,14 +454,19 @@ class AlertService:
             # Webhooks (best-effort)
             try:
                 from backend.api.webhooks import dispatch_webhooks
-                dispatch_webhooks("alert.created", {
+                payload = {
                     "id": alert.id,
                     "tracker_id": alert.tracker_id,
                     "alert_type": alert.alert_type,
                     "message": alert.message,
                     "pos_x": alert.pos_x,
                     "pos_y": alert.pos_y,
-                })
+                    "zone_name": event.zone_name,
+                    "section_name": event.section_name,
+                }
+                dispatch_webhooks("alert.created", payload)
+                if event.alert_type == 3 and event.zone_name:
+                    dispatch_webhooks("zone.enter", payload)
             except Exception as we:
                 logger.warning("Webhook dispatch failed: %s", we)
 

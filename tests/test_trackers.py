@@ -73,9 +73,15 @@ class TestTrackerCRUD:
         tracker_id = create_resp.get_json()["tracker"]["id"]
         resp = client.delete(f"/api/trackers/{tracker_id}", headers=admin_headers)
         assert resp.status_code == 200
-        # Confirm deleted
+        data = resp.get_json()
+        assert data.get("message") == "Decommissioned"
+        assert data["tracker"]["asset_state"] == "DECOMMISSIONED"
+        # Soft-delete: still fetchable, but excluded from default list
         get_resp = client.get(f"/api/trackers/{tracker_id}", headers=admin_headers)
-        assert get_resp.status_code == 404
+        assert get_resp.status_code == 200
+        list_resp = client.get("/api/trackers", headers=admin_headers)
+        ids = [t["id"] for t in list_resp.get_json()["items"]]
+        assert tracker_id not in ids
 
     def test_viewer_cannot_create_tracker(self, client, viewer_headers):
         """VIEWER role cannot create trackers."""

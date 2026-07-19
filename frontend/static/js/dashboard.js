@@ -65,6 +65,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!Number.isNaN(x) && !Number.isNaN(y) && window.zoomToPosition) {
       setTimeout(() => window.zoomToPosition(x, y), 800);
     }
+    const tid = params.get('tracker');
+    if (tid && window.selectTracker) setTimeout(() => window.selectTracker(Number(tid)), 900);
+  } catch (e) {}
+  // Viewer: hide setup / manage tools
+  try {
+    const role = (API.getUser() || {}).role;
+    if (String(role).toUpperCase() === 'VIEWER') {
+      ['nodePlacementBtn','zoneDrawBtn','coverageBtn','btnAlarm'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+    }
   } catch (e) {}
 });
 
@@ -135,11 +147,25 @@ async function loadAlerts() {
   renderAlertFeed();
   const badge = document.getElementById('alertCount');
   const count = alerts.length;
-  if (count > 0) {
-    badge.textContent = count > 99 ? '99+' : count;
-    badge.style.display = 'inline';
-  } else {
-    badge.style.display = 'none';
+  if (badge) {
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+  // Tablet bottom sheet
+  const sheet = document.getElementById('tabletAlertSheet');
+  const list = document.getElementById('tabletAlertList');
+  if (sheet && list && window.matchMedia && window.matchMedia('(max-width:1100px) and (min-width:700px)').matches) {
+    sheet.style.display = count ? 'block' : 'none';
+    list.innerHTML = alerts.slice(0, 8).map(a =>
+      `<div style="padding:6px 0;border-bottom:1px solid rgba(148,163,184,.12);font-size:12px">
+        <strong>${a.alert_type || 'ALERT'}</strong> — ${(a.message || '').slice(0, 80)}
+        <a href="/alerts" style="color:#2dd4bf;margin-left:8px">Open</a>
+      </div>`
+    ).join('') || '';
   }
 }
 

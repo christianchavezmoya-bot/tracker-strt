@@ -118,7 +118,20 @@ class AuthService:
 
         # Check lockout
         if user.is_locked:
-            return None, f"Account locked. Try again in a few minutes."
+            locked = user.locked_until
+            retry_after = None
+            if locked:
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc)
+                if locked.tzinfo is None:
+                    locked = locked.replace(tzinfo=timezone.utc)
+                retry_after = max(0, int((locked - now).total_seconds()))
+            return None, {
+                "error": "Account locked. Try again later.",
+                "code": "account_locked",
+                "retry_after_seconds": retry_after,
+                "locked_until": locked.isoformat() if locked else None,
+            }
 
         if not user.is_active:
             return None, "Account is deactivated. Contact an administrator."

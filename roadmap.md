@@ -1,6 +1,9 @@
 # HOLO-RTLS — Development Roadmap
 ## 12-Week Phased Plan
 
+> **Status:** Legacy Unity-era roadmap. The **shipping product** is the Flask web app.  
+> For current priorities use `docs/MASTER_PLAN_ABOVE_MARKET.md`. Unity / Ollama items below are R&D, not current delivery criteria.
+
 > **Team Size:** 3–4 developers | **Sprints:** 2 weeks each | **Total Duration:** 12 weeks
 
 ---

@@ -258,25 +258,41 @@ function clearFilters() {
 }
 
 function exportCSV() {
-  const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID', 'Details', 'IP Address'];
-  const rows = logs.map(l => [
-    l.timestamp || '',
-    l.user_name || 'System',
-    l.action || '',
-    l.entity_type || '',
-    l.entity_id || '',
-    (l.details || '').replace(/"/g, '""'),
-    l.ip_address || '',
-  ]);
-  const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `audit-log-${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Audit log exported');
+  // Prefer server-side export for large logs
+  const params = new URLSearchParams();
+  const action = document.getElementById('filterAction')?.value;
+  const entity = document.getElementById('filterEntity')?.value;
+  if (action) params.set('action', action);
+  if (entity) params.set('entity_type', entity);
+  const url = '/api/audit/export' + (params.toString() ? '?' + params : '');
+  fetch(url, { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('holo_access_token') } })
+    .then(r => {
+      if (!r.ok) throw new Error('export failed');
+      return r.blob();
+    })
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `audit-log-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast('Audit log exported');
+    })
+    .catch(() => {
+      // Fallback: client-side of currently loaded page
+      const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID', 'Details', 'IP Address'];
+      const rows = logs.map(l => [
+        l.timestamp || '', l.user_name || 'System', l.action || '',
+        l.entity_type || '', l.entity_id || '', (l.details || '').replace(/"/g, '""'), l.ip_address || '',
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `audit-log-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      showToast('Audit log exported (current page)');
+    });
 }
 
 function escapeHtml(s) {

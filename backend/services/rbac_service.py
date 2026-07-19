@@ -47,8 +47,10 @@ class Permission:
     TRIGGER_BACKUP    = "trigger_backup"
     RESTORE_BACKUP    = "restore_backup"
 
-    # API Keys
+    # API Keys / Integrations
     MANAGE_API_KEY    = "manage_api_key"
+    MANAGE_HARDWARE   = "manage_hardware"
+    MANAGE_INTEGRATIONS = "manage_integrations"
 
 
 # ── Permission Matrix ────────────────────────────────────────────────────────
@@ -96,6 +98,8 @@ ROLE_PERMISSIONS: dict[UserRole, Set[str]] = {
         Permission.TRIGGER_BACKUP,
         Permission.RESTORE_BACKUP,
         Permission.MANAGE_API_KEY,
+        Permission.MANAGE_HARDWARE,
+        Permission.MANAGE_INTEGRATIONS,
     },
 }
 

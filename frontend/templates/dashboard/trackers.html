@@ -32,8 +32,10 @@
       <p class="page-subtitle">Register and manage personnel, machine, and sensor tags</p>
     </div>
     <div class="page-actions">
+      <button class="btn btn-ghost" id="btnImport" data-role-min="operator"><i class="fa-solid fa-upload"></i> Import CSV</button>
+      <input type="file" id="importFile" accept=".csv,text/csv" hidden>
       <button class="btn btn-ghost" id="btnExport"><i class="fa-solid fa-download"></i> Export CSV</button>
-      <button class="btn btn-primary" id="btnCreate"><i class="fa-solid fa-plus"></i> Add Tracker</button>
+      <button class="btn btn-primary" id="btnCreate" data-role-min="operator"><i class="fa-solid fa-plus"></i> Add Tracker</button>
     </div>
   </div>
 
@@ -141,7 +143,31 @@
   </div>
 </div>
 
+<!-- Detail drawer -->
+<aside class="detail-drawer" id="detailDrawer" hidden>
+  <div class="drawer-head">
+    <h2 id="drawerTitle">Tracker</h2>
+    <button class="icon-btn" id="drawerClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+  <div class="drawer-actions">
+    <a class="btn btn-ghost" id="drawerMap" href="/"><i class="fa-solid fa-map"></i> Map</a>
+    <button class="btn btn-secondary" id="drawerEdit" data-role-min="operator"><i class="fa-solid fa-pen"></i> Edit</button>
+    <button class="btn btn-danger" id="drawerDecom" data-role-min="operator"><i class="fa-solid fa-box-archive"></i> Decommission</button>
+  </div>
+</aside>
+<style>
+.detail-drawer{position:fixed;top:0;right:0;bottom:0;width:min(380px,92vw);background:#0f172a;border-left:1px solid rgba(148,163,184,.2);z-index:9000;padding:18px;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.4)}
+.detail-drawer[hidden]{display:none!important}
+.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.drawer-body{flex:1;overflow:auto;font-size:13px;line-height:1.7;color:#cbd5e1}
+.drawer-body .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.1)}
+.drawer-body .k{color:#64748b}
+.drawer-actions{display:flex;gap:8px;padding-top:12px;border-top:1px solid rgba(148,163,184,.15)}
+</style>
+
 <script src="/static/js/api.js"></script>
+<script src="/static/js/shell.js"></script>
 <script src="/static/js/nav.js" defer></script>
 <script>
 if (!API.isLoggedIn()) location.href = '/login';
@@ -191,9 +217,10 @@ async function loadTrackers() {
       <td class="mono">${pos}</td>
       <td><span class="${alertClass}">${esc(al)}</span></td>
       <td class="row-actions">
+        <button class="icon-btn" title="Details" onclick='openDetail(${JSON.stringify(t).replace(/'/g,"&#39;")})'><i class="fa-solid fa-eye"></i></button>
         <a class="icon-btn" title="Show on map" href="/?tracker=${t.id}"><i class="fa-solid fa-location-crosshairs"></i></a>
-        <button class="icon-btn" title="Edit" onclick='openEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'><i class="fa-solid fa-pen"></i></button>
-        <button class="icon-btn danger" title="Delete" onclick="removeTracker(${t.id})"><i class="fa-solid fa-trash"></i></button>
+        <button class="icon-btn" title="Edit" data-role-min="operator" onclick='openEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'><i class="fa-solid fa-pen"></i></button>
+        <button class="icon-btn danger" title="Decommission" data-role-min="operator" onclick="removeTracker(${t.id})"><i class="fa-solid fa-box-archive"></i></button>
       </td>
     </tr>`;
   }).join('');
@@ -267,18 +294,45 @@ document.getElementById('trackerForm').addEventListener('submit', async (e) => {
 });
 
 async function removeTracker(id) {
-  if (!confirm('Delete this tracker?')) return;
+  if (!confirm('Decommission this tracker? It will be archived (soft delete).')) return;
   await API.del('/trackers/' + id);
+  closeDrawer();
   loadTrackers();
 }
 
+let _detailTracker = null;
+function openDetail(t) {
+  _detailTracker = t;
+  document.getElementById('drawerTitle').textContent = t.assigned_name || t.hardware_id;
+  document.getElementById('drawerMap').href = '/?tracker=' + t.id;
+  const rows = [
+    ['Hardware ID', t.hardware_id],
+    ['Category', t.category],
+    ['State', t.asset_state],
+    ['Alert', t.alert_status],
+    ['Battery', t.battery_level != null ? Math.round(t.battery_level) + '%' : '—'],
+    ['Position', t.position ? `${Number(t.position.x||0).toFixed(2)}, ${Number(t.position.y||0).toFixed(2)}` : '—'],
+    ['Section', t.current_section || '—'],
+    ['Check-in', t.check_status || '—'],
+    ['Created', (t.created_at || '').slice(0, 19) || '—'],
+  ];
+  document.getElementById('drawerBody').innerHTML = rows.map(r =>
+    `<div class="row"><span class="k">${esc(r[0])}</span><span>${esc(r[1])}</span></div>`
+  ).join('');
+  document.getElementById('detailDrawer').hidden = false;
+}
+function closeDrawer() { document.getElementById('detailDrawer').hidden = true; _detailTracker = null; }
+document.getElementById('drawerClose').onclick = closeDrawer;
+document.getElementById('drawerEdit').onclick = () => { if (_detailTracker) openEdit(_detailTracker); };
+document.getElementById('drawerDecom').onclick = () => { if (_detailTracker) removeTracker(_detailTracker.id); };
+
 document.getElementById('btnExport').onclick = async () => {
-  const res = await API.get('/trackers?per_page=500');
+  const res = await API.get('/trackers?per_page=500&include_decommissioned=true');
   const data = await res.json();
   const items = data.items || [];
-  const header = ['id','hardware_id','assigned_name','category','asset_state','battery_level'];
+  const header = ['hardware_id','assigned_name','category','asset_state','battery_level'];
   const lines = [header.join(',')].concat(items.map(t =>
-    [t.id, t.hardware_id, JSON.stringify(t.assigned_name||''), t.category, t.asset_state, t.battery_level].join(',')
+    [t.hardware_id, JSON.stringify(t.assigned_name||''), t.category, t.asset_state, t.battery_level].join(',')
   ));
   const blob = new Blob([lines.join('\n')], {type:'text/csv'});
   const a = document.createElement('a');
@@ -286,6 +340,21 @@ document.getElementById('btnExport').onclick = async () => {
   a.download = 'trackers.csv';
   a.click();
 };
+
+document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
+document.getElementById('importFile').onchange = async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const res = await API.post('/trackers/import', { csv: text });
+  const data = await res.json();
+  if (res.ok) alert(`Imported ${data.created} (skipped ${data.skipped})`);
+  else alert(data.error || 'Import failed');
+  e.target.value = '';
+  loadTrackers();
+};
+
+if (window.HoloRBAC) HoloRBAC.hideViewerActions();
 
 ['qInput','filterCategory','filterState'].forEach(id => {
   document.getElementById(id).addEventListener('change', loadTrackers);
