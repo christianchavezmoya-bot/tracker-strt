@@ -279,7 +279,7 @@ document.getElementById('trackerForm').addEventListener('submit', async (e) => {
 });
 
 async function removeTracker(id) {
-  if (!confirm('Decommission this tracker? It will be archived (soft delete).')) return;
+  if (!(await holoConfirm('Decommission this tracker? It will be archived (soft delete).', { danger: true, title: 'Confirm' }))) return;
   await API.del('/trackers/' + id);
   closeDrawer();
   loadTrackers();

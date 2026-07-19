@@ -61,9 +61,10 @@ jobs:
         run: |
           python run.py &
           APP_PID=$!
-          for i in $(seq 1 30); do
+          for i in $(seq 1 45); do
             curl -sf http://127.0.0.1:8080/health && break
             sleep 1
           done
-          pytest tests/e2e/test_playwright_smoke.py -q || true
+          curl -sf http://127.0.0.1:8080/health
+          pytest tests/e2e/test_playwright_smoke.py -q
           kill $APP_PID || true

@@ -101,7 +101,7 @@ document.getElementById('btnWebhook').onclick = async () => {
   loadHooks();
 };
 async function revokeKey(id) {
-  if (!confirm('Revoke this key?')) return;
+  if (!(await holoConfirm('Revoke this key?', { danger: true, title: 'Confirm' }))) return;
   await API.del('/keys/' + id);
   loadKeys();
 }
@@ -122,7 +122,7 @@ async function testHook(id) {
   loadHooks();
 }
 async function delHook(id) {
-  if (!confirm('Delete webhook?')) return;
+  if (!(await holoConfirm('Delete webhook?', { danger: true, title: 'Confirm' }))) return;
   await API.del('/webhooks/' + id);
   loadHooks();
 }

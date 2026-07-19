@@ -784,7 +784,7 @@ async function runSchedule(id) {
 }
 
 async function deleteSchedule(id) {
-  if (!confirm('Delete this schedule?')) return;
+  if (!(await holoConfirm('Delete this schedule?', { danger: true, title: 'Confirm' }))) return;
   await API.del('/reports/schedules/' + id);
   loadSchedules();
 }

@@ -1270,7 +1270,7 @@ function _showZoneForm(x, y, existing) {
   const delBtn = panel.querySelector('#zoneDeleteBtn');
   if (delBtn) {
     delBtn.onclick = async () => {
-      if (!confirm('Delete this zone?')) return;
+      if (!(await holoConfirm('Delete this zone?', { danger: true, title: 'Confirm' }))) return;
       const res = await API.del('/zones/' + existing.id);
       if (res && res.ok) {
         if (window.showToast) window.showToast('Zone deleted', 'success');

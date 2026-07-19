@@ -781,7 +781,7 @@ async function editConfig(id) {
 }
 
 async function deleteConfig(id, name) {
-  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  if (!(await holoConfirm(`Delete "${name}"? This cannot be undone.`, { danger: true, title: 'Confirm' }))) return;
   const res = await API.del(`/hardware/${id}`);
   if (res && res.ok) {
     await loadConfigs();
@@ -986,7 +986,7 @@ async function saveNode() {
 }
 
 async function deleteNode(id) {
-  if (!confirm('Delete this node?')) return;
+  if (!(await holoConfirm('Delete this node?', { danger: true, title: 'Confirm' }))) return;
   const res = await API.delete(`/nodes/${id}`);
   if (res && res.ok) {
     await loadNodes();

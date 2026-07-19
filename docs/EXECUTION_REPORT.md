@@ -2,34 +2,36 @@
 
 **Branch:** `cursor/holo-rtls-execute-plan-af22` (not merged to `master`)  
 **Date:** 2026-07-19  
-**Tests:** `pytest` → **96 passed** (3 optional Playwright E2E skipped locally)
+**Tests:** `pytest` → **100 passed** (4 Playwright E2E optional locally)
 
 ---
 
 ## This pass
 
-### UX — eliminate `alert()` (Phase B §2.3)
-- Replaced **all `alert()` calls** in admin templates and `map2d.js` with global **`showToast`**
-- Removed duplicate local `showToast` implementations (users, zones, backup, nodes, hardware, audit)
-- New regression test: `tests/test_ui_no_alerts.py`
+### Accessible confirm dialogs (Phase B UX / a11y)
+- **`window.holoConfirm()`** — modal `alertdialog` replaces native `confirm()` everywhere (admin UI + map zone delete)
+- Danger styling for delete/deactivate/revoke actions
+- Regression: `tests/test_a11y_smoke.py` (no native `confirm()`)
 
-### CI (Phase D)
-- Optional **Playwright E2E job** in GitHub Actions (`e2e-smoke`, `continue-on-error`)
+### A11y polish (Phase D)
+- Toast host: **`aria-live="polite"`**
+- **`prefers-reduced-motion`** in shell.css
 
-### Docs
-- `architecture.md` now points to **`docs/CURRENT_SYSTEM.md`**
+### Playwright E2E
+- Fixed login selectors (`#emailInput`, `#passwordInput`, `#loginBtn`)
+- Added alerts page smoke test
+- CI e2e job waits for `/health` before running tests
 
 ---
 
 ## Prior passes (summary)
-- Global toast, remember-me, PDF bar chart, Web Push VAPID, proximity viz, CI pytest job
-- Location Core, shell, trackers, muster, integrations, stress tests
+- No `alert()` in admin UI, global toast, remember-me, Web Push, proximity viz, CI pytest
 
 ---
 
 ## Still intentionally thin / later
-- Delete `/tracking` template entirely (legacy lab mode kept)
-- Full a11y audit suite
-- Playwright E2E required (currently optional in CI)
+- Delete `/tracking` template (legacy lab)
+- Full automated a11y audit (axe-core)
+- Playwright E2E required gate (still `continue-on-error` in CI)
 
 Default login: `admin@holo-rtls.local` / `ChangeMe123!`

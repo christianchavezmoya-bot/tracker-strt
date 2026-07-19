@@ -480,7 +480,7 @@ async function saveSection() {
 }
 
 async function deleteSection(id, name) {
-  if (!confirm(`Delete section "${name}"?`)) return;
+  if (!(await holoConfirm(`Delete section "${name}"?`, { danger: true, title: 'Confirm' }))) return;
   const res = await API.del(`/zones/sections/${id}`);
   if (res && res.ok) {
     await loadSections();
@@ -602,7 +602,7 @@ async function saveZone() {
 }
 
 async function deleteZone(id, name) {
-  if (!confirm(`Delete zone "${name}"?`)) return;
+  if (!(await holoConfirm(`Delete zone "${name}"?`, { danger: true, title: 'Confirm' }))) return;
   const res = await API.del(`/zones/${id}`);
   if (res && res.ok) {
     await loadZones();

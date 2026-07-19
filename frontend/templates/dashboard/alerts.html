@@ -328,7 +328,7 @@ async function resolveAlert(id) {
 }
 
 async function acknowledgeAll() {
-  if (!confirm('Acknowledge all active alerts?')) return;
+  if (!(await holoConfirm('Acknowledge all active alerts?'))) return;
   const res = await API.post('/alerts/acknowledge-all', {});
   if (res && res.ok) {
     const data = await API.json(res);

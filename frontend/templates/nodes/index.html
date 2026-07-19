@@ -399,7 +399,7 @@ async function saveNode() {
 }
 
 async function deleteNode(id) {
-  if (!confirm('Delete this node?')) return;
+  if (!(await holoConfirm('Delete this node?', { danger: true, title: 'Confirm' }))) return;
   const res = await API.del(`/nodes/${id}`);
   if (res && res.ok) {
     await loadNodes();

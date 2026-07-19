@@ -1007,7 +1007,7 @@ async function toggleFpVisibility(id) {
 }
 
 async function deleteFp(id, name) {
-  if (!confirm(`Delete floor plan "${name}"? This will remove the image file.`)) return;
+  if (!(await holoConfirm(`Delete floor plan "${name}"? This will remove the image file.`, { danger: true, title: 'Confirm' }))) return;
   const res = await API.del(`/settings/floor-plans/${id}`);
   if (res && res.ok) { showToast('Floor plan deleted', 'success'); await loadFloorPlans(); }
   else { const d = await API.json(res); showToast('Delete failed: ' + (d.error || res.statusText), 'error'); }
@@ -1100,7 +1100,7 @@ async function revokeSession(id) {
   loadProfileSecurity();
 }
 async function revokeAllSessions() {
-  if (!confirm('Revoke all other sessions?')) return;
+  if (!(await holoConfirm('Revoke all other sessions?', { danger: true, title: 'Confirm' }))) return;
   await API.post('/sessions/revoke-all', { keep_current: true });
   loadProfileSecurity();
 }

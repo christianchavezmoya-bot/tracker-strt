@@ -460,7 +460,7 @@ async function toggleActive(id, active) {
 }
 
 async function deleteUser(id, name) {
-  if (!confirm(`Deactivate user "${name}"?\n\nThey will no longer be able to log in.`)) return;
+  if (!(await holoConfirm(`Deactivate user "${name}"?\n\nThey will no longer be able to log in.`, { danger: true, title: 'Confirm' }))) return;
   const res = await API.del(`/users/${id}`);
   if (res && res.ok) { await loadUsers(); showToast('User deactivated'); }
   else { const d = await API.json(res); showToast('Error: ' + (d.error || res.statusText), 'error'); }

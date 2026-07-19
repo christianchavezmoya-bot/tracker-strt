@@ -26,36 +26,53 @@ def browser_page():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        context = browser.new_context(viewport={"width": 1280, "height": 800})
+        page = context.new_page()
         yield page
+        context.close()
         browser.close()
+
+
+def _login(page):
+    page.goto(f"{BASE}/login")
+    page.wait_for_selector("#emailInput", state="visible")
+    page.fill("#emailInput", ADMIN_EMAIL)
+    page.fill("#passwordInput", ADMIN_PASS)
+    page.click("#loginBtn")
+    page.wait_for_function("() => !window.location.pathname.includes('/login')", timeout=20000)
 
 
 def test_login_and_live_map(browser_page):
     page = browser_page
-    page.goto(f"{BASE}/login")
-    page.fill('input[name="email_or_username"], input[type="email"]', ADMIN_EMAIL)
-    page.fill('input[name="password"], input[type="password"]', ADMIN_PASS)
-    page.click('button[type="submit"]')
-    page.wait_for_url(f"{BASE}/**", timeout=15000)
-    assert "/login" not in page.url or page.locator("#map2d, .map-container").count() >= 0
+    _login(page)
+    assert "/login" not in page.url
+    page.wait_for_selector("#map2d", state="visible", timeout=15000)
 
 
 def test_trackers_page_loads(browser_page):
     page = browser_page
     if "/login" in page.url:
-        pytest.skip("Login failed — seed admin or set HOLO_E2E_* env")
+        _login(page)
     page.goto(f"{BASE}/trackers")
-    page.wait_for_load_state("networkidle")
-    assert page.locator("h1, .page-title").first.is_visible()
+    page.wait_for_load_state("domcontentloaded")
+    assert page.locator(".page-title, h1").first.is_visible()
 
 
 def test_settings_integrations_tab(browser_page):
     page = browser_page
     if "/login" in page.url:
-        pytest.skip("Login failed")
+        _login(page)
     page.goto(f"{BASE}/settings")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
     page.click('button[data-tab="integrations"]')
     page.wait_for_selector("#section-integrations", state="visible")
     assert page.locator("#mailStatusGrid").is_visible()
+
+
+def test_alerts_page_loads(browser_page):
+    page = browser_page
+    if "/login" in page.url:
+        _login(page)
+    page.goto(f"{BASE}/alerts")
+    page.wait_for_load_state("domcontentloaded")
+    assert page.locator(".page-title, h1").first.is_visible()
