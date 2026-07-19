@@ -10,14 +10,14 @@
 
 ## Executive summary
 
-| Verdict | **NO-GO** for merge to `master` |
+| Verdict | **NO-GO** for merge to `master` (pending stakeholder sign-off on gap deferrals) |
 |---------|----------------------------------|
 | Local automated suite | **PASS** (100 pytest + 4 Playwright E2E + 1 stress) |
-| GitHub Actions CI | **FAIL** — `pip install -r requirements.txt` breaks on PyBluez (fixed on branch in this report pass; re-run CI after push) |
+| GitHub Actions CI | **PASS** (pytest + e2e-smoke) after PyBluez + CSP E2E fixes on this branch |
 | Master plan §10 “100% functional & above market” | **Mostly met** — see gap analysis below |
 | Push to `master` | **Not performed** (per instruction) |
 
-**Recommendation:** Merge only after (1) CI is green on the PR, (2) stakeholder review of gap items marked “acceptable deferral” vs “must fix”, and (3) explicit approval to merge.
+**Recommendation:** CI is green. Merge only after stakeholder review accepts documented gap items (§5–§6) or they are resolved, plus explicit approval to merge.
 
 ---
 
@@ -121,21 +121,17 @@ All primary nav destinations returned **HTTP 200** (server-rendered shell):
 
 ## 3. GitHub Actions CI status
 
-**At report time:** CI job `test` **FAILED** during dependency install:
+**After fixes on this branch:** CI run **29705787353** — **SUCCESS**
 
-```
-ERROR: Failed to build 'pybluez' when getting requirements to build wheel
-error in PyBluez setup command: use_2to3 is invalid.
-```
+| Job | Result |
+|-----|--------|
+| `test` (pytest) | **PASS** — 100 tests |
+| `e2e-smoke` (Playwright) | **PASS** — 4 tests |
 
-**Root cause:** `pybluez==0.23` is incompatible with Python 3.12 / modern setuptools; not required for web app or pytest.
+**Fixes applied (not on `master`):**
 
-**Remediation (same branch, not on `master`):**
-
-1. Move `pybluez` / `bluepy` to optional `requirements-hardware.txt` — **pytest job now passes in CI**
-2. Replace Playwright `wait_for_function` (blocked by CSP `unsafe-eval`) with `wait_for_url` regex in `tests/e2e/conftest.py` — **E2E fix pushed; awaiting CI re-run**
-
-**E2E job:** Previously skipped/failed; re-run pending after CSP fix push.
+1. Move `pybluez` / `bluepy` to optional `requirements-hardware.txt` (PyBluez breaks pip on Py3.12 CI)
+2. E2E login fixture: `wait_for_url` regex instead of `wait_for_function` (CSP blocks `unsafe-eval`)
 
 ---
 
@@ -175,7 +171,8 @@ Items not fully verified in this automated pass:
 
 | ID | Severity | Item | Recommendation |
 |----|----------|------|----------------|
-| G-1 | **Blocker** | GitHub CI fails on PyBluez install | Fixed on branch (`requirements-hardware.txt`); verify green CI |
+| G-1 | **Blocker** | GitHub CI E2E failed on CSP vs Playwright eval | Fixed: `wait_for_url` in E2E conftest; verify green CI |
+| G-1b | **Blocker** (resolved) | GitHub CI pytest failed on PyBluez install | Fixed: optional `requirements-hardware.txt` |
 | G-2 | Low | `/api/settings/proximity_meters` 404 until setting saved | Seed default in `_seed_demo_if_needed` or return default in GET |
 | G-3 | Low | E2E covers 4 flows, not full §8 Playwright list | Expand E2E in follow-up PR |
 | G-4 | Info | Branded PDF uses ASCII bars, not chart graphics | Acceptable for MVP; enhance later |
