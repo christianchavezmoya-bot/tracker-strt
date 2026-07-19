@@ -15,7 +15,7 @@
     { sep: 'Assets' },
     { href: '/trackers', label: 'Trackers',      icon: 'fa-solid fa-tags' },
     { href: '/?mode=setup', label: 'Map Setup',   icon: 'fa-solid fa-wrench', operator: true },
-    { href: '/tracking', label: 'Scanner lab',   icon: 'fa-solid fa-satellite-dish', operator: true },
+    { href: '/tracking?legacy=1', label: 'Scanner lab',   icon: 'fa-solid fa-satellite-dish', operator: true },
     { sep: 'Site' },
     { href: '/nodes',    label: 'Anchors',       icon: 'fa-solid fa-broadcast-tower', operator: true },
     { href: '/zones',    label: 'Zones',         icon: 'fa-solid fa-draw-polygon', operator: true },
@@ -84,12 +84,16 @@
     if (p.admin && !isAdmin) return;
     if (p.operator && isViewer) return;
     var active = false;
+    var hrefPath = p.href.split('?')[0];
+    var hrefQuery = p.href.includes('?') ? p.href.split('?')[1] : '';
     if (p.href === '/') {
       active = (here === '/' && location.search.indexOf('mode=setup') < 0);
-    } else if (p.href.indexOf('?') >= 0) {
-      active = (here === '/' && location.search.indexOf('mode=setup') >= 0 && p.href.indexOf('mode=setup') >= 0);
+    } else if (hrefQuery.indexOf('mode=setup') >= 0) {
+      active = (here === '/' && location.search.indexOf('mode=setup') >= 0);
+    } else if (hrefPath === '/tracking') {
+      active = here.indexOf('/tracking') === 0;
     } else {
-      active = here.indexOf(p.href) === 0;
+      active = here.indexOf(hrefPath) === 0;
     }
     parts.push(
       '<a class="holonav-item' + (active ? ' active' : '') + '" href="' + p.href + '">'

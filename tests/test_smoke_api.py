@@ -76,6 +76,33 @@ def test_backup_schedule_flags(client, admin_headers):
     assert "retention" in data
 
 
+def test_positioning_sources(client, auth_headers):
+    res = client.get("/api/positioning/sources", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.get_json() or {}
+    assert data.get("location_core") is True
+    assert "sources" in data
+    assert any(s.get("id") == "uwb_demo" and s.get("deprecated") for s in data["sources"])
+
+
+def test_uwb_deprecation_header(client, auth_headers):
+    res = client.get("/api/uwb/anchors", headers=auth_headers)
+    assert res.status_code == 200
+    assert res.headers.get("Deprecation") == "true"
+    assert "positioning" in (res.headers.get("Link") or "")
+
+
+def test_tracking_redirects_to_setup(client):
+    res = client.get("/tracking", follow_redirects=False)
+    assert res.status_code in (301, 302)
+    assert "/?mode=setup" in (res.headers.get("Location") or "")
+
+
+def test_tracking_legacy_served(client):
+    res = client.get("/tracking?legacy=1")
+    assert res.status_code == 200
+
+
 def test_nodes_include_metadata_field(client, auth_headers, app):
     from backend.extensions import db
     from backend.models import WifiNode

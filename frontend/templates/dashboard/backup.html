@@ -1,17 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Backup & Restore — HOLO-RTLS</title>
-  <link rel="manifest" href="/static/manifest.json">
-  <meta name="theme-color" content="#00e5ff">
-  <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/dashboard.css">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <style>
-    :root {
+{% extends "base.html" %}
+{% block title %}Backup — HOLO-RTLS{% endblock %}
+{% block breadcrumb %}<span>Backup</span>{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" id="createBtnTop" onclick="createBackup()"><i class="fa-solid fa-plus"></i> Create Backup</button>
+{% endblock %}
+{% block head %}
+<style>
+:root {
       --cyan: #00e5ff; --red: #ff4444; --green: #69ff47; --yellow: #ffdd57;
       --bg-primary: #080f1e; --bg-card: #0d1526; --bg-row: #111d33;
       --border: rgba(255,255,255,0.07); --border-bright: rgba(0,229,255,0.25);
@@ -116,48 +111,10 @@
     .spinner { animation:spin 0.8s linear infinite; }
     @keyframes spin { to{transform:rotate(360deg)} }
     @keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
-  </style>
-</head>
-<body>
-
-<header class="topbar">
-  <div class="topbar-left">
-    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
-    <div class="breadcrumb"><i class="fa-solid fa-chevron-right"></i><span>Backup & Restore</span></div>
-  </div>
-  <div class="topbar-right">
-    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
-    <div class="user-menu">
-      <button class="user-btn" onclick="toggleUserMenu()">
-        <div class="user-avatar" id="userAvatar">A</div>
-        <i class="fa-solid fa-chevron-down"></i>
-      </button>
-      <div class="user-dropdown" id="userDropdown">
-        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
-        <div class="dropdown-divider"></div>
-        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
-      </div>
-    </div>
-  </div>
-</header>
-
-<div class="page-layout">
-  <aside class="page-sidebar">
-    <div class="nav-label">SYSTEM</div>
-    <nav>
-      <a href="/" class="nav-item"><i class="fa-solid fa-gauge"></i> Dashboard</a>
-      <a href="/reports" class="nav-item"><i class="fa-solid fa-chart-line"></i> Reports</a>
-    </nav>
-    <div class="nav-label" style="margin-top:24px">ADMIN</div>
-    <nav>
-      <a href="/users" class="nav-item"><i class="fa-solid fa-users"></i> Users</a>
-      <a href="/audit" class="nav-item"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
-      <a href="/backup" class="nav-item active"><i class="fa-solid fa-database"></i> Backup</a>
-    </nav>
-  </aside>
-
-  <main class="page-main">
-    <div class="page-header">
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-header">
       <div>
         <h1 class="page-title">
           <i class="fa-solid fa-database" style="color:var(--cyan)"></i>
@@ -265,10 +222,10 @@
     </div>
   </div>
 </div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
-<script src="/static/js/api.js"></script>
+{% endblock %}
+{% block scripts %}
 <script>
+
 'use strict';
 let backups = [];
 let restoringJobId = null;
@@ -323,7 +280,7 @@ async function loadUserInfo() {
   const data = await API.json(res);
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
-  document.getElementById('userAvatar').textContent = (u.display_name || u.username || u.email || 'A').charAt(0).toUpperCase();
+  /* shell */;
 }
 
 async function loadBackups() {
@@ -386,13 +343,11 @@ function renderBackups() {
 }
 
 async function createBackup() {
-  const btn = document.getElementById('createBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin spinner"></i> Creating…';
+  const btns = [document.getElementById('createBtn'), document.getElementById('createBtnTop')].filter(Boolean);
+  btns.forEach(btn => { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin spinner"></i> Creating…'; });
   const res = await API.post('/backup/trigger', {});
   const data = await API.json(res);
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa-solid fa-plus"></i> Create Backup';
+  btns.forEach(btn => { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Create Backup'; });
   if (res && res.ok) {
     showToast(`Backup created: ${data.job?.filename}`);
     await loadBackups();
@@ -486,8 +441,7 @@ document.addEventListener('click', e => {
 });
 function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
 function logout() { localStorage.removeItem('holo_access_token'); localStorage.removeItem('holo_refresh_token'); window.location.href = '/login'; }
+
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}
 </script>
-<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}</script>
-<script src="/static/js/nav.js" defer></script>
-</body>
-</html>
+{% endblock %}

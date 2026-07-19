@@ -12,7 +12,7 @@
     { label: 'Muster', href: '/muster', keys: 'muster checkin' },
     { label: 'Trackers', href: '/trackers', keys: 'trackers tags assets' },
     { label: 'Map Setup', href: '/?mode=setup', keys: 'setup commission anchors zones' },
-    { label: 'Scanner lab', href: '/tracking', keys: 'commissioning scanner wifi lab' },
+    { label: 'Scanner lab', href: '/tracking?legacy=1', keys: 'commissioning scanner wifi lab' },
     { label: 'Anchors / Nodes', href: '/nodes', keys: 'anchors nodes' },
     { label: 'Zones', href: '/zones', keys: 'zones geofence' },
     { label: 'Hardware', href: '/hardware', keys: 'hardware', admin: true },

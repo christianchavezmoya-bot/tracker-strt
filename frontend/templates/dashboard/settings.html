@@ -1,59 +1,73 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Settings — HOLO-RTLS</title>
-  <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/dashboard.css">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="manifest" href="/static/manifest.json">
-  <meta name="theme-color" content="#00e5ff">
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}Settings — HOLO-RTLS{% endblock %}
+{% block breadcrumb %}<span>Settings</span>{% endblock %}
+{% block topbar_actions %}
 
-<header class="topbar">
-  <div class="topbar-left">
-    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
-    <div class="breadcrumb"><i class="fa-solid fa-chevron-right"></i><span>Settings</span></div>
-  </div>
-  <div class="topbar-right">
-    <a href="/" class="icon-btn" title="Dashboard"><i class="fa-solid fa-gauge"></i></a>
-    <div class="user-menu">
-      <button class="user-btn" onclick="toggleUserMenu()">
-        <div class="user-avatar" id="userAvatar">A</div>
-        <i class="fa-solid fa-chevron-down"></i>
-      </button>
-      <div class="user-dropdown" id="userDropdown">
-        <a href="/settings"><i class="fa-solid fa-user"></i> Profile</a>
-        <div class="dropdown-divider"></div>
-        <a href="#" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
-      </div>
-    </div>
-  </div>
-</header>
-
-<div class="settings-layout">
-  <aside class="settings-sidebar">
-    <div class="settings-nav-label">SYSTEM</div>
-    <nav class="settings-nav">
-      <a href="/" class="settings-nav-item"><i class="fa-solid fa-gauge"></i> Dashboard</a>
-      <a href="/hardware" class="settings-nav-item"><i class="fa-solid fa-microchip"></i> Hardware</a>
-      <a href="/nodes" class="settings-nav-item"><i class="fa-solid fa-anchor"></i> Nodes</a>
-      <a href="/alerts" class="settings-nav-item"><i class="fa-solid fa-bell"></i> Alerts</a>
-      <a href="/settings" class="settings-nav-item active"><i class="fa-solid fa-gear"></i> Settings</a>
-    </nav>
-    <div class="settings-nav-label" style="margin-top:24px">ADMIN</div>
-    <nav class="settings-nav">
-      <a href="/users" class="settings-nav-item"><i class="fa-solid fa-users"></i> Users</a>
-      <a href="/audit" class="settings-nav-item"><i class="fa-solid fa-clipboard-list"></i> Audit Log</a>
-      <a href="/backup" class="settings-nav-item"><i class="fa-solid fa-database"></i> Backup</a>
-    </nav>
-  </aside>
-
-  <main class="settings-main">
-    <div class="page-header">
+{% endblock %}
+{% block head %}
+<style>
+.settings-layout { display:flex; min-height:100vh; background:var(--bg-primary); }
+.settings-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
+.settings-nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
+.settings-nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; }
+.settings-nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
+.settings-nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
+.settings-main { flex:1; padding:28px 32px; overflow-y:auto; }
+.page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+.page-title { font-size:22px; font-weight:700; color:var(--text-primary); margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+.page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
+.hw-tabs { display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:0; }
+.hw-tab { background:none; border:none; color:var(--text-secondary); font-size:13px; font-weight:500; padding:10px 16px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; display:flex; align-items:center; gap:7px; }
+.hw-tab:hover { color:var(--text-primary); }
+.hw-tab.active { color:var(--cyan); border-bottom-color:var(--cyan); }
+.settings-section { display:flex; flex-direction:column; gap:16px; }
+.settings-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.settings-card-header { display:flex; align-items:center; gap:10px; padding:14px 18px; font-size:13px; font-weight:600; color:var(--text-primary); border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+.settings-card-header i { color:var(--cyan); }
+.settings-badge { margin-left:auto; font-size:10px; font-weight:600; color:var(--green); background:rgba(105,255,71,0.1); padding:2px 8px; border-radius:10px; }
+.settings-grid { display:flex; flex-direction:column; }
+.settings-field { display:flex; align-items:flex-start; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.04); gap:20px; transition:background 0.1s; }
+.settings-field:last-child { border-bottom:none; }
+.settings-field:hover { background:rgba(0,229,255,0.03); }
+.settings-field-info { flex:1; }
+.setting-label { display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:3px; }
+.setting-help { display:block; font-size:11px; color:var(--text-muted); line-height:1.4; }
+.settings-field-control { flex-shrink:0; }
+.setting-input, .setting-select { background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:8px; padding:7px 10px; color:var(--text-primary); font-size:12px; font-family:var(--font-mono); outline:none; transition:border-color 0.15s; min-width:160px; }
+.setting-input:focus, .setting-select:focus { border-color:var(--cyan); }
+.toggle-switch { display:inline-flex; cursor:pointer; }
+.toggle-switch input { display:none; }
+.toggle-slider { width:36px; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; position:relative; transition:background 0.2s; }
+.toggle-slider::after { content:''; width:16px; height:16px; border-radius:50%; background:#fff; position:absolute; top:2px; left:2px; transition:transform 0.2s; }
+.toggle-switch input:checked ~ .toggle-slider { background:var(--cyan); }
+.toggle-switch input:checked ~ .toggle-slider::after { transform:translateX(16px); }
+.appearance-section { padding:20px 18px; }
+.logo-upload-area { display:flex; align-items:center; gap:20px; }
+.logo-preview { width:120px; height:80px; border:2px dashed var(--border); border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; }
+.logo-placeholder { display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--text-muted); font-size:11px; text-align:center; }
+.logo-placeholder i { font-size:20px; }
+.logo-actions { display:flex; flex-direction:column; gap:8px; }
+.logo-meta { display:flex; gap:12px; font-size:11px; color:var(--text-muted); font-family:var(--font-mono); margin-top:8px; }
+.breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
+.breadcrumb i { font-size:10px; }
+.settings-section-title { font-size:18px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
+.save-bar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; align-items:center; justify-content:space-between; gap:20px; background:rgba(8,15,30,0.96); border:1px solid var(--border-bright); border-radius:12px; padding:12px 20px; z-index:100; min-width:360px; backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,0.5); }
+.save-bar span { font-size:13px; color:var(--text-secondary); }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; text-decoration:none; }
+.btn-primary { background:var(--cyan); color:#000; }
+.btn-primary:hover { background:#33eeff; }
+.btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+.btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
+.btn-danger { background:rgba(255,68,68,0.15); color:var(--red); border:1px solid rgba(255,68,68,0.3); }
+.btn-danger:hover { background:rgba(255,68,68,0.25); }
+.table-loading { text-align:center; color:var(--text-muted); font-size:13px; padding:20px; }
+.table-loading i { color:var(--cyan); margin-right:8px; }
+@keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+</style>
+<style>.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)}</style>
+{% endblock %}
+{% block content %}
+<div class="page-header">
       <div>
         <h1 class="page-title"><i class="fa-solid fa-gear" style="color:var(--cyan)"></i> System Settings</h1>
         <p class="page-subtitle">Configure business, alert thresholds, and system preferences</p>
@@ -80,6 +94,27 @@
       <button class="hw-tab" data-tab="profile" onclick="switchTab('profile'); loadProfileSecurity()">
         <i class="fa-solid fa-user-shield"></i> Profile & Sessions
       </button>
+      <button class="hw-tab" data-tab="location" onclick="switchTab('location'); loadLocationCore()">
+        <i class="fa-solid fa-location-crosshairs"></i> Location Core
+      </button>
+    </div>
+
+    <!-- ── Location Core ─────────────────────────────────────────── -->
+    <div class="settings-section" id="section-location" style="display:none">
+      <div class="settings-card">
+        <div class="settings-card-header"><i class="fa-solid fa-map-location-dot"></i> Positioning sources</div>
+        <div style="padding:16px">
+          <p class="page-subtitle" style="margin-bottom:12px">Live Map is the primary ops surface. Legacy UWB demo and Scanner lab remain available for lab use.</p>
+          <div id="locCoreStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px"></div>
+          <div id="locCoreSources" style="font-size:13px;color:var(--text-secondary);line-height:1.7"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+            <a class="btn btn-primary" href="/"><i class="fa-solid fa-map"></i> Live Map</a>
+            <a class="btn btn-secondary" href="/?mode=setup"><i class="fa-solid fa-wrench"></i> Map Setup</a>
+            <a class="btn btn-ghost" href="/tracking?legacy=1"><i class="fa-solid fa-satellite-dish"></i> Scanner lab</a>
+            <a class="btn btn-ghost" href="/hardware"><i class="fa-solid fa-microchip"></i> Hardware</a>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ── Profile & Sessions ───────────────────────────────────── -->
@@ -317,10 +352,10 @@
     </div>
   </div>
 </div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js"></script>
-<script src="/static/js/api.js"></script>
+{% endblock %}
+{% block scripts %}
 <script>
+
 'use strict';
 let settings = {};
 let logo = null;
@@ -340,7 +375,7 @@ async function loadUserInfo() {
   const data = await API.json(res);
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
-  document.getElementById('userAvatar').textContent = (u.display_name || u.username || u.email || 'A').charAt(0).toUpperCase();
+  /* shell */;
   window._currentUser = u;
 }
 
@@ -367,6 +402,34 @@ function switchTab(tab) {
   document.querySelector(`.hw-tab[data-tab="${tab}"]`)?.classList.add('active');
   document.querySelectorAll('.settings-section').forEach(s => s.style.display = 'none');
   document.getElementById(`section-${tab}`).style.display = 'block';
+}
+
+async function loadLocationCore() {
+  const stats = document.getElementById('locCoreStats');
+  const srcEl = document.getElementById('locCoreSources');
+  if (!stats) return;
+  stats.innerHTML = '<div style="color:var(--text-muted)">Loading…</div>';
+  try {
+    const res = await API.get('/positioning/sources');
+    const data = await API.json(res);
+    if (!res || !res.ok) { stats.textContent = 'Failed to load'; return; }
+    const chips = [
+      ['Live snapshots', data.live_snapshots],
+      ['Trackers', data.trackers],
+      ['Anchors', data.anchors],
+      ['HW connected', `${data.hardware_connected}/${data.hardware_configs}`],
+    ];
+    stats.innerHTML = chips.map(([l,v]) =>
+      `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div style="font-size:20px;font-weight:700;font-family:var(--font-mono)">${v ?? '—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${l}</div>
+      </div>`).join('');
+    srcEl.innerHTML = (data.sources || []).map(s =>
+      `<div>${s.deprecated ? '⚠' : '✓'} <strong>${s.label}</strong>${s.primary ? ' · primary' : ''}${s.deprecated ? ' · deprecated' : ''}</div>`
+    ).join('');
+  } catch (e) {
+    stats.textContent = 'Network error';
+  }
 }
 
 // ── Render all sections ─────────────────────────────────────────────────────
@@ -789,68 +852,8 @@ function showToast(msg, color) {
   t.textContent = msg; document.body.appendChild(t);
   setTimeout(() => { t.style.opacity='0'; setTimeout(() => t.remove(), 300); }, 3500);
 }
-</script>
 
-<style>
-.settings-layout { display:flex; min-height:100vh; background:var(--bg-primary); }
-.settings-sidebar { width:220px; flex-shrink:0; background:var(--bg-card); border-right:1px solid var(--border); padding:20px 0; }
-.settings-nav-label { font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--text-muted); padding:0 20px 8px; }
-.settings-nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-secondary); font-size:13px; text-decoration:none; border-left:2px solid transparent; transition:all 0.15s; }
-.settings-nav-item:hover { color:var(--text-primary); background:rgba(0,229,255,0.05); }
-.settings-nav-item.active { color:var(--cyan); border-left-color:var(--cyan); background:rgba(0,229,255,0.07); }
-.settings-main { flex:1; padding:28px 32px; overflow-y:auto; }
-.page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
-.page-title { font-size:22px; font-weight:700; color:var(--text-primary); margin:0 0 4px; display:flex; align-items:center; gap:10px; }
-.page-subtitle { color:var(--text-muted); font-size:13px; margin:0; }
-.hw-tabs { display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:0; }
-.hw-tab { background:none; border:none; color:var(--text-secondary); font-size:13px; font-weight:500; padding:10px 16px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; display:flex; align-items:center; gap:7px; }
-.hw-tab:hover { color:var(--text-primary); }
-.hw-tab.active { color:var(--cyan); border-bottom-color:var(--cyan); }
-.settings-section { display:flex; flex-direction:column; gap:16px; }
-.settings-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
-.settings-card-header { display:flex; align-items:center; gap:10px; padding:14px 18px; font-size:13px; font-weight:600; color:var(--text-primary); border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
-.settings-card-header i { color:var(--cyan); }
-.settings-badge { margin-left:auto; font-size:10px; font-weight:600; color:var(--green); background:rgba(105,255,71,0.1); padding:2px 8px; border-radius:10px; }
-.settings-grid { display:flex; flex-direction:column; }
-.settings-field { display:flex; align-items:flex-start; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.04); gap:20px; transition:background 0.1s; }
-.settings-field:last-child { border-bottom:none; }
-.settings-field:hover { background:rgba(0,229,255,0.03); }
-.settings-field-info { flex:1; }
-.setting-label { display:block; font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:3px; }
-.setting-help { display:block; font-size:11px; color:var(--text-muted); line-height:1.4; }
-.settings-field-control { flex-shrink:0; }
-.setting-input, .setting-select { background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:8px; padding:7px 10px; color:var(--text-primary); font-size:12px; font-family:var(--font-mono); outline:none; transition:border-color 0.15s; min-width:160px; }
-.setting-input:focus, .setting-select:focus { border-color:var(--cyan); }
-.toggle-switch { display:inline-flex; cursor:pointer; }
-.toggle-switch input { display:none; }
-.toggle-slider { width:36px; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; position:relative; transition:background 0.2s; }
-.toggle-slider::after { content:''; width:16px; height:16px; border-radius:50%; background:#fff; position:absolute; top:2px; left:2px; transition:transform 0.2s; }
-.toggle-switch input:checked ~ .toggle-slider { background:var(--cyan); }
-.toggle-switch input:checked ~ .toggle-slider::after { transform:translateX(16px); }
-.appearance-section { padding:20px 18px; }
-.logo-upload-area { display:flex; align-items:center; gap:20px; }
-.logo-preview { width:120px; height:80px; border:2px dashed var(--border); border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; }
-.logo-placeholder { display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--text-muted); font-size:11px; text-align:center; }
-.logo-placeholder i { font-size:20px; }
-.logo-actions { display:flex; flex-direction:column; gap:8px; }
-.logo-meta { display:flex; gap:12px; font-size:11px; color:var(--text-muted); font-family:var(--font-mono); margin-top:8px; }
-.breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
-.breadcrumb i { font-size:10px; }
-.settings-section-title { font-size:18px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
-.save-bar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; align-items:center; justify-content:space-between; gap:20px; background:rgba(8,15,30,0.96); border:1px solid var(--border-bright); border-radius:12px; padding:12px 20px; z-index:100; min-width:360px; backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,0.5); }
-.save-bar span { font-size:13px; color:var(--text-secondary); }
-.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:inherit; text-decoration:none; }
-.btn-primary { background:var(--cyan); color:#000; }
-.btn-primary:hover { background:#33eeff; }
-.btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
-.btn-secondary:hover { background:rgba(255,255,255,0.1); color:var(--text-primary); }
-.btn-danger { background:rgba(255,68,68,0.15); color:var(--red); border:1px solid rgba(255,68,68,0.3); }
-.btn-danger:hover { background:rgba(255,68,68,0.25); }
-.table-loading { text-align:center; color:var(--text-muted); font-size:13px; padding:20px; }
-.table-loading i { color:var(--cyan); margin-right:8px; }
-@keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
-</style>
-<script>
+
 async function loadProfileSecurity() {
   try {
     const me = await API.json(await API.get('/auth/me'));
@@ -925,7 +928,6 @@ async function revokeAllSessions() {
   await API.post('/sessions/revoke-all', { keep_current: true });
   loadProfileSecurity();
 }
+
 </script>
-<script src="/static/js/nav.js" defer></script>
-</body>
-</html>
+{% endblock %}

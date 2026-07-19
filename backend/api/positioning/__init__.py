@@ -13,6 +13,38 @@ from backend.services.history_service import get_history_service
 positioning_bp = Blueprint("positioning", __name__, url_prefix="/api/positioning")
 
 
+@positioning_bp.route("/sources", methods=["GET"])
+@jwt_required()
+def positioning_sources():
+    """
+    Location Core status: which position sources feed live snapshots.
+    """
+    from backend.models import Tracker, WifiNode, HardwareConfig, ConnectionStatus
+    live = db.session.query(PositionSnapshot).count()
+    trackers = Tracker.query.count()
+    anchors = WifiNode.query.count()
+    hw = HardwareConfig.query.all()
+    hw_connected = sum(1 for c in hw if int(getattr(c, "status", 0) or 0) == int(ConnectionStatus.CONNECTED))
+    return jsonify({
+        "location_core": True,
+        "live_snapshots": live,
+        "trackers": trackers,
+        "anchors": anchors,
+        "hardware_configs": len(hw),
+        "hardware_connected": hw_connected,
+        "sources": [
+            {"id": "ingestion", "label": "Hardware bridge / ingestion loop", "primary": True},
+            {"id": "scanner", "label": "Wi‑Fi/BLE scanner → Trackers", "primary": True},
+            {"id": "integrations", "label": "POST /api/integrations/positions", "primary": True},
+            {"id": "uwb_demo", "label": "Legacy /api/uwb (deprecated)", "primary": False, "deprecated": True},
+        ],
+        "preferred_ui": "/",
+        "setup_ui": "/?mode=setup",
+        "legacy_scanner_ui": "/tracking?legacy=1",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+
 # ── Live position snapshots ────────────────────────────────────────────────────
 @positioning_bp.route("/live", methods=["GET"])
 @jwt_required()

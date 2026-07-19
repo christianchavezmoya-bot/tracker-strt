@@ -257,6 +257,10 @@ def create_app(test_config: dict = None) -> Flask:
 
     @app.route("/tracking")
     def tracking_page():
+        # Location Core: prefer Live Map Setup unless explicitly requesting legacy scanner UI
+        from flask import redirect
+        if request.args.get("legacy") != "1" and os.getenv("HOLO_TRACKING_LEGACY_DEFAULT", "0") != "1":
+            return redirect("/?mode=setup")
         return render_template("dashboard/tracking.html")
 
     @app.route("/nodes")

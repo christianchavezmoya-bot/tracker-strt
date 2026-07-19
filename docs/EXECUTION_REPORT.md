@@ -2,34 +2,31 @@
 
 **Branch:** `cursor/holo-rtls-execute-plan-af22` (not merged to `master`)  
 **Date:** 2026-07-19  
-**Tests:** `pytest` → see latest commit  
+**Tests:** `pytest` → **78 passed**
 
 ---
 
 ## This pass
 
-### Coverage confidence
-- Coverage rings use **heartbeat freshness + node status** (and optional `metadata.coverage_radius_m`)
-- Color: teal / amber / red; radius scales with confidence; tooltips show %
+### Shell migration (complete for admin ops pages)
+- Migrated to `base.html`: **zones, backup, reports, nodes, hardware, settings**
+- (Previously: trackers, muster, integrations, alerts, audit, users, search)
 
-### Location Core IA
-- Nav: **Map Setup** (`/?mode=setup`) + **Scanner lab** (`/tracking`) instead of single “Commissioning”
-- Live Map setup banner + toolbar highlight in setup mode
-- Zones page: Live Map CTA + zone **rules** fields (dwell / on-enter / on-exit)
+### Location Core retirement
+- `/tracking` → redirects to `/?mode=setup` unless `?legacy=1` (or `HOLO_TRACKING_LEGACY_DEFAULT=1`)
+- Nav/palette Scanner lab uses `/tracking?legacy=1`
+- `GET /api/positioning/sources` — Location Core status + source list
+- `/api/uwb` responses include `Deprecation` / `Link` successor headers
+- Settings **Location Core** tab with live stats + deep links
 
-### Backup ops
-- Schedule UI shows encryption + remote status
-- `BACKUP_REMOTE_URL` optional POST after local backup
-- Schedule API: `remote_configured` / `encryption_enabled`
-
-### Shell migration
-- `alerts`, `audit`, `users`, `search` now extend `base.html`
+### Anchors / coverage
+- Node form: optional **coverage radius** → `metadata.coverage_radius_m`
 
 ---
 
 ## Still intentionally thin / later
-- Remaining pages: settings, hardware, zones list chrome, reports, nodes, backup → full shell polish
-- Fully retire `/tracking` + `/api/uwb`
+- Live Map / tracking / login remain custom (intentional for full-bleed map & auth)
+- Complete code removal of `/api/uwb` + `/tracking` templates
 - Playwright / stress / a11y
 - LLM / Unity / multi-tenant (non-goals)
 

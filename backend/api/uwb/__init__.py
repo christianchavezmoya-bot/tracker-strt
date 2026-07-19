@@ -36,6 +36,15 @@ _DEPRECATED = {
 }
 
 
+@uwb_bp.after_request
+def _uwb_deprecation_headers(response):
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "Sat, 01 Aug 2026 00:00:00 GMT"
+    response.headers["Link"] = '</api/positioning/live>; rel="successor-version"'
+    response.headers["X-HOLO-Deprecated"] = "api/uwb → api/positioning"
+    return response
+
+
 @uwb_bp.route("/position", methods=["GET"])
 @jwt_required()
 def current_position():

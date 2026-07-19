@@ -144,6 +144,11 @@ def create_node():
         pos_z=body.get("pos_z", 0),
         node_type=node_type,
     )
+    if isinstance(body.get("metadata"), dict):
+        import json
+        node.metadata_json = json.dumps(body["metadata"])
+    elif body.get("metadata_json"):
+        node.metadata_json = body["metadata_json"]
     db.session.add(node)
     db.session.commit()
 
@@ -233,6 +238,17 @@ def update_node(node_id):
                    "status", "metadata_json"]:
         if field in body:
             setattr(node, field, body[field])
+    # Merge metadata dict (e.g. coverage_radius_m) without clobbering other keys
+    if isinstance(body.get("metadata"), dict):
+        import json
+        try:
+            cur = json.loads(node.metadata_json) if node.metadata_json else {}
+        except Exception:
+            cur = {}
+        if not isinstance(cur, dict):
+            cur = {}
+        cur.update(body["metadata"])
+        node.metadata_json = json.dumps(cur)
     db.session.commit()
     AuditLog.log(action="node.update", user_id=int(get_jwt_identity()),
                  entity_type="WifiNode", entity_id=node.id)
