@@ -55,6 +55,12 @@ def ingest_detections():
     n = pos_svc.process_scan_batch(anchor_mac, detections)
     fixes = pos_svc.compute_all_positions()
 
+    # Unify Track B → Location Core (Trackers + SSE)
+    try:
+        _sync_scanner_fixes_to_core(fixes)
+    except Exception as e:
+        logger.warning("Scanner→core sync failed: %s", e)
+
     return jsonify({
         "ok": True,
         "anchor_mac": anchor_mac,
@@ -62,6 +68,59 @@ def ingest_detections():
         "positions_computed": len(fixes),
         "timestamp": datetime.utcnow().isoformat(),
     })
+
+
+def _sync_scanner_fixes_to_core(fixes):
+    """Upsert Tracker rows + broadcast SSE so Command Center sees scanner devices."""
+    from backend.models import Tracker
+    from backend.models.tracker import TagType, DeviceCategory
+    from backend.services.ingestion_loop import get_ingestion_loop
+    from backend.services.history_service import get_history_service
+
+    loop = get_ingestion_loop()
+    history = get_history_service()
+
+    for fix in fixes or []:
+        mac = (getattr(fix, "mac_address", None) or "").upper()
+        if not mac:
+            continue
+        tracker = Tracker.query.filter_by(hardware_id=mac).first()
+        if not tracker:
+            tracker = Tracker(
+                hardware_id=mac,
+                assigned_name=f"Scan-{mac[-8:]}",
+                tag_type=int(TagType.PERSONNEL),
+                category=int(DeviceCategory.SMARTPHONE),
+            )
+            db.session.add(tracker)
+            db.session.flush()
+
+        x, y, z = float(fix.x), float(fix.y), float(getattr(fix, "z", 0) or 0)
+        acc = float(getattr(fix, "accuracy", 0) or 0)
+        tracker.pos_x, tracker.pos_y, tracker.pos_z = x, y, z
+        tracker.last_report_time = datetime.utcnow().timestamp()
+
+        if history:
+            try:
+                history.write_position(
+                    tracker_id=tracker.id, x=x, y=y, z=z,
+                    accuracy=acc, source="WIFI", hardware_id=mac,
+                )
+            except Exception:
+                pass
+
+        if loop:
+            loop._broadcast_sse({
+                "type": "position_update",
+                "tracker_id": tracker.id,
+                "hardware_id": mac,
+                "x": round(x, 3), "y": round(y, 3), "z": round(z, 3),
+                "accuracy": round(acc, 3) if acc else None,
+                "source": "WIFI",
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+
+    db.session.commit()
 
 
 # ── Anchor management ─────────────────────────────────────────────────────────
@@ -99,6 +158,15 @@ def register_anchor():
         anchor.name = body["name"]
     if body.get("floor_plan_id"):
         anchor.floor_plan_id = int(body["floor_plan_id"])
+    # Accept x/y/z aliases used by clients and map them to real-world coords
+    if "real_x" in body or "x" in body:
+        anchor.real_x = float(body.get("real_x", body.get("x")))
+    if "real_y" in body or "y" in body:
+        anchor.real_y = float(body.get("real_y", body.get("y")))
+    if "real_z" in body or "z" in body:
+        anchor.real_z = float(body.get("real_z", body.get("z", 0)) or 0)
+    if "tx_power" in body:
+        anchor.tx_power = float(body["tx_power"])
 
     db.session.commit()
     return jsonify({

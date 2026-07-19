@@ -99,8 +99,9 @@ def register():
         return jsonify({"error": "Invalid role"}), 400
 
     # In production, only admin can register new users (enforce via token)
-    from backend.config import DEBUG
-    if not DEBUG:
+    from flask import current_app
+    debug_mode = bool(current_app.config.get("DEBUG") or current_app.config.get("TESTING"))
+    if not debug_mode:
         try:
             verify_jwt_in_request(optional=True)
             identity = get_jwt_identity()
@@ -118,7 +119,7 @@ def register():
         password=password,
         role=role,
         display_name=display_name,
-        created_by_id=int(get_jwt_identity()) if not DEBUG else None,
+        created_by_id=int(get_jwt_identity()) if not debug_mode else None,
     )
 
     if err:

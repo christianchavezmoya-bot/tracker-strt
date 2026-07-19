@@ -262,10 +262,19 @@ class Zone(db.Model):
         return f"<Zone {self.name} [{ZoneType(self.zone_type).name}]>"
 
     def to_dict(self) -> dict:
+        try:
+            zt_name = ZoneType(int(self.zone_type)).name
+        except (ValueError, TypeError):
+            # Recover from legacy bad rows that stored enum names as strings
+            try:
+                zt_name = ZoneType[str(self.zone_type).upper()].name
+            except (KeyError, ValueError, AttributeError):
+                zt_name = "NORMAL"
         return {
             "id": self.id,
             "name": self.name,
-            "zone_type": ZoneType(self.zone_type).name,
+            "zone_type": zt_name,
+            "zone_type_id": int(self.zone_type) if str(self.zone_type).isdigit() else None,
             "position": {"x": self.pos_x, "y": self.pos_y, "z": self.pos_z},
             "radius": self.radius,
             "is_visible": self.is_visible,

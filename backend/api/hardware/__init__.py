@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.extensions import db
 from backend.models import HardwareConfig, AuditLog
-from backend.models.hardware import HardwareType, Protocol
+from backend.models.hardware import HardwareType, Protocol, ConnectionStatus
 from backend.models.hardware_profiles import PROFILES, get_profile, get_profiles_by_type
 from backend.utils.decorators import require_permission
 from backend.services.rbac_service import Permission
@@ -446,7 +446,9 @@ def connect(config_id):
     ===
     """
     config = HardwareConfig.query.get_or_404(config_id)
-    profile = get_config(config.profile_id)
+    profile = get_profile(config.profile_id)
+    if not profile:
+        return jsonify({"error": f"Unknown profile: {config.profile_id}"}), 404
 
     config.status = ConnectionStatus.CONNECTING
     db.session.commit()
@@ -557,8 +559,10 @@ def hardware_status():
 # ── Connection Test Implementation ────────────────────────────────────────────
 def _test_connection_impl(config, profile):
     """Test actual hardware connectivity. Called by test() and connect()."""
-    from backend.models.hardware import ConnectionStatus
     settings = config.get_settings()
+    # Mock / simulator never needs a physical port
+    if config.profile_id == "mock_data" or (profile and getattr(profile, "id", None) == "mock_data"):
+        return {"connected": True, "message": "Mock simulator ready"}
     protocol = Protocol(config.protocol)
 
     try:

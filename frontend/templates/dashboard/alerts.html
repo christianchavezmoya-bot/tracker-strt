@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ── SSE ────────────────────────────────────────────────────────────────────────
 function startSSE() {
-  const token = localStorage.getItem('access_token');
+  const token = localStorage.getItem('holo_access_token') || localStorage.getItem('access_token');
   es = new EventSource(`/api/stream/positions?token=${token}`);
 
   es.addEventListener('alert', e => {

@@ -138,11 +138,19 @@ class MockBridge(threading.Thread):
                     dist = math.sqrt((x - ax) ** 2 + (y - ay) ** 2)
                     ranges[anchor_id] = max(0.1, dist + random.gauss(0, 0.05))
 
+                # Prefer direct coords when no anchors are loaded (first-run demo)
+                if ranges:
+                    payload = {"ranges": ranges, "x": x, "y": y, "z": 0.0}
+                    source = "UWB"
+                else:
+                    payload = {"x": x, "y": y, "z": 0.0, "accuracy": 0.3}
+                    source = "SEWIO"
+
                 self._queue.put({
                     "tracker_hardware_id": tag_id,
                     "hardware_config_id": self.config_id,
-                    "source": "UWB",
-                    "payload": ranges,
+                    "source": source,
+                    "payload": payload,
                     "hardware_name": self.config_name,
                     "timestamp": datetime.now(timezone.utc),
                 })
@@ -317,7 +325,18 @@ class HardwareBridgeManager:
             bridge = None
             protocol = Protocol(cfg.protocol)
 
-            if protocol == Protocol.SERIAL:
+            # Mock simulator must win over protocol type (profile is SERIAL for catalog reasons)
+            if profile and profile.id == "mock_data":
+                bridge = MockBridge(
+                    config_id=cfg.id,
+                    config_name=cfg.name,
+                    anchors=anchors or {},
+                    interval=float(settings.get("interval", 0.5)),
+                    tracker_ids=settings.get("tracker_ids", "TAG_001,TAG_002,TAG_003").split(","),
+                    event_queue=self._queue,
+                )
+
+            elif protocol == Protocol.SERIAL:
                 bridge = SerialBridge(
                     config_id=cfg.id,
                     config_name=cfg.name,
@@ -338,16 +357,6 @@ class HardwareBridgeManager:
                     password=settings.get("password", ""),
                     topics=settings.get("topics", "rssi/data,rssi/raw").split(","),
                     field_mapping=settings.get("field_mapping", {}),
-                    event_queue=self._queue,
-                )
-
-            elif profile and profile.id == "mock_data":
-                bridge = MockBridge(
-                    config_id=cfg.id,
-                    config_name=cfg.name,
-                    anchors=anchors or {},
-                    interval=float(settings.get("interval", 0.5)),
-                    tracker_ids=settings.get("tracker_ids", "TAG_001,TAG_002,TAG_003").split(","),
                     event_queue=self._queue,
                 )
 

@@ -5,16 +5,26 @@ All settings loaded from environment variables (never hardcoded).
 import os
 from pathlib import Path
 
+# Load .env before reading os.getenv (no-op if python-dotenv missing or no file)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+except ImportError:
+    pass
+
 # ── Paths ──────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent          # /workspace/HOLO-RTLS
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
 # ── Database ────────────────────────────────────────────────────────────────
-SQLALCHEMY_DATABASE_URI = os.getenv(
-    "DATABASE_URL",
-    f"sqlite:///{DATA_DIR / 'holo_rtls.db'}"
-)
+# Prefer absolute SQLite path so CWD does not break relative URIs from .env
+_raw_db = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'holo_rtls.db'}")
+if _raw_db.startswith("sqlite:///") and not _raw_db.startswith("sqlite:////"):
+    _rel = _raw_db[len("sqlite:///"):]
+    if _rel and not _rel.startswith(":") and not Path(_rel).is_absolute():
+        _raw_db = f"sqlite:///{(BASE_DIR / _rel).resolve()}"
+SQLALCHEMY_DATABASE_URI = _raw_db
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 SQLALCHEMY_ECHO = os.getenv("SQLALCHEMY_ECHO", "0") == "1"
 

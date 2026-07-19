@@ -227,12 +227,26 @@ class WifiPositioningService:
         self.db.query(DetectionEvent).filter_by(anchor_id=anchor.id).delete()
         self.db.flush()
 
-        # Persist raw detections
+        # Persist raw detections (accept mac_address / mac / bssid aliases)
         for d in detections:
+            mac = (
+                d.get("mac_address")
+                or d.get("mac")
+                or d.get("bssid")
+                or d.get("device_mac")
+                or ""
+            )
+            if not mac:
+                logger.warning("Skipping detection without mac_address: %s", d)
+                continue
+            try:
+                rssi = float(d.get("rssi", d.get("signal_strength", -70)))
+            except (TypeError, ValueError):
+                continue
             ev = DetectionEvent(
                 anchor_id=anchor.id,
-                mac_address=d["mac_address"].upper(),
-                rssi=float(d["rssi"]),
+                mac_address=str(mac).upper(),
+                rssi=rssi,
                 signal_type=int(d.get("signal_type", SignalType.WIFI)),
                 ssid=d.get("ssid"),
                 adv_name=d.get("adv_name"),

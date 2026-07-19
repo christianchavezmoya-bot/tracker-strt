@@ -139,11 +139,25 @@ def positions_stream():
 def _snapshot_event() -> str:
     """Send current position snapshot for all trackers on connect."""
     from backend.models.positioning import PositionSnapshot
+    from backend.models import Tracker
     from backend.extensions import db
 
     try:
         snapshots = db.session.query(PositionSnapshot).all()
         items = [s.to_dict() for s in snapshots]
+        # Fallback: include Tracker last known coords if snapshot empty
+        if not items:
+            for t in Tracker.query.all():
+                if t.pos_x is None and t.pos_y is None:
+                    continue
+                items.append({
+                    "tracker_id": t.id,
+                    "hardware_id": t.hardware_id,
+                    "x": t.pos_x or 0,
+                    "y": t.pos_y or 0,
+                    "z": t.pos_z or 0,
+                    "source": "TRACKER",
+                })
         return f"data: {json.dumps({'type': 'snapshot', 'positions': items})}\n\n"
     except Exception as e:
         logger.error(f"Error building snapshot: {e}")

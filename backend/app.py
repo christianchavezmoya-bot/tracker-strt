@@ -147,6 +147,8 @@ def create_app(test_config: dict = None) -> Flask:
     from backend.api.stream import stream_bp
     from backend.api.positioning import positioning_bp
     from backend.api.scanner import scanner_bp
+    from backend.api.keys import keys_bp
+    from backend.api.checkin import checkin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trackers_bp)
@@ -165,6 +167,8 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(positioning_bp)
     app.register_blueprint(scanner_bp)
     app.register_blueprint(stream_bp)
+    app.register_blueprint(keys_bp)
+    app.register_blueprint(checkin_bp)
 
     # ── Frontend routes ───────────────────────────────────────────────────────
     from flask import render_template
@@ -180,6 +184,14 @@ def create_app(test_config: dict = None) -> Flask:
     @app.route("/trackers")
     def trackers_page():
         return render_template("dashboard/trackers.html")
+
+    @app.route("/integrations")
+    def integrations_page():
+        return render_template("dashboard/integrations.html")
+
+    @app.route("/muster")
+    def muster_page():
+        return render_template("dashboard/muster.html")
 
     @app.route("/zones")
     def zones_page():
@@ -292,6 +304,8 @@ def _init_positioning(app):
     from backend.models.positioning import TrackingHistory, PositionSnapshot
     db.create_all()
 
+    _seed_demo_if_needed(app)
+
     from backend.services.positioning_service import PositioningService
     from backend.services.floor_plan_mapper import FloorPlanMapperService
     from backend.services.history_service import init_history_service
@@ -349,3 +363,68 @@ def _init_positioning(app):
         f"alerts: {'running' if alert_svc else 'disabled'}, "
         f"ingestion: {'running' if ingestion else 'FAILED'}"
     )
+
+
+def _seed_demo_if_needed(app):
+    """Ensure admin + mock simulator exist so Live Map works on first boot."""
+    import logging
+    from backend.models import User, UserRole, HardwareConfig, WifiNode, Tracker
+    from backend.models.hardware import ConnectionStatus, HardwareType, Protocol
+    from backend.models.tracker import TagType, DeviceCategory, NodeType, NodeStatus
+
+    log = logging.getLogger(__name__)
+
+    if User.query.count() == 0:
+        admin = User(
+            email="admin@holo-rtls.local",
+            username="admin",
+            display_name="System Administrator",
+            role=UserRole.ADMIN,
+        )
+        admin.set_password("ChangeMe123!")
+        db.session.add(admin)
+        log.info("Seeded default admin user")
+
+    demo_nodes = [
+        ("AA:00:00:00:00:01", "Demo Anchor N", 0.0, 0.0, 2.5),
+        ("AA:00:00:00:00:02", "Demo Anchor E", 20.0, 0.0, 2.5),
+        ("AA:00:00:00:00:03", "Demo Anchor S", 20.0, 15.0, 2.5),
+        ("AA:00:00:00:00:04", "Demo Anchor W", 0.0, 15.0, 2.5),
+    ]
+    for mac, name, x, y, z in demo_nodes:
+        if not WifiNode.query.filter_by(mac_address=mac).first():
+            db.session.add(WifiNode(
+                mac_address=mac, assigned_name=name,
+                pos_x=x, pos_y=y, pos_z=z,
+                node_type=int(NodeType.STANDARD),
+                status=int(NodeStatus.ACTIVE),
+            ))
+
+    for hid, name, tt, cat in [
+        ("TAG_001", "Operator Alpha", TagType.PERSONNEL, DeviceCategory.PERSONNEL_TAG),
+        ("TAG_002", "Machine Cart B", TagType.MACHINE, DeviceCategory.MACHINE_TAG),
+        ("TAG_003", "Sensor Pack C", TagType.PERSONNEL, DeviceCategory.ENV_SENSOR),
+    ]:
+        if not Tracker.query.filter_by(hardware_id=hid).first():
+            db.session.add(Tracker(
+                hardware_id=hid, assigned_name=name,
+                tag_type=int(tt), category=int(cat),
+            ))
+
+    # Prefer an active mock_data bridge for demos when none exists
+    has_mock = HardwareConfig.query.filter_by(profile_id="mock_data").first()
+    if not has_mock:
+        mock = HardwareConfig(
+            name="Demo Mock Simulator",
+            hardware_type=HardwareType.UWB,
+            protocol=Protocol.SERIAL,
+            profile_id="mock_data",
+            is_active=True,
+            status=ConnectionStatus.DISCONNECTED,
+        )
+        mock.set_settings({"interval": 0.5, "tracker_ids": "TAG_001,TAG_002,TAG_003"})
+        db.session.add(mock)
+        log.info("Seeded demo mock_data hardware config")
+
+    db.session.commit()
+

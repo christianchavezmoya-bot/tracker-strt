@@ -514,3 +514,59 @@ def full_export():
             "last_seen": history[-1].timestamp.isoformat() if history else "",
         })
     return make_csv_response(rows, f"full_report_{date_str}.csv")
+
+
+@reports_bp.route("/dwell", methods=["GET"])
+@jwt_required()
+@require_permission(Permission.GENERATE_REPORT)
+def dwell_report():
+    """
+    Zone dwell-time analytics: approximate time each tracker spent near each zone
+    (distance <= radius) over the selected window.
+    """
+    from backend.models import Zone
+
+    start, end = _date_range(int(request.args.get("days", 7)))
+    if not start:
+        return jsonify({"error": "Invalid date range"}), 400
+
+    zones = Zone.query.all()
+    trackers = Tracker.query.all()
+    rows = []
+
+    for t in trackers:
+        history = TrackingHistory.query.filter(
+            TrackingHistory.tracker_id == t.id,
+            TrackingHistory.timestamp >= start,
+            TrackingHistory.timestamp < end,
+        ).order_by(TrackingHistory.timestamp.asc()).all()
+        if len(history) < 2:
+            continue
+
+        for z in zones:
+            dwell_sec = 0.0
+            for i in range(1, len(history)):
+                a, b = history[i - 1], history[i]
+                dt = (b.timestamp - a.timestamp).total_seconds()
+                if dt <= 0 or dt > 300:
+                    continue
+                dist = ((a.x - z.pos_x) ** 2 + (a.y - z.pos_y) ** 2) ** 0.5
+                if dist <= (z.radius or 0):
+                    dwell_sec += dt
+            if dwell_sec > 0:
+                rows.append({
+                    "tracker_id": t.id,
+                    "hardware_id": t.hardware_id,
+                    "assigned_name": t.assigned_name or "",
+                    "zone_id": z.id,
+                    "zone_name": z.name,
+                    "zone_type": z.to_dict().get("zone_type"),
+                    "dwell_seconds": round(dwell_sec, 1),
+                    "dwell_minutes": round(dwell_sec / 60.0, 2),
+                })
+
+    rows.sort(key=lambda r: r["dwell_seconds"], reverse=True)
+    fmt = request.args.get("format", "json")
+    if fmt == "csv":
+        return make_csv_response(rows or [{"tracker_id": "", "dwell_seconds": 0}], "dwell_report.csv")
+    return jsonify({"items": rows, "total": len(rows), "start": start.isoformat(), "end": end.isoformat()})

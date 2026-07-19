@@ -497,7 +497,14 @@ let esRetryTimer = null;
 
 function startSSE() {
   if (es) { try { es.close(); } catch {} }
-  es = new EventSource('/api/stream/positions');
+  const token = (typeof API !== 'undefined' && API._token)
+    || localStorage.getItem('holo_access_token')
+    || localStorage.getItem('access_token')
+    || '';
+  const url = token
+    ? `/api/stream/positions?token=${encodeURIComponent(token)}`
+    : '/api/stream/positions';
+  es = new EventSource(url);
 
   es.addEventListener('position_update', e => {
     const data = JSON.parse(e.data);

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Muster — HOLO-RTLS</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/shell.css">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body class="shell-page">
+<header class="topbar shell-topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb"><span>Muster</span></div>
+  </div>
+</header>
+<main class="shell-main">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Muster board</h1>
+      <p class="page-subtitle">Personnel check-in accountability for emergencies and shift starts</p>
+    </div>
+    <button class="btn btn-ghost" id="btnRefresh"><i class="fa-solid fa-rotate"></i> Refresh</button>
+  </div>
+  <div class="stat-strip">
+    <div class="stat-chip"><span class="stat-num" id="cIn">—</span><span class="stat-label">Checked in</span></div>
+    <div class="stat-chip"><span class="stat-num" id="cOut">—</span><span class="stat-label">Checked out</span></div>
+    <div class="stat-chip"><span class="stat-num" id="cMiss">—</span><span class="stat-label">Unchecked</span></div>
+    <div class="stat-chip"><span class="stat-num" id="cTot">—</span><span class="stat-label">Total</span></div>
+  </div>
+  <div class="table-panel">
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Hardware</th><th>Status</th><th>Section</th><th>Actions</th></tr></thead>
+      <tbody id="body"><tr><td colspan="5" class="empty-cell">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/nav.js" defer></script>
+<script>
+if (!API.isLoggedIn()) location.href='/login';
+async function load() {
+  const res = await API.get('/checkin/status');
+  const data = await res.json();
+  document.getElementById('cIn').textContent = (data.counts||{}).CHECKED_IN || 0;
+  document.getElementById('cOut').textContent = (data.counts||{}).CHECKED_OUT || 0;
+  document.getElementById('cMiss').textContent = (data.counts||{}).UNCHECKED || 0;
+  document.getElementById('cTot').textContent = data.total || 0;
+  const items = data.items || [];
+  document.getElementById('body').innerHTML = items.map(t => `<tr>
+    <td><strong>${t.assigned_name || 'Unnamed'}</strong></td>
+    <td class="mono">${t.hardware_id}</td>
+    <td><span class="chip ${t.check_status==='UNCHECKED'?'warn':''}">${t.check_status}</span></td>
+    <td>${t.current_section || '—'}</td>
+    <td class="row-actions">
+      <button class="btn btn-sm btn-primary" onclick="setStatus(${t.tracker_id},'CHECKED_IN')">In</button>
+      <button class="btn btn-sm btn-ghost" onclick="setStatus(${t.tracker_id},'CHECKED_OUT')">Out</button>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="5" class="empty-cell">No trackers</td></tr>';
+}
+async function setStatus(id, status) {
+  await API.post('/checkin/' + id, { status });
+  load();
+}
+document.getElementById('btnRefresh').onclick = load;
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>

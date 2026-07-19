@@ -102,10 +102,12 @@ class IngestionLoop(threading.Thread):
                 tracker = Tracker.query.filter_by(hardware_id=hardware_id).first()
                 if not tracker:
                     # Auto-create tracker for unknown hardware
+                    from backend.models.tracker import TagType, DeviceCategory
                     tracker = Tracker(
                         hardware_id=hardware_id,
-                        name=f"Auto-{hardware_id[:12]}",
-                        category="auto_discovered",
+                        assigned_name=f"Auto-{hardware_id[:12]}",
+                        tag_type=int(TagType.PERSONNEL),
+                        category=int(DeviceCategory.PERSONNEL_TAG),
                     )
                     db.session.add(tracker)
                     db.session.commit()
@@ -120,7 +122,8 @@ class IngestionLoop(threading.Thread):
 
     def run(self):
         logger.info("IngestionLoop started")
-        self._ensure_cache()
+        with self._app.app_context():
+            self._ensure_cache()
 
         while not self._stop.is_set():
             try:
@@ -129,7 +132,8 @@ class IngestionLoop(threading.Thread):
                 continue
 
             try:
-                self._process_event(event)
+                with self._app.app_context():
+                    self._process_event(event)
             except Exception as e:
                 logger.error(f"Ingestion processing error: {e}")
 
@@ -212,9 +216,11 @@ class IngestionLoop(threading.Thread):
         self._broadcast_sse(sse_data)
 
         # Step 8: Publish to MQTT
-        if self._mqtt and self._mqtt.is_connected():
+        if self._mqtt and getattr(self._mqtt, "is_connected", False):
             try:
-                self._mqtt.publish("rtls/state_changes", json.dumps(sse_data), qos=1)
+                publish = getattr(self._mqtt, "publish", None)
+                if callable(publish):
+                    self._mqtt.publish("rtls/state_changes", json.dumps(sse_data), qos=1)
             except Exception as e:
                 logger.error(f"MQTT publish error: {e}")
 

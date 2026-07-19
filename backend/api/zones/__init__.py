@@ -3,11 +3,32 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.extensions import db
 from backend.models import Zone, MapSection, AuditLog
+from backend.models.tracker import ZoneType
 from backend.utils.decorators import require_permission
 from backend.services.rbac_service import Permission
 
 zones_bp = Blueprint("zones", __name__, url_prefix="/api/zones")
 
+
+def _parse_zone_type(raw, default=ZoneType.NORMAL) -> int:
+    """Accept int, numeric string, or enum name (e.g. RESTRICTED)."""
+    if raw is None or raw == "":
+        return int(default)
+    if isinstance(raw, int):
+        try:
+            return int(ZoneType(raw))
+        except ValueError:
+            return int(default)
+    s = str(raw).strip()
+    if s.isdigit():
+        try:
+            return int(ZoneType(int(s)))
+        except ValueError:
+            return int(default)
+    try:
+        return int(ZoneType[s.upper()])
+    except KeyError:
+        return int(default)
 
 @zones_bp.route("/sections", methods=["GET"])
 @jwt_required()
@@ -290,11 +311,11 @@ def create_zone():
     body = request.get_json() or {}
     zone = Zone(
         name=body.get("name", "").strip() or "Unnamed Zone",
-        zone_type=body.get("zone_type", 1),
-        pos_x=body.get("pos_x", 0),
-        pos_y=body.get("pos_y", 0),
-        pos_z=body.get("pos_z", 0),
-        radius=body.get("radius", 5),
+        zone_type=_parse_zone_type(body.get("zone_type", 1)),
+        pos_x=float(body.get("pos_x", body.get("center_x", 0)) or 0),
+        pos_y=float(body.get("pos_y", body.get("center_y", 0)) or 0),
+        pos_z=float(body.get("pos_z", 0) or 0),
+        radius=float(body.get("radius", 5) or 5),
         is_visible=body.get("is_visible", True),
         color_hex=body.get("color_hex", "#00e5ff"),
         section_id=body.get("section_id"),
@@ -355,7 +376,10 @@ def update_zone(zone_id):
     for field in ["name", "zone_type", "pos_x", "pos_y", "pos_z",
                    "radius", "is_visible", "color_hex", "section_id"]:
         if field in body:
-            setattr(zone, field, body[field])
+            val = body[field]
+            if field == "zone_type":
+                val = _parse_zone_type(val)
+            setattr(zone, field, val)
     db.session.commit()
     AuditLog.log(action="zone.update", user_id=int(get_jwt_identity()),
                  entity_type="Zone", entity_id=zone.id)

@@ -2,45 +2,297 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trackers — HOLO-RTLS</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0ea5a4">
   <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/auth.css">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/shell.css">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-<body class="auth-page">
-  <div class="auth-bg">
-    <div class="auth-grid-overlay"></div>
-    <div class="auth-glow auth-glow-1"></div>
+<body class="shell-page">
+<header class="topbar shell-topbar">
+  <div class="topbar-left">
+    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
+    <div class="breadcrumb"><span>Trackers</span></div>
   </div>
-  <div class="auth-container" style="max-width:700px">
-    <div class="auth-brand" style="margin-bottom:16px">
-      <div class="auth-logo">◈</div>
-      <h1 class="auth-title" style="font-size:18px">Trackers</h1>
-      <p class="auth-subtitle">Implementation in progress — Phase 2+</p>
+  <div class="topbar-right">
+    <a href="/" class="btn btn-ghost btn-sm"><i class="fa-solid fa-map-location-dot"></i> Live Map</a>
+    <div class="user-menu">
+      <button class="user-btn" id="userAvatarBtn"><div class="user-avatar" id="userAvatar">A</div></button>
     </div>
-    <div class="auth-card" style="text-align:center">
-      <div style="font-size:48px;color:var(--cyan);margin:20px 0">
-        <i class="fa-solid fa-hard-hat"></i>
+  </div>
+</header>
+
+<main class="shell-main">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Trackers</h1>
+      <p class="page-subtitle">Register and manage personnel, machine, and sensor tags</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-ghost" id="btnExport"><i class="fa-solid fa-download"></i> Export CSV</button>
+      <button class="btn btn-primary" id="btnCreate"><i class="fa-solid fa-plus"></i> Add Tracker</button>
+    </div>
+  </div>
+
+  <div class="stat-strip" id="statStrip">
+    <div class="stat-chip"><span class="stat-num" id="statTotal">—</span><span class="stat-label">Total</span></div>
+    <div class="stat-chip"><span class="stat-num" id="statActive">—</span><span class="stat-label">Active</span></div>
+    <div class="stat-chip"><span class="stat-num" id="statOffline">—</span><span class="stat-label">Offline</span></div>
+    <div class="stat-chip"><span class="stat-num" id="statAlert">—</span><span class="stat-label">Alerting</span></div>
+  </div>
+
+  <div class="toolbar-row">
+    <div class="search-field">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input id="qInput" type="search" placeholder="Search name or hardware ID…" />
+    </div>
+    <select id="filterCategory" class="select-field">
+      <option value="">All categories</option>
+      <option value="1">Personnel</option>
+      <option value="2">Machine</option>
+      <option value="3">Smartphone</option>
+      <option value="4">Smartwatch</option>
+      <option value="5">Env sensor</option>
+    </select>
+    <select id="filterState" class="select-field">
+      <option value="">All states</option>
+      <option value="1">Active</option>
+      <option value="2">Offline</option>
+      <option value="3">Maintenance</option>
+      <option value="4">Decommissioned</option>
+    </select>
+  </div>
+
+  <div class="table-panel">
+    <table class="data-table" id="trackersTable">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Hardware ID</th>
+          <th>Category</th>
+          <th>State</th>
+          <th>Battery</th>
+          <th>Position</th>
+          <th>Alert</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="trackersBody">
+        <tr><td colspan="8" class="empty-cell">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Create / Edit modal -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="modalTitle">Add Tracker</h2>
+      <button class="icon-btn" id="modalClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="trackerForm" class="modal-body">
+      <input type="hidden" id="editId" />
+      <label class="field">
+        <span>Hardware ID / MAC</span>
+        <input id="fHardware" required placeholder="TAG_004 or AA:BB:CC:DD:EE:FF" />
+      </label>
+      <label class="field">
+        <span>Assigned name</span>
+        <input id="fName" placeholder="Operator Delta" />
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Tag type</span>
+          <select id="fTagType">
+            <option value="1">Personnel</option>
+            <option value="2">Machine</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Category</span>
+          <select id="fCategory">
+            <option value="1">Personnel tag</option>
+            <option value="2">Machine tag</option>
+            <option value="3">Smartphone</option>
+            <option value="4">Smartwatch</option>
+            <option value="5">Env sensor</option>
+          </select>
+        </label>
       </div>
-      <p style="color:var(--text-muted);margin-bottom:20px">
-        This page is a placeholder.<br>
-        It will be implemented in <strong>Phase 2–5</strong> of the build plan.
-      </p>
-      <a href="/" class="btn btn-primary">← Back to Command Center</a>
-    </div>
-    <p class="auth-footer" style="margin-top:16px">
-      See <strong>BUILD_PLAN.md</strong> for the full roadmap.
-    </p>
+      <label class="field" id="stateField" hidden>
+        <span>Asset state</span>
+        <select id="fState">
+          <option value="1">Active</option>
+          <option value="2">Offline</option>
+          <option value="3">Maintenance</option>
+          <option value="4">Decommissioned</option>
+        </select>
+      </label>
+      <p class="form-error" id="formError" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="btnSave">Save</button>
+      </div>
+    </form>
   </div>
-  <script src="/static/js/api.js"></script>
-  <script>
-    if (!API.isLoggedIn()) window.location.href = '/login';
-    document.addEventListener('DOMContentLoaded', () => {
-      const user = API.getUser();
-      if (user) document.title = user.display_name + ' — HOLO-RTLS';
-    });
-  </script>
+</div>
+
+<script src="/static/js/api.js"></script>
 <script src="/static/js/nav.js" defer></script>
+<script>
+if (!API.isLoggedIn()) location.href = '/login';
+const user = API.getUser() || {};
+document.getElementById('userAvatar').textContent = (user.display_name || user.username || 'A')[0].toUpperCase();
+
+let page = 1;
+const CAT = {1:'Personnel',2:'Machine',3:'Phone',4:'Watch',5:'Sensor',6:'UWB'};
+const STATE = {1:'Active',2:'Offline',3:'Maintenance',4:'Decommissioned'};
+const ALERT = {0:'Normal',1:'No movement',2:'No signal',3:'Restricted',4:'Low battery',5:'Vitals',6:'Env'};
+
+async function loadTrackers() {
+  const q = document.getElementById('qInput').value.trim();
+  const category = document.getElementById('filterCategory').value;
+  const asset_state = document.getElementById('filterState').value;
+  const params = new URLSearchParams({ page, per_page: 100 });
+  if (q) params.set('q', q);
+  if (category) params.set('category', category);
+  if (asset_state) params.set('asset_state', asset_state);
+
+  const res = await API.get('/trackers?' + params.toString());
+  const data = await res.json();
+  const items = data.items || [];
+  document.getElementById('statTotal').textContent = data.total ?? items.length;
+  document.getElementById('statActive').textContent = items.filter(t => t.asset_state === 'ACTIVE' || t.asset_state === 1).length;
+  document.getElementById('statOffline').textContent = items.filter(t => t.asset_state === 'OFFLINE' || t.asset_state === 2).length;
+  document.getElementById('statAlert').textContent = items.filter(t => t.alert_status && t.alert_status !== 'NORMAL' && t.alert_status !== 0).length;
+
+  const body = document.getElementById('trackersBody');
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="8" class="empty-cell">No trackers yet. <button class="linkish" onclick="openCreate()">Add the first tag</button></td></tr>';
+    return;
+  }
+  body.innerHTML = items.map(t => {
+    const bat = t.battery_level != null ? Math.round(t.battery_level) + '%' : '—';
+    const pos = t.position ? `${Number(t.position.x||0).toFixed(1)}, ${Number(t.position.y||0).toFixed(1)}` : '—';
+    const cat = typeof t.category === 'string' ? t.category : (CAT[t.category] || t.category);
+    const st = typeof t.asset_state === 'string' ? t.asset_state : (STATE[t.asset_state] || t.asset_state);
+    const al = typeof t.alert_status === 'string' ? t.alert_status : (ALERT[t.alert_status] || t.alert_status);
+    const alertClass = (al && al !== 'NORMAL' && al !== 'Normal') ? 'chip warn' : 'chip';
+    return `<tr>
+      <td><strong>${esc(t.assigned_name || 'Unnamed')}</strong></td>
+      <td class="mono">${esc(t.hardware_id)}</td>
+      <td>${esc(cat)}</td>
+      <td><span class="chip">${esc(st)}</span></td>
+      <td>${bat}</td>
+      <td class="mono">${pos}</td>
+      <td><span class="${alertClass}">${esc(al)}</span></td>
+      <td class="row-actions">
+        <a class="icon-btn" title="Show on map" href="/?tracker=${t.id}"><i class="fa-solid fa-location-crosshairs"></i></a>
+        <button class="icon-btn" title="Edit" onclick='openEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'><i class="fa-solid fa-pen"></i></button>
+        <button class="icon-btn danger" title="Delete" onclick="removeTracker(${t.id})"><i class="fa-solid fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function openCreate() {
+  document.getElementById('modalTitle').textContent = 'Add Tracker';
+  document.getElementById('editId').value = '';
+  document.getElementById('fHardware').value = '';
+  document.getElementById('fHardware').disabled = false;
+  document.getElementById('fName').value = '';
+  document.getElementById('fTagType').value = '1';
+  document.getElementById('fCategory').value = '1';
+  document.getElementById('stateField').hidden = true;
+  document.getElementById('formError').hidden = true;
+  document.getElementById('modal').hidden = false;
+}
+function openEdit(t) {
+  document.getElementById('modalTitle').textContent = 'Edit Tracker';
+  document.getElementById('editId').value = t.id;
+  document.getElementById('fHardware').value = t.hardware_id;
+  document.getElementById('fHardware').disabled = true;
+  document.getElementById('fName').value = t.assigned_name || '';
+  document.getElementById('fTagType').value = String(t.tag_type_id || t.tag_type || 1);
+  document.getElementById('fCategory').value = String(t.category_id || (typeof t.category === 'number' ? t.category : 1));
+  document.getElementById('stateField').hidden = false;
+  document.getElementById('fState').value = String(t.asset_state_id || (typeof t.asset_state === 'number' ? t.asset_state : 1));
+  document.getElementById('formError').hidden = true;
+  document.getElementById('modal').hidden = false;
+}
+function closeModal() { document.getElementById('modal').hidden = true; }
+
+document.getElementById('btnCreate').onclick = openCreate;
+document.getElementById('btnCancel').onclick = closeModal;
+document.getElementById('modalClose').onclick = closeModal;
+document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+
+document.getElementById('trackerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('editId').value;
+  const err = document.getElementById('formError');
+  err.hidden = true;
+  let res;
+  if (id) {
+    res = await API.patch('/trackers/' + id, {
+      assigned_name: document.getElementById('fName').value.trim() || null,
+      tag_type: Number(document.getElementById('fTagType').value),
+      category: Number(document.getElementById('fCategory').value),
+      asset_state: Number(document.getElementById('fState').value),
+    });
+  } else {
+    res = await API.post('/trackers', {
+      hardware_id: document.getElementById('fHardware').value.trim(),
+      assigned_name: document.getElementById('fName').value.trim() || null,
+      tag_type: Number(document.getElementById('fTagType').value),
+      category: Number(document.getElementById('fCategory').value),
+    });
+  }
+  if (!res || !res.ok) {
+    const data = res ? await res.json().catch(() => ({})) : {};
+    err.textContent = data.error || 'Save failed';
+    err.hidden = false;
+    return;
+  }
+  closeModal();
+  loadTrackers();
+});
+
+async function removeTracker(id) {
+  if (!confirm('Delete this tracker?')) return;
+  await API.del('/trackers/' + id);
+  loadTrackers();
+}
+
+document.getElementById('btnExport').onclick = async () => {
+  const res = await API.get('/trackers?per_page=500');
+  const data = await res.json();
+  const items = data.items || [];
+  const header = ['id','hardware_id','assigned_name','category','asset_state','battery_level'];
+  const lines = [header.join(',')].concat(items.map(t =>
+    [t.id, t.hardware_id, JSON.stringify(t.assigned_name||''), t.category, t.asset_state, t.battery_level].join(',')
+  ));
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'trackers.csv';
+  a.click();
+};
+
+['qInput','filterCategory','filterState'].forEach(id => {
+  document.getElementById(id).addEventListener('change', loadTrackers);
+  document.getElementById(id).addEventListener('keyup', e => { if (e.key === 'Enter') loadTrackers(); });
+});
+
+loadTrackers();
+</script>
 </body>
 </html>

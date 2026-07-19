@@ -113,6 +113,27 @@ class HistoryService:
         snapshot.updated_at = now
         snapshot.last_seen_hardware = now
 
+        # Keep Tracker row in sync for list UIs and map bootstrap
+        try:
+            from backend.models import Tracker
+            tracker = self._db.query(Tracker).get(tracker_id)
+            if tracker:
+                tracker.pos_x = x
+                tracker.pos_y = y
+                tracker.pos_z = z
+                tracker.last_report_time = now.timestamp()
+        except Exception:
+            pass
+
+        # Persist snapshot + tracker immediately (buffer only holds history rows).
+        # Must commit here: ingestion app_context ends before the flush thread runs,
+        # and a scoped session would otherwise drop uncommitted snapshot rows.
+        try:
+            self._db.commit()
+        except Exception as e:
+            logger.error(f"Snapshot commit error: {e}")
+            self._db.rollback()
+
         # ── Append to circular buffer for batch history write ──
         entry = {
             "tracker_id": tracker_id,

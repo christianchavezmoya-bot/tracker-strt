@@ -43,16 +43,38 @@ def list_trackers():
 @require_permission(Permission.MANAGE_TRACKER)
 def create_tracker():
     body = request.get_json() or {}
-    hardware_id = body.get("hardware_id", "").strip()
+    # Accept hardware_id / device_id / mac_address; coerce non-strings safely
+    raw_id = body.get("hardware_id", body.get("device_id", body.get("mac_address", "")))
+    hardware_id = str(raw_id or "").strip()
     if not hardware_id:
         return jsonify({"error": "hardware_id is required"}), 400
     if Tracker.query.filter_by(hardware_id=hardware_id).first():
         return jsonify({"error": "hardware_id already exists"}), 409
+
+    def _as_int(val, default):
+        if val is None or val == "":
+            return int(default)
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str) and val.isdigit():
+            return int(val)
+        # Named enums e.g. "PERSONNEL"
+        for enum_cls in (TagType, DeviceCategory):
+            try:
+                return int(enum_cls[str(val).upper()])
+            except (KeyError, ValueError):
+                pass
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return int(default)
+
+    name = body.get("assigned_name") or body.get("name")
     tracker = Tracker(
         hardware_id=hardware_id,
-        assigned_name=body.get("assigned_name"),
-        tag_type=int(body.get("tag_type", TagType.PERSONNEL)),
-        category=int(body.get("category", DeviceCategory.PERSONNEL_TAG)),
+        assigned_name=name,
+        tag_type=_as_int(body.get("tag_type", body.get("type")), TagType.PERSONNEL),
+        category=_as_int(body.get("category"), DeviceCategory.PERSONNEL_TAG),
     )
     db.session.add(tracker)
     db.session.commit()
@@ -103,7 +125,7 @@ def reassign_tracker(tracker_id):
     """Reassign tracker to new hardware_id (when physical tag is replaced)."""
     tracker = Tracker.query.get_or_404(tracker_id)
     body = request.get_json() or {}
-    new_hardware_id = body.get("hardware_id", "").strip()
+    new_hardware_id = str(body.get("hardware_id") or "").strip()
     if not new_hardware_id:
         return jsonify({"error": "hardware_id is required"}), 400
     if Tracker.query.filter_by(hardware_id=new_hardware_id).first():
