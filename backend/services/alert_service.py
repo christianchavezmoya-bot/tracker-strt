@@ -120,13 +120,29 @@ class AlertService:
     # ── Zone cache ─────────────────────────────────────────────────────────────
 
     def _reload_zones(self):
-        """Re-fetch zones and sections from DB."""
+        """Re-fetch zones and sections from DB (snapshot plain values — session-safe)."""
         with self._app.app_context():
             from backend.models import Zone, MapSection
+            from sqlalchemy.orm import joinedload
             try:
-                self._zones_cache = self._db.query(Zone).filter(
-                    Zone.zone_type == 2   # ZoneType.RESTRICTED = 2
+                zones = self._db.query(Zone).options(joinedload(Zone.section)).filter(
+                    Zone.zone_type.in_([2, 3])   # RESTRICTED=2, DANGER=3
                 ).all()
+                snapped = []
+                for z in zones:
+                    try:
+                        sec_name = z.section.name if z.section else None
+                    except Exception:
+                        sec_name = None
+                    snapped.append(type("ZoneSnap", (), {
+                        "name": z.name,
+                        "pos_x": z.pos_x,
+                        "pos_y": z.pos_y,
+                        "pos_z": z.pos_z or 0.0,
+                        "radius": z.radius or 0.0,
+                        "section_name": sec_name,
+                    })())
+                self._zones_cache = snapped
                 self._sections_cache = self._db.query(MapSection).filter(
                     MapSection.is_restricted == True
                 ).all()
@@ -215,7 +231,7 @@ class AlertService:
                     alert_type=3,   # RESTRICTED_ZONE
                     message=f"Tracker entered restricted zone: {zone.name}",
                     pos_x=x, pos_y=y, pos_z=z,
-                    section_name=zone.section.name if zone.section else None,
+                    section_name=getattr(zone, "section_name", None),
                     zone_name=zone.name,
                 ))
         return alerts
