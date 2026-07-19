@@ -62,36 +62,40 @@ def create_node():
     tags:
       - Nodes
     summary: Create a WiFi node
-    description: Creates a new WiFi node. Requires MANAGE_NODE permission.
+    description: Creates a new WiFi node. MAC address is auto-generated if not
+    provided. Requires MANAGE_NODE permission.
     security:
       - Bearer: []
     parameters:
       - in: body
         name: body
-        required: true
         schema:
           type: object
-          required:
-            - mac_address
           properties:
+            name:
+              type: string
+              description: Human-readable name for the node
             mac_address:
               type: string
-              description: MAC address of the node
-            assigned_name:
-              type: string
-              description: Human-readable name
+              description: Optional MAC address. Auto-generated if omitted.
             pos_x:
               type: number
               default: 0
-              description: X coordinate
+              description: X coordinate (meters)
             pos_y:
               type: number
               default: 0
-              description: Y coordinate
+              description: Y coordinate (meters)
             pos_z:
               type: number
               default: 0
-              description: Z coordinate
+              description: Z coordinate (floor level)
+            node_type:
+              type: string
+              description: Node type — UWB_ANCHOR, WIFI_AP, GATEWAY, REPEATER
+            section_name:
+              type: string
+              description: Section / zone name
     responses:
       201:
         description: Node created
@@ -99,23 +103,50 @@ def create_node():
           type: object
           properties:
             node: { type: object }
-      400:
-        description: mac_address is required
       409:
         description: MAC address already exists
     ===
     """
+    from backend.models.tracker import NodeType
+    import uuid
+
     body = request.get_json() or {}
+
+    # Auto-generate MAC if not provided
     mac = body.get("mac_address", "").strip()
     if not mac:
-        return jsonify({"error": "mac_address is required"}), 400
-    if WifiNode.query.filter_by(mac_address=mac).first():
-        return jsonify({"error": "mac_address already exists"}), 409
-    node = WifiNode(mac_address=mac, assigned_name=body.get("assigned_name"),
-                    pos_x=body.get("pos_x", 0), pos_y=body.get("pos_y", 0),
-                    pos_z=body.get("pos_z", 0))
+        mac = f"AUTO-{uuid.uuid4().hex[:12].upper()}"
+    elif WifiNode.query.filter_by(mac_address=mac).first():
+        return jsonify({"error": "MAC address already exists"}), 409
+
+    name = body.get("name") or body.get("assigned_name") or f"Node-{mac[-6:]}"
+
+    # Parse node_type: accept string name or int value
+    node_type_val = body.get("node_type")
+    if node_type_val is not None:
+        if isinstance(node_type_val, int):
+            node_type = node_type_val
+        elif isinstance(node_type_val, str):
+            try:
+                node_type = NodeType[node_type_val].value
+            except KeyError:
+                node_type = NodeType.STANDARD.value
+        else:
+            node_type = NodeType.STANDARD.value
+    else:
+        node_type = NodeType.STANDARD.value
+
+    node = WifiNode(
+        mac_address=mac,
+        assigned_name=name,
+        pos_x=body.get("pos_x", 0),
+        pos_y=body.get("pos_y", 0),
+        pos_z=body.get("pos_z", 0),
+        node_type=node_type,
+    )
     db.session.add(node)
     db.session.commit()
+
     AuditLog.log(action="node.create", user_id=int(get_jwt_identity()),
                  entity_type="WifiNode", entity_id=node.id)
     return jsonify({"node": node.to_dict()}), 201
