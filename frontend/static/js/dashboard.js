@@ -10,6 +10,16 @@ let selectedTrackerId = null;
 let currentView = '2d';
 let filters = { people: true, machines: true, sensors: true, offline: true, alerts: true };
 
+// ── Layer panel state ───────────────────────────────────────────────────────
+let layerPanelOpen = false;
+let layerState = { zones: true, sections: true, grid: true, trackers: true, heatmap: true };
+// Expose globally so map2d.js / map3d.js can read it
+window.layerState = layerState;
+
+// ── Gas history buffer ─────────────────────────────────────────────────────
+const GAS_HISTORY_MAX = 60;  // Keep last 60 readings
+let gasHistory = {};         // tracker_id -> [{ppm, ts}]
+
 // ── Historical Playback ─────────────────────────────────────────────────────
 let isPlayback = false;
 let playbackInterval = null;
@@ -268,6 +278,9 @@ function showTagCard(t) {
     speedRow.style.display = 'none';
   }
 
+  // Vitals
+  showVitals(t);
+
   card.style.display = 'block';
 }
 
@@ -326,6 +339,7 @@ function resetCamera() {
 function toggleHeatmap() {
   if (!heatmapCanvas) initHeatmapCanvas();
   heatmapVisible = !heatmapVisible;
+  layerState.heatmap = heatmapVisible;   // Keep layer panel checkbox in sync
   if (heatmapVisible) {
     heatmapCanvas.style.display = 'block';
     renderHeatmapFrame();
@@ -387,11 +401,82 @@ function renderHeatmapFrame() {
   });
 }
 function toggleLayers() {
-  // Show layer control
+  layerPanelOpen = !layerPanelOpen;
+  document.getElementById('layersPanel').style.display = layerPanelOpen ? 'block' : 'none';
+  document.getElementById('layersBtn').classList.toggle('active', layerPanelOpen);
+  if (layerPanelOpen) syncLayerCheckboxes();
 }
-function triggerAlarm() {
-  // TODO: downlink alarm via MQTT
-  alert('Alarm triggered for tracker');
+
+// Sync layer checkboxes with current state
+function syncLayerCheckboxes() {
+  const checks = ['zones', 'sections', 'grid', 'trackers', 'heatmap'];
+  checks.forEach(name => {
+    const el = document.getElementById('layer' + name.charAt(0).toUpperCase() + name.slice(1));
+    if (el) el.checked = layerState[name];
+  });
+}
+
+function toggleZoneLayer() {
+  layerState.zones = !layerState.zones;
+  const show = layerState.zones;
+  if (window.toggleZoneLayer) window.toggleZoneLayer(show);
+  if (window.toggleZoneLayer3D) window.toggleZoneLayer3D(show);
+}
+
+function toggleSectionLayer() {
+  layerState.sections = !layerState.sections;
+  const show = layerState.sections;
+  if (window.toggleSectionLayer) window.toggleSectionLayer(show);
+  if (window.toggleSectionLayer3D) window.toggleSectionLayer3D(show);
+}
+
+function toggleGridLayer() {
+  layerState.grid = !layerState.grid;
+  const show = layerState.grid;
+  if (window.toggleGridLayer) window.toggleGridLayer(show);
+  if (window.toggleGridLayer3D) window.toggleGridLayer3D(show);
+}
+
+function toggleTrackerLayer() {
+  layerState.trackers = !layerState.trackers;
+  const show = layerState.trackers;
+  if (window.renderTrackerDots) window.renderTrackerDots();  // re-renders with current state
+  if (window.toggleTrackerLayer3D) window.toggleTrackerLayer3D(show);
+}
+
+function toggleHeatmapLayer() {
+  layerState.heatmap = !layerState.heatmap;
+  if (heatmapVisible !== layerState.heatmap) toggleHeatmap();  // sync canvas + button
+  syncLayerCheckboxes();
+}
+
+function focusSelectedTracker3D() {
+  if (currentView === '3d' && window.focus3DTracker && selectedTrackerId) {
+    window.focus3DTracker(selectedTrackerId);
+  }
+}
+async function triggerAlarm() {
+  if (!selectedTrackerId) return;
+  const btn = document.getElementById('btnAlarm');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Sending…';
+  }
+  try {
+    const res = await API.post('/alerts/trigger', { tracker_id: selectedTrackerId });
+    if (res && res.ok) {
+      showToast('Alarm triggered for ' + (trackers[selectedTrackerId]?.assigned_name || 'tracker'), 'success');
+    } else {
+      const data = await API.json(res);
+      showToast('Failed: ' + (data?.error || 'Server error'), 'error');
+    }
+  } catch (e) {
+    showToast('Network error triggering alarm', 'error');
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-bell"></i> Alert';
+  }
 }
 function editTag() {
   window.location.href = `/trackers?id=${selectedTrackerId}`;
@@ -434,6 +519,15 @@ function startSSE() {
           trackers[tid].speed = pos.speed;
           trackers[tid].last_seen = pos.timestamp;
           trackers[tid].source = pos.source;
+
+          // Update gas history from snapshot (if gas field present)
+          if (pos.gas_ppm != null) {
+            if (!gasHistory[tid]) gasHistory[tid] = [];
+            gasHistory[tid].push({ ppm: pos.gas_ppm, ts: Date.now() });
+            if (gasHistory[tid].length > GAS_HISTORY_MAX) gasHistory[tid].shift();
+            // Refresh gas chart if this tracker's tag card is open
+            if (selectedTrackerId === tid) drawGasChart(tid);
+          }
         }
       });
       trackerList = Object.values(trackers);
@@ -517,6 +611,33 @@ function handlePositionUpdate(data) {
   if (window.updateTrackerDot) window.updateTrackerDot(tid, data);
   if (window.updateTrackerDot3D) window.updateTrackerDot3D(tid, data);
   updateStats();
+}
+
+function showToast(message, type = 'success') {
+  const colors = {
+    success: { bg: 'rgba(0,229,255,0.1)', border: 'rgba(0,229,255,0.4)', icon: 'fa-check-circle', iconColor: 'var(--green)' },
+    error:   { bg: 'rgba(255,68,68,0.1)',  border: 'rgba(255,68,68,0.4)', icon: 'fa-circle-exclamation', iconColor: 'var(--red)' },
+  };
+  const c = colors[type] || colors.success;
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+    background: ${c.bg}; border: 1px solid ${c.border};
+    border-radius: var(--radius); padding: 12px 16px; max-width: 320px;
+    display: flex; align-items: flex-start; gap: 10px;
+    backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    animation: slideUp 0.3s ease;
+  `;
+  toast.innerHTML = `
+    <i class="fa-solid ${c.icon}" style="color:${c.iconColor};font-size:16px;flex-shrink:0;margin-top:1px"></i>
+    <span style="font-size:13px;color:var(--text-primary)">${message}</span>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
 }
 
 function showAlertToast(alert) {
@@ -1039,6 +1160,94 @@ async function doSearch() {
 function onSearchResult(type, id) {
   closeSearch();
   if (type === 'tracker') selectTracker(id);
+}
+
+// ── Vitals display ───────────────────────────────────────────────────────────
+function showVitals(t) {
+  // Heart Rate
+  const hrRow = document.getElementById('tagCardHRRow');
+  if (t.heart_rate != null && t.heart_rate !== undefined) {
+    hrRow.style.display = 'flex';
+    const hr = Math.round(t.heart_rate);
+    const hrColor = hr < 60 ? 'var(--yellow)' : hr > 120 ? 'var(--red)' : 'var(--green)';
+    document.getElementById('tagCardHR').textContent = hr + ' bpm';
+    document.getElementById('tagCardHR').style.color = hrColor;
+  } else {
+    hrRow.style.display = 'none';
+  }
+
+  // SpO2
+  const spo2Row = document.getElementById('tagCardSpO2Row');
+  if (t.sp_o2 != null && t.sp_o2 !== undefined) {
+    spo2Row.style.display = 'flex';
+    const spo2 = Math.round(t.sp_o2);
+    const spo2Color = spo2 < 90 ? 'var(--red)' : spo2 < 95 ? 'var(--yellow)' : 'var(--green)';
+    document.getElementById('tagCardSpO2').textContent = spo2 + '%';
+    document.getElementById('tagCardSpO2').style.color = spo2Color;
+  } else {
+    spo2Row.style.display = 'none';
+  }
+
+  // Gas
+  const gasRow = document.getElementById('tagCardGasRow');
+  const gasWrap = document.getElementById('tagCardGasChartWrap');
+  if (t.gas_ppm != null && t.gas_ppm !== undefined) {
+    gasRow.style.display = 'flex';
+    const gas = Math.round(t.gas_ppm);
+    const gasColor = gas > 1000 ? 'var(--red)' : gas > 500 ? 'var(--yellow)' : 'var(--green)';
+    document.getElementById('tagCardGas').textContent = gas + ' ppm';
+    document.getElementById('tagCardGas').style.color = gasColor;
+
+    // Update gas history
+    if (!gasHistory[t.id]) gasHistory[t.id] = [];
+    gasHistory[t.id].push({ ppm: t.gas_ppm, ts: Date.now() });
+    if (gasHistory[t.id].length > GAS_HISTORY_MAX) gasHistory[t.id].shift();
+
+    // Show chart
+    if (gasHistory[t.id].length >= 2) {
+      gasWrap.style.display = 'block';
+      drawGasChart(t.id);
+    }
+  } else {
+    gasRow.style.display = 'none';
+    gasWrap.style.display = 'none';
+  }
+}
+
+function drawGasChart(trackerId) {
+  const canvas = document.getElementById('tagCardGasChart');
+  if (!canvas) return;
+  const history = gasHistory[trackerId];
+  if (!history || history.length < 2) return;
+
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const ppmValues = history.map(h => h.ppm);
+  const maxPPM = Math.max(...ppmValues, 500) * 1.1;
+  const step = W / (history.length - 1);
+
+  // Background line
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)';
+  ctx.lineWidth = 1;
+  ppmValues.forEach((v, i) => {
+    const x = i * step;
+    const y = H - (v / maxPPM) * H;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Danger thresholds
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = 'rgba(255, 165, 0, 0.5)';
+  ctx.beginPath();
+  ctx.moveTo(0, H - (500 / maxPPM) * H);
+  ctx.lineTo(W, H - (500 / maxPPM) * H);
+  ctx.stroke();
+  ctx.setLineDash([]);
 }
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────────────

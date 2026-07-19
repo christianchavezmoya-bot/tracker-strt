@@ -43,6 +43,7 @@ class Permission:
     VIEW_AUDIT        = "view_audit"
 
     # Backup
+    TRIGGER_ALARM     = "trigger_alarm"
     TRIGGER_BACKUP    = "trigger_backup"
     RESTORE_BACKUP    = "restore_backup"
 
@@ -67,6 +68,7 @@ ROLE_PERMISSIONS: dict[UserRole, Set[str]] = {
         Permission.VIEW_ZONE,
         Permission.VIEW_ALERT,
         Permission.ACKNOWLEDGE_ALERT,
+        Permission.TRIGGER_ALARM,
         Permission.MANAGE_NODE,
         Permission.VIEW_HISTORY,
         Permission.GENERATE_REPORT,
@@ -83,6 +85,7 @@ ROLE_PERMISSIONS: dict[UserRole, Set[str]] = {
         Permission.DELETE_ZONE,
         Permission.VIEW_ALERT,
         Permission.ACKNOWLEDGE_ALERT,
+        Permission.TRIGGER_ALARM,
         Permission.MANAGE_NODE,
         Permission.VIEW_HISTORY,
         Permission.GENERATE_REPORT,

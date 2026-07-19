@@ -623,3 +623,94 @@ def mark_all_read():
     ).update({Notification.is_read: True})
     db.session.commit()
     return jsonify({"marked_read": count})
+
+
+# ── Alarm trigger (downlink via MQTT) ─────────────────────────────────────────
+
+@alerts_bp.route("/trigger", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.TRIGGER_ALARM)
+def trigger_alarm():
+    """
+    === A
+    tags:
+      - Alerts
+    summary: Trigger an audible alarm on a tracker
+    description: Sends a downlink MQTT message to make a specific tracker emit
+    an audible alarm. Requires TRIGGER_ALARM permission.
+    security:
+      - Bearer: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [tracker_id]
+            properties:
+              tracker_id:
+                type: integer
+                description: ID of the tracker to alert
+              message:
+                type: string
+                description: Optional alert message
+    responses:
+      200:
+        description: Alarm triggered successfully
+        schema:
+          type: object
+          properties:
+            success: { type: boolean }
+            tracker_id: { type: integer }
+            message: { type: string }
+      400:
+        description: Missing tracker_id
+      404:
+        description: Tracker not found
+      403:
+        description: Permission denied
+    ===
+    """
+    body = request.get_json() or {}
+    tracker_id = body.get("tracker_id")
+    if not tracker_id:
+        return jsonify({"error": "tracker_id is required"}), 400
+
+    from backend.models import Tracker
+    tracker = Tracker.query.get(tracker_id)
+    if not tracker:
+        return jsonify({"error": "Tracker not found"}), 404
+
+    # Publish to MQTT — downstream firmware/hardware bridge subscribes to this
+    from backend.api.stream import get_mqtt_publisher
+    import json
+    mqtt = get_mqtt_publisher()
+    alarm_payload = {
+        "type": "alarm_trigger",
+        "tracker_id": tracker_id,
+        "hardware_id": tracker.hardware_id,
+        "message": body.get("message", "Personnel alarm triggered"),
+        "triggered_by": int(get_jwt_identity()),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if mqtt and mqtt.is_connected:
+        mqtt.publish("rtls/alarms/trigger", json.dumps(alarm_payload), qos=1)
+        logger.info(f"Alarm triggered for tracker {tracker_id} ({tracker.hardware_id})")
+    else:
+        logger.warning(f"MQTT not connected — alarm for tracker {tracker_id} not published")
+
+    # Log to audit trail
+    from backend.models import AuditLog
+    AuditLog.log(
+        action="alarm.trigger",
+        user_id=int(get_jwt_identity()),
+        entity_type="Tracker",
+        entity_id=tracker_id,
+        details=f"Alarm triggered for tracker {tracker.hardware_id}: {body.get('message', '')}",
+    )
+
+    return jsonify({
+        "success": True,
+        "tracker_id": tracker_id,
+        "message": "Alarm triggered",
+    })

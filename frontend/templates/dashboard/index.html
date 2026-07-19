@@ -4,409 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HOLO-RTLS — Command Center</title>
-  <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#00e5ff">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="/static/assets/icon-192.png">
-  <link rel="stylesheet" href="/static/css/main.css">
+  <meta name="description" content="Underground Mine Real-Time Location System">
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23081f3e'/><circle cx='16' cy='16' r='8' fill='none' stroke='%2300e5ff' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%2300e5ff'/></svg>">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/static/css/dashboard.css">
-  <style>
-    /* ══ Analytics Row ═══════════════════════════════════════════════════════ */
-    .analytics-row {
-      display: flex;
-      flex-direction: row;
-      gap: 12px;
-      padding: 10px 20px;
-      background: rgba(8, 15, 30, 0.6);
-      border-bottom: 1px solid var(--border-dim);
-      flex-shrink: 0;
-    }
-
-    .kpi-mini-card {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
-      background: var(--bg-card);
-      border: 1px solid var(--border-dim);
-      border-radius: var(--radius);
-      padding: 8px 16px;
-      min-width: 100px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .kpi-dot {
-      position: absolute;
-      top: 8px;
-      right: 10px;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-    }
-
-    .kpi-number {
-      font-size: 26px;
-      font-weight: 700;
-      font-family: var(--font-mono);
-      color: var(--text-primary);
-      line-height: 1;
-    }
-
-    .kpi-label {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    /* ══ Playback Bar ════════════════════════════════════════════════════════ */
-    .playback-bar {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 56px;
-      background: rgba(8, 15, 30, 0.96);
-      border-top: 1px solid var(--cyan);
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 0 16px;
-      z-index: 40;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
-    }
-
-    .playback-mode-badge {
-      display: flex;
-      align-items: center;
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      font-family: var(--font-mono);
-      border-radius: 4px;
-      overflow: hidden;
-      border: 1px solid;
-      height: 22px;
-    }
-
-    .badge-live {
-      display: inline-block;
-      padding: 3px 8px;
-      background: rgba(0, 255, 100, 0.15);
-      color: var(--green);
-      border-color: var(--green);
-    }
-
-    .badge-playback {
-      display: inline-block;
-      padding: 3px 8px;
-      background: rgba(0, 229, 255, 0.15);
-      color: var(--cyan);
-      border-color: var(--cyan);
-    }
-
-    .playback-timestamp {
-      font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--cyan);
-      min-width: 140px;
-      text-align: center;
-    }
-
-    .playback-slider-wrap {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      min-width: 0;
-    }
-
-    .playback-slider {
-      -webkit-appearance: none;
-      width: 100%;
-      height: 4px;
-      border-radius: 2px;
-      background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
-      outline: none;
-      cursor: pointer;
-    }
-
-    .playback-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 8px var(--cyan);
-      cursor: pointer;
-      border: 2px solid rgba(0, 0, 0, 0.4);
-    }
-
-    .playback-slider::-moz-range-thumb {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 8px var(--cyan);
-      cursor: pointer;
-      border: 2px solid rgba(0, 0, 0, 0.4);
-    }
-
-    .playback-range-labels {
-      font-size: 10px;
-      font-family: var(--font-mono);
-      color: var(--text-muted);
-      min-width: 40px;
-    }
-
-    .playback-controls {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .playback-step-btn {
-      width: 28px;
-      height: 28px;
-      background: rgba(0, 229, 255, 0.08);
-      border: 1px solid rgba(0, 229, 255, 0.3);
-      border-radius: var(--radius);
-      color: var(--text-secondary);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      transition: all 0.15s;
-    }
-
-    .playback-step-btn:hover {
-      background: rgba(0, 229, 255, 0.2);
-      color: var(--cyan);
-      border-color: var(--cyan);
-    }
-
-    .playback-play-btn {
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      background: rgba(0, 229, 255, 0.15);
-      border: 2px solid var(--cyan);
-      color: var(--cyan);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      transition: all 0.15s;
-      box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
-    }
-
-    .playback-play-btn:hover {
-      background: var(--cyan);
-      color: #000;
-      box-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
-    }
-
-    .playback-play-btn.playing {
-      background: var(--cyan);
-      color: #000;
-      box-shadow: 0 0 16px var(--cyan);
-    }
-
-    .playback-speed-group {
-      display: flex;
-      gap: 4px;
-    }
-
-    .speed-btn {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border-dim);
-      color: var(--text-muted);
-      font-size: 10px;
-      font-weight: 700;
-      font-family: var(--font-mono);
-      padding: 4px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .speed-btn:hover {
-      border-color: var(--cyan);
-      color: var(--cyan);
-    }
-
-    .speed-btn.active {
-      background: rgba(0, 229, 255, 0.2);
-      border-color: var(--cyan);
-      color: var(--cyan);
-    }
-
-    .playback-exit-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(255, 68, 68, 0.12);
-      border: 1px solid rgba(255, 68, 68, 0.4);
-      color: var(--red);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      padding: 6px 12px;
-      border-radius: var(--radius);
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-
-    .playback-exit-btn:hover {
-      background: rgba(255, 68, 68, 0.25);
-      box-shadow: 0 0 12px rgba(255, 68, 68, 0.3);
-    }
-
-    /* ══ Zone Occupancy ═════════════════════════════════════════════════════ */
-    .zone-occupancy-section {
-      border-bottom: 1px solid var(--border-dim);
-      padding-bottom: 8px;
-      margin-bottom: 4px;
-    }
-
-    .zone-occ-toggle {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      padding: 8px 12px;
-      cursor: pointer;
-      text-align: left;
-      transition: color 0.15s;
-    }
-
-    .zone-occ-toggle:hover {
-      color: var(--text-primary);
-    }
-
-    .zone-occ-toggle i:first-child {
-      color: var(--cyan);
-      font-size: 11px;
-    }
-
-    .zone-chevron {
-      margin-left: auto;
-      font-size: 9px;
-      transition: transform 0.2s;
-    }
-
-    .zone-occupancy-section.open .zone-chevron {
-      transform: rotate(180deg);
-    }
-
-    .zone-occ-body {
-      display: none;
-      padding: 4px 12px 8px;
-    }
-
-    .zone-occupancy-section.open .zone-occ-body {
-      display: block;
-    }
-
-    .zone-occ-loading {
-      text-align: center;
-      padding: 8px;
-      color: var(--text-muted);
-      font-size: 11px;
-    }
-
-    .zone-occ-loading i {
-      color: var(--cyan);
-    }
-
-    .zone-bar-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 7px;
-    }
-
-    .zone-bar-label {
-      font-size: 10px;
-      font-family: var(--font-mono);
-      color: var(--text-muted);
-      min-width: 80px;
-      max-width: 80px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .zone-bar-track {
-      flex: 1;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.06);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .zone-bar {
-      height: 100%;
-      border-radius: 3px;
-      background: linear-gradient(90deg, var(--cyan), rgba(0, 229, 255, 0.4));
-      transition: width 0.4s ease;
-      min-width: 2px;
-    }
-
-    .zone-bar-count {
-      font-size: 10px;
-      font-family: var(--font-mono);
-      color: var(--cyan);
-      min-width: 16px;
-      text-align: right;
-    }
-
-    /* ══ Heatmap Canvas ══════════════════════════════════════════════════════ */
-    .heatmap-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 2;
-      opacity: 0.5;
-    }
-
-    .heatmap-canvas.hidden {
-      display: none;
-    }
-  </style>
-  <!-- Leaflet for 2D map -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <!-- FontAwesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 
-<!-- ── Top Navigation Bar ─────────────────────────────────────────────── -->
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
 <header class="topbar">
   <div class="topbar-left">
     <div class="brand">
-      <div class="brand-icon">◈</div>
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <rect width="28" height="28" rx="6" fill="#081f3e"/>
+        <circle cx="14" cy="14" r="8" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+        <circle cx="14" cy="14" r="3" fill="#00e5ff"/>
+      </svg>
       <span class="brand-name">HOLO-RTLS</span>
+      <span class="brand-sub">Command Center</span>
     </div>
+  </div>
+
+  <div class="topbar-center">
     <div class="view-toggle">
       <button class="view-btn active" data-view="2d" onclick="setView('2d')">
         <i class="fa-solid fa-map"></i> 2D
@@ -417,36 +39,29 @@
     </div>
   </div>
 
-  <div class="topbar-center">
-    <div class="search-bar" onclick="openSearch()">
-      <i class="fa-solid fa-search"></i>
-      <span>Search assets, people, zones...</span>
-      <kbd>Ctrl K</kbd>
-    </div>
-  </div>
-
   <div class="topbar-right">
-    <div class="status-indicator" id="connectionStatus">
-      <div class="status-dot" id="statusDot"></div>
-      <span id="statusText">Connecting...</span>
-    </div>
-
     <!-- Notification Bell -->
-    <div class="icon-btn" id="notifBtn" onclick="toggleNotifications()">
+    <button class="icon-btn" id="notifBtn" onclick="toggleNotifications()" title="Notifications">
       <i class="fa-regular fa-bell"></i>
-      <span class="badge" id="alertBadge" style="display:none">0</span>
-    </div>
+      <span class="badge-dot" id="notifBadge" style="display:none"></span>
+    </button>
 
-    <!-- Settings -->
-    <a href="/settings" class="icon-btn" title="Settings">
-      <i class="fa-solid fa-gear"></i>
-    </a>
+    <!-- Alert Feed Toggle -->
+    <button class="icon-btn" onclick="toggleAlertFeed()" title="Alert Feed" id="alertFeedBtn">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span class="badge-count" id="alertCount" style="display:none">0</span>
+    </button>
 
-    <!-- User Menu -->
-    <div class="user-menu" id="userMenu">
+    <!-- Search -->
+    <button class="icon-btn" onclick="openSearch()" title="Search (Ctrl+K)">
+      <i class="fa-solid fa-magnifying-glass"></i>
+    </button>
+
+    <!-- User -->
+    <div class="user-menu-wrap">
       <button class="user-btn" onclick="toggleUserMenu()">
-        <div class="user-avatar" id="userAvatar">A</div>
-        <span class="user-name" id="userName">Admin</span>
+        <div class="user-avatar" id="userAvatar">—</div>
+        <span class="user-name" id="userName">—</span>
         <i class="fa-solid fa-chevron-down"></i>
       </button>
       <div class="user-dropdown" id="userDropdown">
@@ -582,18 +197,53 @@
       <button class="tool-btn" onclick="toggleFullscreen()" title="Fullscreen">
         <i class="fa-regular fa-expand"></i>
       </button>
-      <button class="tool-btn" onclick="toggleLayers()" title="Layers">
+      <button class="tool-btn active" onclick="toggleLayers()" title="Layers" id="layersBtn">
         <i class="fa-solid fa-layer-group"></i>
       </button>
       <button class="tool-btn" onclick="resetCamera()" title="Reset View">
         <i class="fa-solid fa-crosshairs"></i>
       </button>
-      <button class="tool-btn" onclick="toggleHeatmap()" title="Heatmap">
+      <button class="tool-btn" onclick="toggleHeatmap()" title="Heatmap" id="heatmapBtn">
         <i class="fa-solid fa-fire"></i>
       </button>
       <button class="tool-btn" onclick="focusSelectedTracker3D()" title="Focus Selected">
         <i class="fa-solid fa-bullseye"></i>
       </button>
+    </div>
+
+    <!-- Layer Panel -->
+    <div class="layers-panel" id="layersPanel" style="display:none">
+      <div class="layers-header">
+        <span>LAYERS</span>
+        <button onclick="toggleLayers()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0 4px">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <label class="layer-item">
+        <input type="checkbox" id="layerZones" checked onchange="toggleZoneLayer()">
+        <span class="layer-dot" style="background:var(--red)"></span>
+        Zones
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="layerSections" checked onchange="toggleSectionLayer()">
+        <span class="layer-dot" style="background:var(--cyan)"></span>
+        Sections
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="layerGrid" checked onchange="toggleGridLayer()">
+        <span class="layer-dot" style="background:var(--yellow)"></span>
+        Grid
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="layerTrackers" checked onchange="toggleTrackerLayer()">
+        <span class="layer-dot" style="background:var(--green)"></span>
+        Trackers
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="layerHeatmap" checked onchange="toggleHeatmapLayer()">
+        <span class="layer-dot" style="background:var(--orange)"></span>
+        Heatmap
+      </label>
     </div>
 
     <!-- Tag Detail Floating Card -->
@@ -624,6 +274,7 @@
           <span class="label">Battery</span>
           <span class="value" id="tagCardBattery">—</span>
         </div>
+        <!-- Vitals rows — shown when data is available -->
         <div class="tag-card-row" id="tagCardHRRow" style="display:none">
           <i class="fa-solid fa-heart-pulse"></i>
           <span class="label">Heart Rate</span>
@@ -633,6 +284,15 @@
           <i class="fa-solid fa-lungs"></i>
           <span class="label">SpO2</span>
           <span class="value" id="tagCardSpO2">—</span>
+        </div>
+        <!-- Gas chart row -->
+        <div class="tag-card-row" id="tagCardGasRow" style="display:none">
+          <i class="fa-solid fa-wind"></i>
+          <span class="label">Gas (ppm)</span>
+          <span class="value" id="tagCardGas">—</span>
+        </div>
+        <div id="tagCardGasChartWrap" style="display:none;padding:0 16px 8px">
+          <canvas id="tagCardGasChart" width="220" height="50" style="width:100%;height:50px;display:block"></canvas>
         </div>
         <div class="tag-card-row">
           <i class="fa-solid fa-bullseye"></i>
@@ -675,152 +335,91 @@
 
       <!-- Range slider -->
       <div class="playback-slider-wrap">
-        <input type="range" class="playback-slider"
-               id="playbackSlider" min="0" max="100" value="100"
-               oninput="onPlaybackSliderInput(this.value)">
-      </div>
-
-      <!-- Time range labels -->
-      <div class="playback-range-labels">
-        <span id="playbackRangeStart">—</span>
+        <input type="range" class="playback-slider" id="playbackSlider" min="0" max="100" value="100" oninput="onPlaybackSliderInput(this.value)">
+        <div class="playback-time-labels">
+          <span id="playbackStartTime">—</span>
+          <span id="playbackEndTime">—</span>
+        </div>
       </div>
 
       <!-- Controls -->
       <div class="playback-controls">
-        <button class="playback-step-btn" onclick="stepPlayback(-60)" title="Step back 1 min">
-          <i class="fa-solid fa-backward-step"></i>
+        <button class="playback-btn" onclick="stepPlayback(-60)" title="-1 min">
+          <i class="fa-solid fa-backward-fast"></i>
         </button>
-        <button class="playback-play-btn" id="playbackPlayBtn" onclick="togglePlaybackPlay()" title="Play/Pause">
-          <i class="fa-solid fa-play" id="playbackPlayIcon"></i>
+        <button class="playback-btn primary" onclick="togglePlaybackPlay()" id="playPauseBtn" title="Play/Pause">
+          <i class="fa-solid fa-play" id="playPauseIcon"></i>
         </button>
-        <button class="playback-step-btn" onclick="stepPlayback(60)" title="Step forward 1 min">
-          <i class="fa-solid fa-forward-step"></i>
+        <button class="playback-btn" onclick="stepPlayback(60)" title="+1 min">
+          <i class="fa-solid fa-forward-fast"></i>
+        </button>
+        <div class="playback-speed-btns">
+          <button class="speed-btn active" data-speed="1" onclick="setPlaybackSpeed(1)">1×</button>
+          <button class="speed-btn" data-speed="2" onclick="setPlaybackSpeed(2)">2×</button>
+          <button class="speed-btn" data-speed="5" onclick="setPlaybackSpeed(5)">5×</button>
+          <button class="speed-btn" data-speed="10" onclick="setPlaybackSpeed(10)">10×</button>
+        </div>
+        <button class="playback-btn danger" onclick="stopPlayback()" title="Exit Playback">
+          <i class="fa-solid fa-stop"></i>
         </button>
       </div>
-
-      <!-- Speed selector -->
-      <div class="playback-speed-group">
-        <button class="speed-btn active" data-speed="1" onclick="setPlaybackSpeed(1)">1×</button>
-        <button class="speed-btn" data-speed="2" onclick="setPlaybackSpeed(2)">2×</button>
-        <button class="speed-btn" data-speed="5" onclick="setPlaybackSpeed(5)">5×</button>
-        <button class="speed-btn" data-speed="10" onclick="setPlaybackSpeed(10)">10×</button>
-      </div>
-
-      <!-- Exit playback -->
-      <button class="playback-exit-btn" onclick="stopPlayback()">
-        <i class="fa-solid fa-arrow-left"></i> EXIT PLAYBACK
-      </button>
     </div>
 
-    <!-- History Playback Bar -->
-    <div class="history-bar" id="historyBar" style="display:none">
-      <div class="history-header">
-        <i class="fa-solid fa-clock-rotate-left"></i>
-        <span>History Playback</span>
-        <button onclick="closeHistory()"><i class="fa-solid fa-xmark"></i></button>
-        <span id="historyTimeDisplay" style="margin-left:auto;font-family:var(--font-mono);font-size:12px;color:var(--cyan)">—</span>
+    <!-- Zone Occupancy Widget (Phase 10) -->
+    <div class="zone-occupancy-widget" id="zoneOccupancyWidget" style="display:none">
+      <div class="widget-header">
+        <span>ZONE OCCUPANCY</span>
+        <button onclick="toggleZoneOccupancy()" style="background:none;border:none;color:var(--text-muted);cursor:pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
-      <div class="history-slider-row">
-        <span class="time-label" id="historyStartTime">—</span>
-        <input type="range" class="history-slider" id="historySlider" min="0" max="100" value="100">
-        <span class="time-label" id="historyEndTime">Now</span>
+      <div id="zoneOccWidgetBody"></div>
+    </div>
+
+    <!-- Alert Feed Sidebar -->
+    <div class="alert-feed" id="alertFeed" style="display:none">
+      <div class="alert-feed-header">
+        <span>ALERTS</span>
+        <button onclick="toggleAlertFeed()" style="background:none;border:none;color:var(--text-muted);cursor:pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
+      <div id="alertList"></div>
+    </div>
+
+    <!-- Search Modal -->
+    <div class="search-overlay" id="searchOverlay" style="display:none" onclick="closeSearch()">
+      <div class="search-modal" onclick="event.stopPropagation()">
+        <div class="search-input-wrap">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" class="search-input" id="searchInput" placeholder="Search trackers, users..." oninput="doSearch()" autofocus>
+          <kbd>ESC</kbd>
+        </div>
+        <div class="search-results" id="searchResults"></div>
+      </div>
+    </div>
+
+    <!-- Notifications Panel -->
+    <div class="notif-panel" id="notifPanel" style="display:none">
+      <div class="notif-header">
+        <span>NOTIFICATIONS</span>
+        <button onclick="markAllRead()" class="mark-read-btn">Mark all read</button>
+      </div>
+      <div id="notifList"></div>
     </div>
   </main>
-
-  <!-- Right Panel: Alert Feed -->
-  <aside class="right-panel" id="rightPanel">
-    <div class="panel-header">
-      <h3>ALERTS</h3>
-      <span class="alert-count-badge" id="alertCountBadge">0</span>
-    </div>
-    <div class="alert-list" id="alertList">
-      <div class="alert-empty" id="alertEmpty">
-        <i class="fa-regular fa-check-circle"></i>
-        <p>No active alerts</p>
-      </div>
-    </div>
-    <div class="panel-footer">
-      <a href="/alerts" class="view-all-link">View all alerts <i class="fa-solid fa-arrow-right"></i></a>
-    </div>
-  </aside>
-
 </div>
 
-<!-- ── Status Strip ────────────────────────────────────────────────────── -->
-<div class="status-strip">
-  <div class="stat-item">
-    <span class="dot dot-green"></span>
-    <span id="statActive">0</span> Active
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <span class="dot dot-red"></span>
-    <span id="statAlerts">0</span> Alerts
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <span class="dot dot-blue"></span>
-    <span id="statCheckedIn">0</span> Checked In
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <i class="fa-solid fa-wifi"></i>
-    <span id="statNodes">0</span> Nodes
-  </div>
-  <div class="stat-divider"></div>
-  <div class="stat-item">
-    <i class="fa-solid fa-clock"></i>
-    <span id="statUptime">—</span>
-  </div>
-  <div class="stat-spacer"></div>
-  <div class="stat-item live-indicator">
-    <div class="live-dot"></div>
-    LIVE
-  </div>
-</div>
-
-<!-- ── Notifications Dropdown ──────────────────────────────────────────── -->
-<div class="notifications-dropdown" id="notifDropdown" style="display:none">
-  <div class="notif-header">
-    <span>Notifications</span>
-    <button onclick="markAllRead()">Mark all read</button>
-  </div>
-  <div class="notif-list" id="notifList">
-    <div class="notif-empty">No new notifications</div>
-  </div>
-</div>
-
-<!-- ── Search Modal ────────────────────────────────────────────────────── -->
-<div class="modal-overlay" id="searchModal" style="display:none" onclick="closeSearch()">
-  <div class="search-modal" onclick="event.stopPropagation()">
-    <div class="search-input-row">
-      <i class="fa-solid fa-search"></i>
-      <input type="text" id="searchInput" placeholder="Search assets, people, zones..."
-             oninput="doSearch()" autocomplete="off">
-      <kbd onclick="closeSearch()">ESC</kbd>
-    </div>
-    <div class="search-results" id="searchResults">
-      <div class="search-hint">Type to search...</div>
-    </div>
-  </div>
-</div>
-
-<!-- ── Scripts ─────────────────────────────────────────────────────────── -->
+<!-- ── Scripts ───────────────────────────────────────────────────────── -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/static/js/api.js"></script>
-<script src="/static/js/auth.js"></script>
-<script src="/static/js/dashboard.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="/static/js/visualization/map2d.js"></script>
 <script src="/static/js/visualization/map3d.js"></script>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () =>
-        navigator.serviceWorker.register('/static/sw.js').catch(() => {})
-      );
-    }
-  </script>
+<script src="/static/js/dashboard.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+  }
+</script>
 </body>
 </html>

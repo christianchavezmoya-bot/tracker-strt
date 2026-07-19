@@ -80,6 +80,7 @@ function initMap3D() {
   grid.material.transparent = true;
   grid.position.y = 0.01;
   window._scene.add(grid);
+  window._gridHelper = grid;
 
   // ── Axes ───────────────────────────────────────────────────────────────
   const axes = new THREE.AxesHelper(15);
@@ -234,6 +235,9 @@ function render3DTrackerDots() {
   // Remove old meshes
   Object.values(window._trackerMeshes).forEach(m => window._scene.remove(m));
   window._trackerMeshes = {};
+
+  // Respect layer visibility state from dashboard.js
+  if (window.layerState && window.layerState.trackers === false) return;
 
   Object.values(window.trackers || {}).forEach(t => {
     if (t.pos_x === undefined || t.pos_y === undefined) return;
@@ -623,3 +627,39 @@ function animate3D() {
 
   window._renderer.render(window._scene, window._camera);
 }
+
+// ── Layer visibility toggles (called from dashboard.js) ─────────────────────
+window._zoneLayersVisible = true;
+window._sectionLayersVisible = true;
+window._gridLayersVisible = true;
+window._trackerLayersVisible = true;
+
+function toggleZoneLayer3D(show) {
+  window._zoneLayersVisible = show;
+  Object.values(window._zoneMeshes).forEach(z => {
+    if (z && z.mesh) { z.mesh.visible = show; z.wireMesh.visible = show; }
+  });
+}
+
+function toggleSectionLayer3D(show) {
+  window._sectionLayersVisible = show;
+  // Sections not rendered in 3D — no-op
+}
+
+function toggleGridLayer3D(show) {
+  window._gridLayersVisible = show;
+  if (window._gridHelper) window._gridHelper.visible = show;
+}
+
+function toggleTrackerLayer3D(show) {
+  window._trackerLayersVisible = show;
+  Object.values(window._trackerMeshes).forEach(m => {
+    if (m) m.visible = show;
+  });
+}
+
+// Global exports
+window.toggleZoneLayer3D = toggleZoneLayer3D;
+window.toggleSectionLayer3D = toggleSectionLayer3D;
+window.toggleGridLayer3D = toggleGridLayer3D;
+window.toggleTrackerLayer3D = toggleTrackerLayer3D;

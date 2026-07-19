@@ -13,6 +13,7 @@ window._map2d = null;
 let _floorPlanLayer = null;
 let _zoneLayers = [];
 let _sectionLayers = [];
+let _gridLines = [];   // Track grid polylines for clearing on toggle
 let _calibrationPoints = [];   // {pixel_x, pixel_y, real_x, real_y}
 let _isCalibrated = false;
 let _imageWidth = 1000;
@@ -255,22 +256,27 @@ function loadFloorPlanFromURL(url, section) {
 
 function drawGridOverlay() {
   // Draw a subtle grid on the map
+  // Clear any existing grid lines first to prevent accumulation
+  _gridLines.forEach(l => window._map2d.removeLayer(l));
+  _gridLines = [];
   const bounds = window._map2d.getBounds();
   const step = 50;  // 50m grid
 
   for (let x = 0; x <= (_imageWidth || 1000); x += step) {
     const latlng1 = L.CRS.Simple.unproject(L.point(x, 0));
     const latlng2 = L.CRS.Simple.unproject(L.point(x, _imageHeight || 1000));
-    L.polyline([latlng1, latlng2], {
+    const line = L.polyline([latlng1, latlng2], {
       color: 'rgba(0,229,255,0.08)', weight: 1,
     }).addTo(window._map2d);
+    _gridLines.push(line);
   }
   for (let y = 0; y <= (_imageHeight || 1000); y += step) {
     const latlng1 = L.CRS.Simple.unproject(L.point(0, y));
     const latlng2 = L.CRS.Simple.unproject(L.point(_imageWidth || 1000, y));
-    L.polyline([latlng1, latlng2], {
+    const line = L.polyline([latlng1, latlng2], {
       color: 'rgba(0,229,255,0.08)', weight: 1,
     }).addTo(window._map2d);
+    _gridLines.push(line);
   }
 }
 
@@ -366,6 +372,9 @@ function renderTrackerDots() {
     if (layer._isTrackerDot) window._map2d.removeLayer(layer);
   });
 
+  // Respect layer visibility state from dashboard.js
+  if (window.layerState && window.layerState.trackers === false) return;
+
   Object.values(window.trackers || {}).forEach(t => {
     if (t.pos_x === undefined || t.pos_y === undefined) return;
     addTrackerDot(t);
@@ -405,6 +414,9 @@ function addTrackerDot(t) {
 
 function updateTrackerDot(tid, pos) {
   if (!window._map2d) return;
+  // Respect tracker layer visibility
+  if (window.layerState && window.layerState.trackers === false) return;
+
   const tracker = window.trackers && window.trackers[tid];
   if (!tracker) return;
 
@@ -440,3 +452,25 @@ function zoomToPosition(x, y) {
   const latlng = L.CRS.Simple.unproject(L.point(x, y));
   window._map2d.setView(latlng, Math.max(window._map2d.getZoom(), 17), { animate: true });
 }
+
+// ── Layer visibility toggles (called from dashboard.js) ─────────────────────
+function toggleZoneLayer(show) {
+  if (!_zoneLayers) return;
+  _zoneLayers.forEach(l => show ? l.addTo(window._map2d) : window._map2d.removeLayer(l));
+}
+
+function toggleSectionLayer(show) {
+  if (!_sectionLayers) return;
+  _sectionLayers.forEach(l => show ? l.addTo(window._map2d) : window._map2d.removeLayer(l));
+}
+
+function toggleGridLayer(show) {
+  if (!_gridLines) return;
+  _gridLines.forEach(l => show ? l.addTo(window._map2d) : window._map2d.removeLayer(l));
+}
+
+// ── Global exports ─────────────────────────────────────────────────────────
+window.renderZones = renderZones;
+window.toggleZoneLayer = toggleZoneLayer;
+window.toggleSectionLayer = toggleSectionLayer;
+window.toggleGridLayer = toggleGridLayer;
