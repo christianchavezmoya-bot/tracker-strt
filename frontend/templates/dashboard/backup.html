@@ -183,6 +183,8 @@
         <div class="sc-label">SCHEDULED BACKUP</div>
         <div id="schedInfo" style="font-size:13px;color:var(--text-secondary)">Loading…</div>
       </div>
+      <div id="encBadge" class="sc-label" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border)">Encryption: …</div>
+      <div id="remoteBadge" class="sc-label" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border)">Remote: …</div>
       <label style="display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px">
         Retention
         <input type="number" id="retentionInput" min="1" max="100" value="10" style="width:64px;padding:6px 8px;background:var(--bg-input,#0b1220);border:1px solid var(--border);color:inherit;border-radius:6px">
@@ -292,6 +294,21 @@ async function loadSchedule() {
     if (el) el.textContent = (data.description || 'Daily backup') + ` · keep ${data.retention}`;
     const inp = document.getElementById('retentionInput');
     if (inp && data.retention) inp.value = data.retention;
+    const enc = document.getElementById('encBadge');
+    if (enc) {
+      enc.textContent = data.encryption_enabled
+        ? `Encryption: ${data.encryption || 'fernet'} (BACKUP_ENCRYPT_KEY)`
+        : 'Encryption: off (set BACKUP_ENCRYPT_KEY)';
+      enc.style.borderColor = data.encryption_enabled ? 'rgba(105,255,71,.35)' : 'var(--border)';
+      enc.style.color = data.encryption_enabled ? 'var(--green)' : 'var(--text-muted)';
+    }
+    const rem = document.getElementById('remoteBadge');
+    if (rem) {
+      rem.textContent = data.remote_configured
+        ? `Remote: ${data.remote_label || 'configured'}`
+        : 'Remote: local only (set BACKUP_REMOTE_URL)';
+      rem.style.color = data.remote_configured ? 'var(--green)' : 'var(--text-muted)';
+    }
   } catch (e) {}
 }
 async function saveRetention() {

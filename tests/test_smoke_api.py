@@ -65,3 +65,28 @@ def test_backup_list(client, admin_headers):
     res = client.get("/api/backup", headers=admin_headers)
     assert res.status_code == 200
     assert "items" in (res.get_json() or {})
+
+
+def test_backup_schedule_flags(client, admin_headers):
+    res = client.get("/api/backup/schedule", headers=admin_headers)
+    assert res.status_code == 200
+    data = res.get_json() or {}
+    assert "encryption_enabled" in data
+    assert "remote_configured" in data
+    assert "retention" in data
+
+
+def test_nodes_include_metadata_field(client, auth_headers, app):
+    from backend.extensions import db
+    from backend.models import WifiNode
+    with app.app_context():
+        n = WifiNode(mac_address="AA:BB:CC:DD:EE:99", assigned_name="Cov",
+                     pos_x=1.0, pos_y=2.0, metadata_json='{"coverage_radius_m":15}')
+        db.session.add(n)
+        db.session.commit()
+    res = client.get("/api/nodes", headers=auth_headers)
+    assert res.status_code == 200
+    items = (res.get_json() or {}).get("items") or []
+    hit = next((i for i in items if i.get("mac_address") == "AA:BB:CC:DD:EE:99"), None)
+    assert hit is not None
+    assert hit.get("metadata", {}).get("coverage_radius_m") == 15

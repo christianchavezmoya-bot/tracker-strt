@@ -1,16 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Alerts — HOLO-RTLS</title>
-  <link rel="manifest" href="/static/manifest.json">
-  <meta name="theme-color" content="#00e5ff">
-  <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/auth.css">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <style>
-    body { display: block; overflow: auto; padding: 20px; }
+{% extends "base.html" %}
+{% block title %}Alerts — HOLO-RTLS{% endblock %}
+{% block breadcrumb %}<span>Alerts</span>{% endblock %}
+{% block topbar_actions %}
+
+{% endblock %}
+{% block head %}
+<style>
+    body.shell-page { display: block; overflow: auto; }
     .alerts-page { max-width: 1100px; margin: 0 auto; }
     .page-header { margin-bottom: 24px; }
     .page-header h1 { font-family: var(--font-mono); font-size: 22px; color: var(--cyan); letter-spacing: 0.05em; }
@@ -82,34 +78,9 @@
     /* ── Notification bell badge ─────────────────────────────────────────── */
     .notif-badge { position: fixed; top: 14px; right: 140px; z-index: 100; }
   </style>
-</head>
-<body>
 
-<!-- Notification bell (floating) -->
-<div class="notif-badge" id="notifBell" title="Notifications">
-  <div style="position:relative;cursor:pointer" onclick="toggleNotifPanel()">
-    <i class="fa-solid fa-bell" style="font-size:20px;color:var(--text-muted);transition:color 0.2s" id="bellIcon"></i>
-    <span id="notifBadge" style="
-      display:none; position:absolute; top:-6px; right:-6px;
-      background:var(--red); color:white; font-size:10px; font-weight:700;
-      width:18px; height:18px; border-radius:50%; text-align:center; line-height:18px;
-    ">0</span>
-  </div>
-  <!-- Dropdown -->
-  <div id="notifDropdown" style="
-    display:none; position:absolute; top:36px; right:0; width:340px;
-    background:var(--bg-card); border:1px solid var(--border-bright);
-    border-radius:var(--radius); box-shadow:0 8px 32px rgba(0,0,0,0.4);
-    z-index:200; max-height:400px; overflow-y:auto;
-  ">
-    <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">NOTIFICATIONS</span>
-      <button onclick="markAllRead()" style="background:none;border:none;color:var(--cyan);cursor:pointer;font-size:11px">Mark all read</button>
-    </div>
-    <div id="notifList"></div>
-  </div>
-</div>
-
+{% endblock %}
+{% block content %}
 <div class="alerts-page">
   <!-- Header -->
   <div class="page-header">
@@ -150,12 +121,10 @@
     <div style="text-align:center;padding:40px;color:var(--text-muted)">
       <i class="fa-solid fa-circle-notch fa-spin" style="font-size:20px;color:var(--cyan);margin-bottom:10px;display:block"></i>
       Loading...
-    </div>
-  </div>
-</div>
-
-<script src="/static/js/api.js"></script>
+{% endblock %}
+{% block scripts %}
 <script>
+
 // ── State ──────────────────────────────────────────────────────────────────────
 let currentFilter = "ACTIVE";
 let currentType = "";
@@ -434,8 +403,7 @@ function formatTime(iso) {
   if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
   return d.toLocaleDateString();
 }
+
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}
 </script>
-<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}</script>
-<script src="/static/js/nav.js" defer></script>
-</body>
-</html>
+{% endblock %}

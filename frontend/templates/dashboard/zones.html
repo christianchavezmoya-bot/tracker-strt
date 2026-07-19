@@ -62,7 +62,10 @@
           Define restricted areas and map sections for the positioning engine
         </p>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn btn-secondary" href="/?mode=setup" style="text-decoration:none">
+          <i class="fa-solid fa-map"></i> Draw on Live Map
+        </a>
         <button class="btn btn-secondary" onclick="switchTab('zones')">
           <i class="fa-solid fa-circle"></i> Add Zone
         </button>
@@ -76,9 +79,9 @@
     <div class="info-banner">
       <i class="fa-solid fa-info-circle"></i>
       <div>
-        <strong>Sections</strong> are polygon areas on the map (e.g., longwall panels, portals).
-        <strong>Zones</strong> are circular areas used for alerting (restricted zones, check-in points).
-        Zone violations trigger alerts in real-time.
+        Prefer <strong>Draw on Live Map</strong> for map-native polygons and circle zones.
+        This page remains for list/edit and numeric coordinates.
+        Zone rules (dwell max) fire alerts when exceeded.
       </div>
     </div>
 
@@ -247,6 +250,23 @@
       <div class="form-group">
         <label class="form-label">Radius (meters)</label>
         <input class="form-input" type="number" step="0.1" id="zoneRadius" value="5" min="0.1">
+      </div>
+      <div class="form-group" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+        <label class="form-label">Rules</label>
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Dwell max (seconds)</label>
+            <input class="form-input" type="number" min="1" step="1" id="zoneDwellMax" placeholder="blank = none">
+          </div>
+        </div>
+        <label class="toggle-label" style="margin-top:8px">
+          <input type="checkbox" id="zoneOnEnter" checked>
+          <span>Alert on enter</span>
+        </label>
+        <label class="toggle-label">
+          <input type="checkbox" id="zoneOnExit">
+          <span>Alert on exit</span>
+        </label>
       </div>
       <div class="form-group">
         <label class="form-label">Section (optional)</label>
@@ -482,6 +502,9 @@ function openZoneModal() {
   document.getElementById('zoneType').value = '2'; // Restricted default
   document.getElementById('zoneSection').value = '';
   document.getElementById('zoneVisible').checked = true;
+  document.getElementById('zoneDwellMax').value = '';
+  document.getElementById('zoneOnEnter').checked = true;
+  document.getElementById('zoneOnExit').checked = false;
   document.getElementById('zoneModal').style.display = 'flex';
 }
 
@@ -505,6 +528,10 @@ function editZone(id) {
   document.getElementById('zoneType').value = typeMap[z.zone_type] || '1';
   document.getElementById('zoneSection').value = z.section_id || '';
   document.getElementById('zoneVisible').checked = z.is_visible !== false;
+  const rules = z.rules || {};
+  document.getElementById('zoneDwellMax').value = rules.dwell_max_seconds != null ? rules.dwell_max_seconds : '';
+  document.getElementById('zoneOnEnter').checked = rules.on_enter !== false;
+  document.getElementById('zoneOnExit').checked = !!rules.on_exit;
   document.getElementById('zoneModal').style.display = 'flex';
 }
 
@@ -512,6 +539,7 @@ async function saveZone() {
   const name = document.getElementById('zoneName').value.trim();
   if (!name) { alert('Name is required'); return; }
   const typeMap = { '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+  const dwellRaw = document.getElementById('zoneDwellMax').value;
   const body = {
     name,
     zone_type: typeMap[document.getElementById('zoneType').value] || 1,
@@ -521,6 +549,11 @@ async function saveZone() {
     radius: parseFloat(document.getElementById('zoneRadius').value) || 5,
     section_id: document.getElementById('zoneSection').value ? parseInt(document.getElementById('zoneSection').value) : null,
     is_visible: document.getElementById('zoneVisible').checked,
+    rules: {
+      on_enter: document.getElementById('zoneOnEnter').checked,
+      on_exit: document.getElementById('zoneOnExit').checked,
+      dwell_max_seconds: dwellRaw ? parseFloat(dwellRaw) : null,
+    },
   };
   let res;
   if (editingZoneId) {

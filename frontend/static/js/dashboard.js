@@ -57,9 +57,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMap3D();
   startSSE();
   setupKeyboardShortcuts();
-  // Deep-link from Alerts "Show on map"
+  // Deep-link from Alerts "Show on map" / Map Setup nav
   try {
     const params = new URLSearchParams(location.search);
+    if (params.get('mode') === 'setup') {
+      enterSetupMode();
+    }
     const x = parseFloat(params.get('x'));
     const y = parseFloat(params.get('y'));
     if (!Number.isNaN(x) && !Number.isNaN(y) && window.zoomToPosition) {
@@ -80,6 +83,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {}
 });
 
+function enterSetupMode() {
+  // Highlight setup tools on Live Map (Location Core commissioning)
+  ['nodePlacementBtn', 'zoneDrawBtn', 'sectionDrawBtn', 'coverageBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.style.outline = '2px solid rgba(14,165,164,.7)';
+      el.style.outlineOffset = '2px';
+    }
+  });
+  if (window.showToast) {
+    window.showToast('Setup mode — place anchors, draw zones/sections, toggle coverage', 'info');
+  }
+  const banner = document.getElementById('setupModeBanner');
+  if (banner) banner.style.display = 'flex';
+}
+window.enterSetupMode = enterSetupMode;
 // ── Auth / User ──────────────────────────────────────────────────────────────
 async function loadUserInfo() {
   const res = await API.get('/auth/me');

@@ -14,7 +14,8 @@
     { href: '/muster',   label: 'Muster',        icon: 'fa-solid fa-clipboard-user' },
     { sep: 'Assets' },
     { href: '/trackers', label: 'Trackers',      icon: 'fa-solid fa-tags' },
-    { href: '/tracking', label: 'Commissioning', icon: 'fa-solid fa-screwdriver-wrench', operator: true },
+    { href: '/?mode=setup', label: 'Map Setup',   icon: 'fa-solid fa-wrench', operator: true },
+    { href: '/tracking', label: 'Scanner lab',   icon: 'fa-solid fa-satellite-dish', operator: true },
     { sep: 'Site' },
     { href: '/nodes',    label: 'Anchors',       icon: 'fa-solid fa-broadcast-tower', operator: true },
     { href: '/zones',    label: 'Zones',         icon: 'fa-solid fa-draw-polygon', operator: true },
@@ -82,7 +83,14 @@
     if (p.sep) { parts.push('<div class="holonav-sep">' + p.sep + '</div>'); return; }
     if (p.admin && !isAdmin) return;
     if (p.operator && isViewer) return;
-    var active = (p.href === '/' ? here === '/' : here.indexOf(p.href) === 0);
+    var active = false;
+    if (p.href === '/') {
+      active = (here === '/' && location.search.indexOf('mode=setup') < 0);
+    } else if (p.href.indexOf('?') >= 0) {
+      active = (here === '/' && location.search.indexOf('mode=setup') >= 0 && p.href.indexOf('mode=setup') >= 0);
+    } else {
+      active = here.indexOf(p.href) === 0;
+    }
     parts.push(
       '<a class="holonav-item' + (active ? ' active' : '') + '" href="' + p.href + '">'
       + '<span class="holonav-ico"><i class="' + p.icon + '"></i></span>' + p.label + '</a>'

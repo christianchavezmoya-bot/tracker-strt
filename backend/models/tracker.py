@@ -183,6 +183,13 @@ class WifiNode(db.Model):
             return "STANDARD"
 
     def to_dict(self) -> dict:
+        meta = None
+        if self.metadata_json:
+            try:
+                import json
+                meta = json.loads(self.metadata_json)
+            except Exception:
+                meta = None
         return {
             "id": self.id,
             "mac_address": self.mac_address,
@@ -191,6 +198,7 @@ class WifiNode(db.Model):
             "node_type": self.node_type_name,
             "status": NodeStatus(self.status).name,
             "last_heartbeat": self.last_heartbeat.isoformat() if self.last_heartbeat else None,
+            "metadata": meta,
         }
 
 

@@ -108,6 +108,22 @@ def _create_backup_file(trigger: str = "manual", user_id: int = None):
         job.size_bytes = size
         job.status = "done"
         job.completed_at = datetime.now(timezone.utc)
+        # Optional offsite push when BACKUP_REMOTE_URL is set
+        remote = os.getenv("BACKUP_REMOTE_URL", "").strip()
+        if remote and trigger != "pre_restore":
+            try:
+                import requests
+                with open(filepath, "rb") as fh:
+                    r = requests.post(
+                        remote,
+                        files={"file": (filename, fh, "application/octet-stream")},
+                        timeout=60,
+                        headers={"X-HOLO-Backup": "1"},
+                    )
+                note = f" remote_push={r.status_code}"
+                job.notes = ((job.notes or "") + note).strip()
+            except Exception as e:
+                job.notes = ((job.notes or "") + f" remote_push_error={str(e)[:120]}").strip()
         db.session.commit()
         return job
     except Exception as e:
@@ -160,6 +176,7 @@ def trigger_backup():
 @require_permission(Permission.TRIGGER_BACKUP)
 def backup_schedule_info():
     enc = bool(os.getenv("BACKUP_ENCRYPT_KEY", "").strip())
+    remote = os.getenv("BACKUP_REMOTE_URL", "").strip()
     return jsonify({
         "enabled": True,
         "cron": "30 2 * * *",
@@ -167,6 +184,9 @@ def backup_schedule_info():
         "retention": int(getattr(config, "BACKUP_RETENTION_COUNT", 10) or 10),
         "encryption_enabled": enc,
         "encryption": "fernet" if enc else None,
+        "remote_configured": bool(remote),
+        "remote_label": (remote.split("://")[0] + "://…") if remote else None,
+        "remote_note": "After local backup, POST multipart to BACKUP_REMOTE_URL when set",
     })
 
 

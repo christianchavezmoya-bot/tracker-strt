@@ -658,6 +658,7 @@ async function renderNodeMarkers() {
       const marker = L.marker(latlng, { icon: nodeIcon, zIndexOffset: 500, draggable: true });
       marker._isNodeMarker = true;
       marker._nodeId = node.id;
+      marker._nodeData = node;
       marker.bindTooltip('<b>' + label + '</b><br>' + (node.node_type || '') + '<br>Drag to reposition', { direction: 'top', offset: [0, -18], className: 'holo-tooltip' });
       marker.on('click', () => {
         if (_isNodePlacementMode) { exitPlacementMode(); return; }
@@ -701,7 +702,9 @@ function showNodeDetail(node) {
         <div><strong>Z:</strong> ${node.pos_z ?? node.position?.z ?? 0} (floor)</div>
         ${node.section_name ? '<div><strong>Section:</strong> ' + node.section_name + '</div>' : ''}
         <div><strong>MAC:</strong> <span style="font-family:monospace">${node.mac_address || '—'}</span></div>
-        <div><strong>Status:</strong> <span style="color:${node.is_active !== false ? '#6bff47' : '#ff4444'}">${node.is_active !== false ? 'Active' : 'Inactive'}</span></div>
+        <div><strong>Status:</strong> <span style="color:${String(node.status||'').toUpperCase()!=='OFFLINE' ? '#6bff47' : '#ff4444'}">${node.status || (node.is_active !== false ? 'Active' : 'Offline')}</span></div>
+        ${node.last_heartbeat ? `<div><strong>Heartbeat:</strong> ${node.last_heartbeat}</div>` : ''}
+        <div><strong>Coverage:</strong> ${(_nodeCoverageScore(node) * 100).toFixed(0)}%</div>
       </div>
     </div>
   `).openOn(window._map2d);
@@ -1160,21 +1163,64 @@ function _showZoneForm(x, y) {
   };
 }
 
+function _nodeCoverageScore(node) {
+  // 0–1 confidence from status + heartbeat freshness (no RF model required)
+  if (!node) return 0.35;
+  const status = String(node.status || '').toUpperCase();
+  if (status === 'OFFLINE') return 0.12;
+  let score = status === 'ACTIVE' ? 0.85 : (status === 'CALIBRATING' ? 0.55 : 0.4);
+  const hb = node.last_heartbeat;
+  if (hb) {
+    const ageSec = (Date.now() - new Date(hb).getTime()) / 1000;
+    if (!Number.isNaN(ageSec)) {
+      if (ageSec < 30) score = Math.min(1, score + 0.12);
+      else if (ageSec < 120) score *= 0.9;
+      else if (ageSec < 600) score *= 0.55;
+      else score *= 0.25;
+    }
+  } else {
+    score *= 0.45;
+  }
+  return Math.max(0.08, Math.min(1, score));
+}
+
+function _nodeCoverageRadius(node, score) {
+  // Prefer explicit metadata range when present; else scale 6–18 m by confidence
+  let base = 12;
+  try {
+    const meta = typeof node.metadata === 'object' ? node.metadata
+      : (node.metadata_json ? JSON.parse(node.metadata_json) : null);
+    if (meta && (meta.coverage_radius_m || meta.range_m)) {
+      base = Number(meta.coverage_radius_m || meta.range_m) || base;
+    }
+  } catch (e) {}
+  return Math.max(4, base * (0.45 + 0.55 * score));
+}
+
 function renderCoverageRings() {
   _coverageLayers.forEach(l => window._map2d.removeLayer(l));
   _coverageLayers = [];
   _nodeMarkers.forEach(m => {
     if (!m.getLatLng) return;
+    const node = m._nodeData || {};
+    const score = _nodeCoverageScore(node);
+    const radius = _nodeCoverageRadius(node, score);
+    // Teal → amber → red as confidence drops
+    const color = score >= 0.7 ? '#2dd4bf' : (score >= 0.4 ? '#f59e0b' : '#f87171');
     const ring = L.circle(m.getLatLng(), {
-      radius: 12,
-      color: '#2dd4bf',
-      fillColor: '#2dd4bf',
-      fillOpacity: 0.04,
-      weight: 1,
-      opacity: 0.35,
-      dashArray: '4,6',
+      radius,
+      color,
+      fillColor: color,
+      fillOpacity: 0.03 + score * 0.1,
+      weight: 1.5,
+      opacity: 0.25 + score * 0.45,
+      dashArray: score >= 0.55 ? null : '4,6',
     }).addTo(window._map2d);
     ring._isCoverage = true;
+    ring.bindTooltip(
+      `${node.assigned_name || node.mac_address || 'Anchor'} · coverage ${(score * 100).toFixed(0)}% · r≈${radius.toFixed(1)}m`,
+      { direction: 'top', className: 'holo-tooltip' }
+    );
     _coverageLayers.push(ring);
   });
 }
