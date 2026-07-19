@@ -126,7 +126,7 @@ class AlertService:
             from sqlalchemy.orm import joinedload
             try:
                 zones = self._db.query(Zone).options(joinedload(Zone.section)).filter(
-                    Zone.zone_type.in_([2, 3])   # RESTRICTED=2, DANGER=3
+                    Zone.zone_type.in_([2, 5])   # RESTRICTED=2, DANGER=5
                 ).all()
                 snapped = []
                 for z in zones:
