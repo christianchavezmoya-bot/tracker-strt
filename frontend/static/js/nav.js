@@ -15,7 +15,6 @@
     { sep: 'Assets' },
     { href: '/trackers', label: 'Trackers',      icon: 'fa-solid fa-tags' },
     { href: '/?mode=setup', label: 'Map Setup',   icon: 'fa-solid fa-wrench', operator: true },
-    { href: '/tracking?legacy=1', label: 'Scanner lab',   icon: 'fa-solid fa-satellite-dish', operator: true },
     { sep: 'Site' },
     { href: '/nodes',    label: 'Anchors',       icon: 'fa-solid fa-broadcast-tower', operator: true },
     { href: '/zones',    label: 'Zones',         icon: 'fa-solid fa-draw-polygon', operator: true },
@@ -90,8 +89,6 @@
       active = (here === '/' && location.search.indexOf('mode=setup') < 0);
     } else if (hrefQuery.indexOf('mode=setup') >= 0) {
       active = (here === '/' && location.search.indexOf('mode=setup') >= 0);
-    } else if (hrefPath === '/tracking') {
-      active = here.indexOf('/tracking') === 0;
     } else {
       active = here.indexOf(hrefPath) === 0;
     }

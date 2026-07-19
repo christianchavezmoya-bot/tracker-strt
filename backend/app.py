@@ -179,6 +179,10 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(inject_bp)
     app.register_blueprint(push_bp)
 
+    if os.getenv("PLAYWRIGHT_E2E") == "1":
+        from backend.api.e2e import e2e_bp
+        app.register_blueprint(e2e_bp)
+
     # ── JWT blocklist (session revoke) ────────────────────────────────────────
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(jwt_header, jwt_payload):
@@ -259,11 +263,9 @@ def create_app(test_config: dict = None) -> Flask:
 
     @app.route("/tracking")
     def tracking_page():
-        # Location Core: prefer Live Map Setup unless explicitly requesting legacy scanner UI
+        """Legacy scanner lab retired — Location Core lives on Live Map Setup."""
         from flask import redirect
-        if request.args.get("legacy") != "1" and os.getenv("HOLO_TRACKING_LEGACY_DEFAULT", "0") != "1":
-            return redirect("/?mode=setup")
-        return render_template("dashboard/tracking.html")
+        return redirect("/?mode=setup", code=302)
 
     @app.route("/nodes")
     def nodes_page():
@@ -447,7 +449,9 @@ def _ensure_schema_columns():
 def _seed_demo_if_needed(app):
     """Ensure admin + mock simulator exist so Live Map works on first boot."""
     import logging
-    from backend.models import User, UserRole, HardwareConfig, WifiNode, Tracker
+    from backend.models import User, UserRole, HardwareConfig, WifiNode, Tracker, Setting
+    from backend.models.settings import SettingScope
+    from backend.services.settings_defaults import SETTING_DEFAULTS
     from backend.models.hardware import ConnectionStatus, HardwareType, Protocol
     from backend.models.tracker import TagType, DeviceCategory, NodeType, NodeStatus
 
@@ -504,6 +508,16 @@ def _seed_demo_if_needed(app):
         mock.set_settings({"interval": 0.5, "tracker_ids": "TAG_001,TAG_002,TAG_003"})
         db.session.add(mock)
         log.info("Seeded demo mock_data hardware config")
+
+    for key, meta in SETTING_DEFAULTS.items():
+        if not Setting.query.filter_by(key=key).first():
+            db.session.add(Setting(
+                key=key,
+                value=meta["value"],
+                value_type=meta["value_type"],
+                scope=int(meta["scope"]),
+                label=meta.get("label"),
+            ))
 
     db.session.commit()
 

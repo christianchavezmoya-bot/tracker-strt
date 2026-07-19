@@ -40,7 +40,6 @@ def positioning_sources():
         ],
         "preferred_ui": "/",
         "setup_ui": "/?mode=setup",
-        "legacy_scanner_ui": "/tracking?legacy=1",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 

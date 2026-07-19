@@ -46,7 +46,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   await loadUserInfo();
-  await Promise.all([loadTrackers(), loadAlerts(), loadNodes(), loadZones(), loadProximitySetting()]);
+  try {
+    await Promise.all([loadTrackers(), loadAlerts(), loadNodes(), loadZones(), loadProximitySetting()]);
+  } catch (e) {
+    console.error('Dashboard preload failed:', e);
+  }
   updateStats();
   updateDashboardKPIs();
   initHeatmapCanvas();
@@ -54,8 +58,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   zoneOccupancyTimer = setInterval(() => {
     if (!isPlayback) renderZoneOccupancy();
   }, 10000);
-  initMap2D();
-  initMap3D();
+  try {
+    initMap2D();
+    initMap3D();
+  } catch (e) {
+    console.error('Map init failed:', e);
+  }
   startSSE();
   setupKeyboardShortcuts();
   // Deep-link from Alerts "Show on map" / Map Setup nav
@@ -203,7 +211,8 @@ async function loadNodes() {
   const data = await API.json(res);
   if (!res || !res.ok) return;
   nodes = data.items || [];
-  document.getElementById('statNodes').textContent = nodes.length;
+  const statNodes = document.getElementById('statNodes');
+  if (statNodes) statNodes.textContent = nodes.length;
 }
 
 async function loadZones() {
@@ -293,7 +302,9 @@ function alertBadgeClass(status) {
 function renderAlertFeed() {
   const list = document.getElementById('alertList');
   const empty = document.getElementById('alertEmpty');
-  document.getElementById('alertCountBadge').textContent = alerts.length;
+  const countBadge = document.getElementById('alertCountBadge');
+  if (countBadge) countBadge.textContent = alerts.length;
+  if (!list) return;
   if (alerts.length === 0) {
     if (empty) empty.style.display = 'flex';
     return;
@@ -401,11 +412,16 @@ function toggleFilter(type) {
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function updateStats() {
   const all = trackerList;
-  document.getElementById('statActive').textContent =
-    all.filter(t => t.asset_state === 'ACTIVE').length;
-  document.getElementById('statAlerts').textContent = alerts.length;
-  document.getElementById('statCheckedIn').textContent =
-    all.filter(t => t.check_status === 'CHECKED_IN').length;
+  const statActive = document.getElementById('statActive');
+  const statAlerts = document.getElementById('statAlerts');
+  const statCheckedIn = document.getElementById('statCheckedIn');
+  if (statActive) {
+    statActive.textContent = all.filter(t => t.asset_state === 'ACTIVE').length;
+  }
+  if (statAlerts) statAlerts.textContent = alerts.length;
+  if (statCheckedIn) {
+    statCheckedIn.textContent = all.filter(t => t.check_status === 'CHECKED_IN').length;
+  }
 }
 
 // ── View Toggle ──────────────────────────────────────────────────────────────

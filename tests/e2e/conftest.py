@@ -1,6 +1,8 @@
 """Playwright E2E fixtures."""
 import os
 import re
+import time
+
 import pytest
 
 BASE = os.getenv("HOLO_E2E_BASE", "http://127.0.0.1:8080")
@@ -35,6 +37,25 @@ def logged_in_page(browser_page, e2e_base):
     page.fill("#emailInput", ADMIN_EMAIL)
     page.fill("#passwordInput", ADMIN_PASS)
     page.click("#loginBtn")
-    # Avoid wait_for_function — CSP blocks unsafe-eval in production Talisman headers.
     page.wait_for_url(re.compile(r".*(?<!/login)$"), timeout=25000)
     return page
+
+
+def e2e_auth_headers(page) -> dict:
+    token = page.evaluate(
+        "() => localStorage.getItem('holo_access_token') || localStorage.getItem('access_token')"
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def seed_e2e_alert(page, e2e_base) -> int:
+    resp = page.request.post(
+        f"{e2e_base}/api/e2e/seed-alert",
+        headers=e2e_auth_headers(page),
+    )
+    assert resp.ok, resp.text()
+    return resp.json()["alert"]["id"]
+
+
+def unique_suffix() -> str:
+    return str(int(time.time() * 1000) % 1000000)

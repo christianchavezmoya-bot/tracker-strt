@@ -92,6 +92,10 @@ def get_setting(key):
     """
     setting = Setting.query.filter_by(key=key).first()
     if not setting:
+        from backend.services.settings_defaults import default_setting_dict
+        fallback = default_setting_dict(key)
+        if fallback:
+            return jsonify({"setting": fallback})
         return jsonify({"error": "Not found"}), 404
     return jsonify({"setting": setting.to_dict()})
 

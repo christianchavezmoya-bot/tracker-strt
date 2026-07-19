@@ -98,9 +98,17 @@ def test_tracking_redirects_to_setup(client):
     assert "/?mode=setup" in (res.headers.get("Location") or "")
 
 
-def test_tracking_legacy_served(client):
-    res = client.get("/tracking?legacy=1")
-    assert res.status_code == 200
+def test_proximity_meters_default_on_fresh(client, admin_headers):
+    res = client.get("/api/settings/proximity_meters", headers=admin_headers)
+    assert res.status_code == 200, res.get_data(as_text=True)
+    setting = (res.get_json() or {}).get("setting") or {}
+    assert setting.get("value") in ("2.0", 2.0, "2")
+
+
+def test_tracking_legacy_redirects(client):
+    res = client.get("/tracking?legacy=1", follow_redirects=False)
+    assert res.status_code in (301, 302)
+    assert "/?mode=setup" in (res.headers.get("Location") or "")
 
 
 def test_nodes_include_metadata_field(client, auth_headers, app):
@@ -163,6 +171,7 @@ def test_pdf_summary_includes_bar_chart():
     pdf = rows_to_pdf("Summary", rows, site_name="Test")
     assert b"Summary chart" in pdf
     assert b"trackers" in pdf
+    assert b"/DCTDecode" in pdf
 
 
 def test_create_report_schedule(client, auth_headers):

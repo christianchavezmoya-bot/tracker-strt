@@ -27,7 +27,7 @@
 | `/settings` | Facility, thresholds, integrations, Web Push |
 | `/integrations` | API keys + webhooks |
 | `/muster` | Emergency muster board |
-| `/tracking?legacy=1` | Scanner lab (deprecated path; redirects without `legacy=1`) |
+| `/tracking` | Redirects to Live Map Setup (`/?mode=setup`) |
 
 ## Auth
 

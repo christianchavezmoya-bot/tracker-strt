@@ -97,7 +97,7 @@
     <button class="filter-btn red active" data-filter="ACTIVE" onclick="setFilter('ACTIVE')">Active</button>
     <button class="filter-btn" data-filter="ACKNOWLEDGED" onclick="setFilter('ACKNOWLEDGED')">Acknowledged</button>
     <button class="filter-btn green" data-filter="RESOLVED" onclick="setFilter('RESOLVED')">Resolved</button>
-    <select class="select-filter" id="typeFilter" onchange="loadAlerts()">
+    <select class="select-filter" id="typeFilter" aria-label="Filter by alert type" onchange="loadAlerts()">
       <option value="">All Types</option>
       <option value="NO_SIGNAL">No Signal</option>
       <option value="LOW_BATTERY">Low Battery</option>
@@ -309,8 +309,8 @@ function setFilter(filter) {
 
 // ── Actions ────────────────────────────────────────────────────────────────────
 async function acknowledge(id) {
-  const notes = prompt('Notes (optional):') || '';
-  const res = await API.post(`/alerts/${id}/acknowledge`, { notes });
+  if (!(await holoConfirm('Acknowledge this alert?'))) return;
+  const res = await API.post(`/alerts/${id}/acknowledge`, { notes: '' });
   if (res && res.ok) {
     document.getElementById(`alert-${id}`)?.remove();
     loadAlerts();

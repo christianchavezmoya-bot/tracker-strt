@@ -25,7 +25,7 @@ def test_shell_reduced_motion():
 def test_no_native_confirm_in_admin_ui():
     bare = []
     for p in (ROOT / "frontend").rglob("*"):
-        if p.suffix not in (".html", ".js") or "tracking.html" in str(p):
+        if p.suffix not in (".html", ".js"):
             continue
         for i, line in enumerate(p.read_text().splitlines(), 1):
             if "confirm(" in line and "holoConfirm" not in line:
