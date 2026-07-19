@@ -93,7 +93,7 @@ class AlertService:
         # Track zones and sections (re-fetched periodically to avoid stale data)
         self._zones_cache: List[object] = []
         self._sections_cache: List[object] = []
-        self._last_zone_reload = datetime.min(timezone.utc)
+        self._last_zone_reload = datetime.min.replace(tzinfo=timezone.utc)
         self._zone_cache_ttl = 60  # seconds
 
         # Alert count stats
