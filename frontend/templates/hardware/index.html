@@ -796,21 +796,51 @@ function renderNodes() {
     tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No nodes configured. <a href="#" onclick="openAddNodeModal();return false">Add one →</a></td></tr>`;
     return;
   }
-  tbody.innerHTML = nodes.map(n => `
-    <tr>
-      <td class="config-name">${n.assigned_name || '—'}</td>
+  const placedCount = nodes.filter(n => n.pos_x != null || n.position?.x != null).length;
+  const unplacedCount = nodes.length - placedCount;
+  tbody.innerHTML = nodes.map(n => {
+    const isPlaced = n.pos_x != null || n.position?.x != null;
+    const posStr = fmtPos(n.position);
+    return `
+    <tr class="${!isPlaced ? 'row-unplaced' : ''}">
+      <td>
+        <div class="config-name-cell">
+          <span class="config-icon"><i class="fa-solid fa-microchip" style="color:${isPlaced ? 'var(--cyan)' : '#ffa500'}"></i></span>
+          <div>
+            <div class="config-name">${n.assigned_name || '—'}</div>
+            ${!isPlaced ? '<div class="config-error" style="color:#ffa500">Not placed on map</div>' : ''}
+          </div>
+        </div>
+      </td>
       <td class="mono">${n.mac_address || '—'}</td>
-      <td class="mono">${fmtPos(n.position)}</td>
+      <td class="mono">${posStr}</td>
       <td><span class="type-badge type-${(n.node_type || '').toLowerCase()}">${n.node_type || 'Standard'}</span></td>
       <td><span class="status-pill ${n.status === 'ACTIVE' ? 'pill-green' : 'pill-gray'}">${n.status || 'Unknown'}</span></td>
       <td class="mono">${n.last_heartbeat ? timeAgo(n.last_heartbeat) : 'Never'}</td>
       <td>
         <div class="action-btns">
-          <button class="action-btn" onclick="editNode(${n.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="action-btn" onclick="editNode(${n.id})" title="Edit name / details"><i class="fa-solid fa-pen"></i></button>
           <button class="action-btn danger" onclick="deleteNode(${n.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
         </div>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
+
+  // Update toolbar subtitle with counts
+  const toolbar = document.querySelector('#tab-nodes .hw-toolbar');
+  if (toolbar) {
+    const existing = document.getElementById('nodeCounts');
+    if (existing) existing.remove();
+    const badge = document.createElement('div');
+    badge.id = 'nodeCounts';
+    badge.style.cssText = 'font-size:12px;color:var(--text-muted);display:flex;gap:12px;align-items:center';
+    badge.innerHTML = `
+      <span style="color:var(--cyan)"><strong>${placedCount}</strong> placed</span>
+      <span style="color:#ffa500"><strong>${unplacedCount}</strong> not placed</span>
+      <span style="color:var(--text-muted)">| Go to map to assign positions</span>
+    `;
+    toolbar.appendChild(badge);
+  }
 }
 
 function fmtPos(pos) {
@@ -1093,6 +1123,10 @@ textarea.form-input { resize:vertical; }
 
 /* ── Animations ─────────────────────────────────────────────────────── */
 @keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+/* Row: unplaced node */
+.row-unplaced td { background: rgba(255,165,0,0.04) !important; }
+.row-unplaced:hover td { background: rgba(255,165,0,0.08) !important; }
+
 </style>
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/static/sw.js').catch(() => {})); }
