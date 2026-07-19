@@ -144,6 +144,7 @@ def create_app(test_config: dict = None) -> Flask:
     from backend.api.hardware import hardware_bp
     from backend.api.stream import stream_bp
     from backend.api.positioning import positioning_bp
+    from backend.api.scanner import scanner_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trackers_bp)
@@ -160,6 +161,7 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(uwb_bp)
     app.register_blueprint(hardware_bp)
     app.register_blueprint(positioning_bp)
+    app.register_blueprint(scanner_bp)
     app.register_blueprint(stream_bp)
 
     # ── Frontend routes ───────────────────────────────────────────────────────
@@ -196,6 +198,10 @@ def create_app(test_config: dict = None) -> Flask:
     @app.route("/hardware")
     def hardware_page():
         return render_template("hardware/index.html")
+
+    @app.route("/tracking")
+    def tracking_page():
+        return render_template("dashboard/tracking.html")
 
     @app.route("/nodes")
     def nodes_page():

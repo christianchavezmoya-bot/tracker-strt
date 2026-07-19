@@ -109,8 +109,8 @@ class MockBridge(threading.Thread):
 
     def __init__(self, config_id: int, config_name: str,
                  anchors: Dict[str, tuple],
-                 interval: float = 0.5,
                  event_queue: queue.Queue,
+                 interval: float = 0.5,
                  tracker_ids: list = None):
         super().__init__(daemon=True, name=f"MockBridge-{config_name}")
         self.config_id = config_id
@@ -336,7 +336,7 @@ class HardwareBridgeManager:
                     broker_port=int(settings.get("broker_port", 1883)),
                     username=settings.get("username", ""),
                     password=settings.get("password", ""),
-                    topics=settings.get("topics", ["rssi/data", "rssi/raw"]).split(","),
+                    topics=settings.get("topics", "rssi/data,rssi/raw").split(","),
                     field_mapping=settings.get("field_mapping", {}),
                     event_queue=self._queue,
                 )

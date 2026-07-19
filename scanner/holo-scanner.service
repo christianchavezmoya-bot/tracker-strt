@@ -1,0 +1,31 @@
+[Unit]
+Description=HOLO-RTLS WiFi + BLE Scanner Daemon
+After=network-online.target
+Wants=network-online.target
+# Restart on crash; extend RestartSec if you see boot-time issues
+Restart=on-failure
+RestartSec=5
+
+[Service]
+Type=simple
+User=pi
+# Adjust path to your project root
+WorkingDirectory=/home/pi/HOLO-RTLS
+# Virtual environment (or remove --system-site-packages if using system Python)
+Environment="PATH=/home/pi/HOLO-RTLS/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/home/pi/HOLO-RTLS/.venv/bin/python3 scanner/main.py
+# Log to journalctl
+StandardOutput=journal
+StandardError=journal
+# Security hardening (optional but recommended on Pi)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/HOLO-RTLS/logs
+
+# Reload config without restarting the service
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target

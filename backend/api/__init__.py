@@ -14,7 +14,7 @@ GET  /api/auth/permissions — Get current user's permissions
 """
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
-    jwt_required, get_jwt_identity, get_jwt,
+    jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request,
 )
 from backend.services.auth_service import AUTH_SERVICE
 from backend.services.rbac_service import RBAC_SERVICE

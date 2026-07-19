@@ -27,7 +27,7 @@ def get_limiter() -> Limiter:
 # ── Security headers via Talisman ─────────────────────────────────────────────
 CSP_POLICY = {
     "default-src": "'self'",
-    "script-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+    "script-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com",
     "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
     "font-src": "'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
     "img-src": "'self' data: blob: https://unpkg.com",

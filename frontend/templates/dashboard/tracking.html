@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Tracking — HOLO-RTLS</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    /* ── Layout ─────────────────────────────────────────────────────────────── */
+    :root {
+      --panel-w: 300px;
+      --toolbar-h: 48px;
+      --statusbar-h: 28px;
+    }
+
+    body { display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Top bar */
+    .tracking-topbar {
+      height: var(--topbar-h);
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 50;
+    }
+
+    /* Main area: sidebar + canvas */
+    .tracking-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ────────────────────────────────────────────────────────────── */
+    .sidebar {
+      width: var(--panel-w);
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .sidebar-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sidebar-tab {
+      flex: 1;
+      padding: 10px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-align: center;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      letter-spacing: 0.04em;
+    }
+
+    .sidebar-tab.active {
+      color: var(--cyan);
+      border-bottom-color: var(--cyan);
+    }
+
+    .sidebar-tab:hover { color: var(--text-secondary); }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .sidebar-section { display: none; }
+    .sidebar-section.active { display: block; }
+
+    /* ── Floor plan canvas area ────────────────────────────────────────────── */
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    #floor-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    /* ── Toolbar ────────────────────────────────────────────────────────────── */
+    .canvas-toolbar {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 10px;
+      display: flex;
+      gap: 4px;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+      box-shadow: var(--cyan-glow);
+    }
+
+    .tool-btn {
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.04em;
+    }
+
+    .tool-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+    .tool-btn.active { color: var(--cyan); border-color: var(--cyan-border); background: var(--cyan-dim); }
+
+    /* ── Floor plan selector ───────────────────────────────────────────────── */
+    .fp-selector {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 10px;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+    }
+
+    .fp-selector select {
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-size: 12px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      outline: none;
+    }
+
+    .fp-selector select option { background: var(--bg-panel); }
+
+    /* ── Status bar ────────────────────────────────────────────────────────── */
+    .statusbar {
+      height: var(--statusbar-h);
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 20px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .statusbar .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    .statusbar .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .statusbar .dot.cyan  { background: var(--cyan);  box-shadow: 0 0 6px var(--cyan); }
+    .statusbar .dot.red   { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+    .statusbar .dot.yellow{ background: var(--yellow);box-shadow: 0 0 6px var(--yellow); }
+
+    /* ── Device list ───────────────────────────────────────────────────────── */
+    .device-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .device-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--cyan);
+      border-radius: 2px 0 0 2px;
+    }
+
+    .device-card:hover { border-color: var(--cyan-border); background: var(--bg-hover); }
+    .device-card.selected { border-color: var(--cyan); background: var(--cyan-dim); }
+    .device-card.selected::before { background: var(--cyan); }
+
+    .device-card .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .device-card .device-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 160px;
+    }
+
+    .device-card .device-mac {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+    }
+
+    .device-card .device-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .device-card .device-meta span { display: flex; align-items: center; gap: 3px; }
+
+    .device-type-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 20px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: var(--cyan-dim);
+      color: var(--cyan);
+      border: 1px solid var(--cyan-border);
+    }
+
+    .device-type-badge.ble { background: var(--magenta-dim); color: var(--magenta); border-color: rgba(224,64,251,0.3); }
+    .device-type-badge.unknown { background: var(--bg-active); color: var(--text-muted); border-color: var(--border); }
+
+    /* ── Anchors panel ─────────────────────────────────────────────────────── */
+    .anchor-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .anchor-icon {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--cyan-dim);
+      border: 1px solid var(--cyan-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--cyan);
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .anchor-card .anchor-info { flex: 1; min-width: 0; }
+    .anchor-card .anchor-name { font-size: 12px; font-weight: 600; }
+    .anchor-card .anchor-mac  { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); }
+
+    .anchor-status {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .anchor-status.active    { background: var(--green-dim); color: var(--green); }
+    .anchor-status.offline  { background: var(--red-dim);   color: var(--red); }
+    .anchor-status.calibrating { background: var(--yellow-dim); color: var(--yellow); }
+
+    /* ── Tool panels ───────────────────────────────────────────────────────── */
+    .tool-panel {
+      position: absolute;
+      bottom: 40px;
+      left: 12px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      z-index: 20;
+      backdrop-filter: blur(8px);
+      min-width: 220px;
+    }
+
+    .tool-panel h4 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 10px;
+    }
+
+    .tool-panel label {
+      display: block;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 3px;
+    }
+
+    .tool-panel input {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      padding: 5px 8px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      margin-bottom: 8px;
+      outline: none;
+    }
+
+    .tool-panel input:focus { border-color: var(--cyan-border); }
+
+    .tool-panel .btn-row { display: flex; gap: 6px; margin-top: 4px; }
+
+    /* ── Buttons ───────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+      letter-spacing: 0.03em;
+      font-family: var(--font-ui);
+    }
+
+    .btn-primary {
+      background: var(--cyan);
+      color: var(--bg-primary);
+      border-color: var(--cyan);
+    }
+
+    .btn-primary:hover { background: #33eeff; box-shadow: var(--cyan-glow); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border-color: var(--border);
+    }
+
+    .btn-ghost:hover { border-color: var(--cyan-border); color: var(--cyan); background: var(--cyan-dim); }
+
+    .btn-danger {
+      background: var(--red-dim);
+      color: var(--red);
+      border-color: rgba(255,68,68,0.3);
+    }
+
+    .btn-danger:hover { background: rgba(255,68,68,0.25); }
+
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
+
+    /* ── Empty state ───────────────────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-state i { font-size: 32px; margin-bottom: 12px; display: block; color: var(--border-bright); }
+    .empty-state p  { font-size: 13px; margin-bottom: 12px; }
+    .empty-state small { font-size: 11px; }
+
+    /* ── Scan stats ────────────────────────────────────────────────────────── */
+    .scan-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .stat-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      text-align: center;
+    }
+
+    .stat-box .val {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--cyan);
+    }
+
+    .stat-box .lbl {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Toast / notification ───────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 50px;
+      right: 20px;
+      background: var(--bg-panel);
+      border: 1px solid var(--cyan-border);
+      border-radius: var(--radius);
+      padding: 10px 16px;
+      font-size: 12px;
+      color: var(--text-primary);
+      z-index: 1000;
+      box-shadow: var(--cyan-glow);
+      animation: toastIn 0.2s ease;
+      max-width: 300px;
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Modal ─────────────────────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(7,11,24,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal {
+      background: var(--bg-panel);
+      border: 1px solid var(--cyan-border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      width: 400px;
+      max-width: 90vw;
+      box-shadow: var(--cyan-glow);
+    }
+
+    .modal h3 { color: var(--cyan); font-size: 16px; margin-bottom: 16px; }
+    .modal .form-group { margin-bottom: 12px; }
+    .modal label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .modal input, .modal select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      padding: 8px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .modal input:focus, .modal select:focus { border-color: var(--cyan-border); }
+    .modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+<!-- ══ Top Bar ═══════════════════════════════════════════════════════════════ -->
+<div class="tracking-topbar">
+  <div class="brand" style="margin-right:4px">
+    <div class="brand-icon" style="color:var(--cyan)">◈</div>
+    <span class="brand-text" style="font-size:15px;font-weight:700;letter-spacing:0.05em;color:var(--text-primary)">
+      LIVE TRACKING
+    </span>
+  </div>
+
+  <div class="topbar-center">
+    <div style="display:flex;align-items:center;gap:8px;height:32px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;">
+      <i class="fa-solid fa-wifi" style="color:var(--cyan);font-size:12px"></i>
+      <span id="stat-devices" style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)">0</span>
+      <span style="color:var(--text-muted);font-size:12px">devices</span>
+      <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+      <i class="fa-solid fa-broadcast-tower" style="color:var(--magenta);font-size:12px"></i>
+      <span id="stat-anchors" style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)">0</span>
+      <span style="color:var(--text-muted);font-size:12px">anchors</span>
+      <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+      <span id="stat-scan" style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)">—</span>
+      <span style="color:var(--text-muted);font-size:12px">scans</span>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);font-size:12px">
+      <span class="dot green" id="sse-dot"></span>
+      <span id="sse-status" style="color:var(--text-secondary);font-family:var(--font-mono)">connecting</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="App.refreshPositions()">
+      <i class="fa-solid fa-arrows-rotate"></i> Refresh
+    </button>
+    <button class="btn btn-ghost btn-sm" onclick="App.showDeviceModal()">
+      <i class="fa-solid fa-plus"></i> Register Device
+    </button>
+  </div>
+</div>
+
+<!-- ══ Main Body ════════════════════════════════════════════════════════════ -->
+<div class="tracking-body">
+
+  <!-- ── Sidebar ───────────────────────────────────────────────────────── -->
+  <div class="sidebar">
+    <div class="sidebar-tabs">
+      <div class="sidebar-tab active" data-tab="devices" onclick="App.switchTab('devices')">
+        <i class="fa-solid fa-signal"></i> Devices
+      </div>
+      <div class="sidebar-tab" data-tab="anchors" onclick="App.switchTab('anchors')">
+        <i class="fa-solid fa-broadcast-tower"></i> Anchors
+      </div>
+      <div class="sidebar-tab" data-tab="admin" onclick="App.switchTab('admin')">
+        <i class="fa-solid fa-gear"></i> Admin
+      </div>
+    </div>
+
+    <!-- Devices tab -->
+    <div class="sidebar-content sidebar-section active" id="tab-devices">
+      <div style="margin-bottom:8px">
+        <input type="text" id="device-search" placeholder="Search MAC or name…"
+               style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);padding:6px 8px;font-size:12px;outline:none"
+               oninput="App.filterDevices(this.value)">
+      </div>
+      <div id="device-list">
+        <div class="empty-state">
+          <i class="fa-solid fa-satellite-dish"></i>
+          <p>No devices detected yet</p>
+          <small>Start scanner nodes to see live devices</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Anchors tab -->
+    <div class="sidebar-content sidebar-section" id="tab-anchors">
+      <div class="scan-stats">
+        <div class="stat-box">
+          <div class="val" id="stat-wifi">0</div>
+          <div class="lbl">WiFi probes</div>
+        </div>
+        <div class="stat-box">
+          <div class="val" id="stat-ble">0</div>
+          <div class="lbl">BLE devices</div>
+        </div>
+      </div>
+      <div id="anchor-list">
+        <div class="empty-state">
+          <i class="fa-solid fa-map-pin"></i>
+          <p>No anchors configured</p>
+          <small>Add anchors in the Admin tab</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin tab -->
+    <div class="sidebar-content sidebar-section" id="tab-admin">
+      <h4 style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">
+        Floor Plans
+      </h4>
+      <div id="floorplan-list" style="margin-bottom:16px">
+        <!-- populated by JS -->
+      </div>
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:16px" onclick="App.showUploadModal()">
+        <i class="fa-solid fa-upload"></i> Upload Floor Plan
+      </button>
+
+      <h4 style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">
+        Calibration
+      </h4>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6">
+        <p>1. Place an anchor on the floor plan canvas (right-click → "Place Anchor")</p>
+        <p style="margin-top:6px">2. Click the anchor marker → "Calibrate TX Power"</p>
+        <p style="margin-top:6px">3. Hold a reference device 1m away → enter RSSI value</p>
+        <p style="margin-top:6px">4. Click "Calibrate" to compute anchor TX power</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:12px" onclick="App.clearCalibration()">
+        <i class="fa-solid fa-eraser"></i> Clear Calibration
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Canvas ──────────────────────────────────────────────────────────── -->
+  <div class="canvas-wrap" id="canvas-wrap">
+    <canvas id="floor-canvas"></canvas>
+
+    <!-- Toolbar -->
+    <div class="canvas-toolbar">
+      <button class="tool-btn active" id="tool-select" onclick="App.setTool('select')">
+        <i class="fa-solid fa-hand-pointer"></i> Select
+      </button>
+      <button class="tool-btn" id="tool-anchor" onclick="App.setTool('anchor')">
+        <i class="fa-solid fa-map-pin"></i> Place Anchor
+      </button>
+      <button class="tool-btn" id="tool-calib" onclick="App.setTool('calib')">
+        <i class="fa-solid fa-crosshairs"></i> Calibrate
+      </button>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 2px"></div>
+      <button class="tool-btn" onclick="App.zoomIn()"><i class="fa-solid fa-plus"></i></button>
+      <button class="tool-btn" onclick="App.zoomOut()"><i class="fa-solid fa-minus"></i></button>
+      <button class="tool-btn" onclick="App.resetView()"><i class="fa-solid fa-expand"></i></button>
+    </div>
+
+    <!-- Floor plan selector -->
+    <div class="fp-selector">
+      <i class="fa-solid fa-layer-group" style="color:var(--text-muted);margin-right:6px;font-size:11px"></i>
+      <select id="fp-select" onchange="App.loadFloorPlan(this.value)">
+        <option value="">— No floor plan —</option>
+      </select>
+    </div>
+
+    <!-- Tool panel: Calibration -->
+    <div class="tool-panel" id="panel-calib" style="display:none">
+      <h4><i class="fa-solid fa-crosshairs"></i> Pixel → Real Calibration</h4>
+      <label>Pixel X (click canvas)</label>
+      <input type="number" id="calib-px" placeholder="0" readonly>
+      <label>Pixel Y</label>
+      <input type="number" id="calib-py" placeholder="0" readonly>
+      <label>Real-world X (metres)</label>
+      <input type="number" id="calib-rx" placeholder="0.0" step="0.1">
+      <label>Real-world Y (metres)</label>
+      <input type="number" id="calib-ry" placeholder="0.0" step="0.1">
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" onclick="App.addCalibrationPoint()">
+          <i class="fa-solid fa-plus"></i> Add Point
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="App.computeCalibration()">
+          <i class="fa-solid fa-calculator"></i> Solve
+        </button>
+      </div>
+      <div id="calib-points" style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+        No calibration points yet.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Status Bar ═══════════════════════════════════════════════════════════ -->
+<div class="statusbar">
+  <span><span class="dot cyan" id="pos-dot"></span> Positioning: <span id="pos-status">idle</span></span>
+  <span><span class="dot green" id="sse2-dot"></span> SSE: <span id="sse2-status">connecting</span></span>
+  <span>FPS: <span id="fps-counter">—</span></span>
+  <span style="margin-left:auto">HOLO-RTLS WiFi/BLE RTLS</span>
+</div>
+
+<!-- ══ Device Registration Modal ═══════════════════════════════════════════ -->
+<div class="modal-overlay" id="device-modal" style="display:none">
+  <div class="modal">
+    <h3><i class="fa-solid fa-tag"></i> Register Device</h3>
+    <div class="form-group">
+      <label>MAC Address</label>
+      <input type="text" id="reg-mac" placeholder="AA:BB:CC:DD:EE:FF" style="font-family:var(--font-mono)">
+    </div>
+    <div class="form-group">
+      <label>Friendly Name</label>
+      <input type="text" id="reg-name" placeholder="John's Phone">
+    </div>
+    <div class="form-group">
+      <label>Device Type</label>
+      <select id="reg-type">
+        <option value="0">Unknown</option>
+        <option value="1">Smartphone</option>
+        <option value="2">Laptop</option>
+        <option value="3">Tablet</option>
+        <option value="4">IoT Device</option>
+        <option value="5">Personnel Tag</option>
+        <option value="99">Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <input type="text" id="reg-notes" placeholder="Optional notes…">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="App.hideDeviceModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="App.registerDevice()">
+        <i class="fa-solid fa-save"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// HOLO-RTLS — Live Tracking App
+// ═══════════════════════════════════════════════════════════════════════════════
+const App = {
+  // ── State ────────────────────────────────────────────────────────────────
+  devices: [],      // all tracked devices
+  anchors: [],      // wifi anchors
+  floorPlans: [],   // floor plans
+  currentFP: null,  // active floor plan
+  positions: {},    // mac → {x, y, z, accuracy}
+  selectedMac: null,
+  tool: 'select',   // 'select' | 'anchor' | 'calib'
+  calibPoints: [],
+  // Canvas
+  canvas: null,
+  ctx: null,
+  img: null,
+  imgLoaded: false,
+  // View transform
+  zoom: 1.0,
+  panX: 0,
+  panY: 0,
+  isPanning: false,
+  lastMouse: { x: 0, y: 0 },
+  // Animation
+  animFrame: null,
+  dots: [],         // animated dot positions (smoothed)
+  // SSE
+  es: null,
+  sseConnected: false,
+  scanCount: 0,
+  // FPS
+  fps: 0,
+  fpsFrames: 0,
+  fpsLast: 0,
+  // Calibrated transform (pixel → real world)
+  calibMatrix: null, // {a,b,c,d,e,f} or null
+  fpRealW: 0,
+  fpRealH: 0,
+
+  // ── Init ────────────────────────────────────────────────────────────────
+  async init() {
+    if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+
+    this.canvas = document.getElementById('floor-canvas');
+    this.ctx    = this.canvas.getContext('2d');
+
+    this.resizeCanvas();
+    window.addEventListener('resize', () => this.resizeCanvas());
+
+    // Mouse events
+    this.canvas.addEventListener('mousedown',  e => this.onMouseDown(e));
+    this.canvas.addEventListener('mousemove',  e => this.onMouseMove(e));
+    this.canvas.addEventListener('mouseup',    e => this.onMouseUp(e));
+    this.canvas.addEventListener('wheel',      e => this.onWheel(e));
+    this.canvas.addEventListener('contextmenu', e => this.onContextMenu(e));
+    this.canvas.addEventListener('click',       e => this.onClick(e));
+
+    // Load data
+    await this.loadFloorPlans();
+    await this.loadAnchors();
+    await this.loadDevices();
+    await this.loadPositions();
+
+    // Connect SSE
+    this.connectSSE();
+
+    // Start render loop
+    this.lastFpsTime = performance.now();
+    this.render();
+
+    document.getElementById('stat-anchors').textContent = this.anchors.length;
+
+    console.log('[Tracking] App initialized');
+  },
+
+  // ── Canvas ───────────────────────────────────────────────────────────────
+  resizeCanvas() {
+    const wrap = document.getElementById('canvas-wrap');
+    this.canvas.width  = wrap.clientWidth;
+    this.canvas.height = wrap.clientHeight;
+  },
+
+  render() {
+    const ctx = this.ctx;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+
+    // Background
+    ctx.fillStyle = '#070b18';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    this.drawGrid(ctx, W, H);
+
+    // Floor plan image
+    if (this.img && this.imgLoaded) {
+      ctx.save();
+      ctx.translate(this.panX, this.panY);
+      ctx.scale(this.zoom, this.zoom);
+      ctx.drawImage(this.img, 0, 0, this.img.naturalWidth, this.img.naturalHeight);
+      ctx.restore();
+    } else if (this.currentFP) {
+      // Placeholder with label
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,229,255,0.03)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(0,229,255,0.2)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([8, 8]);
+      ctx.strokeRect(W * 0.1, H * 0.1, W * 0.8, H * 0.8);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(0,229,255,0.4)';
+      ctx.font = '16px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.currentFP.name, W / 2, H / 2 - 12);
+      ctx.font = '12px Inter';
+      ctx.fillStyle = 'rgba(0,229,255,0.3)';
+      ctx.fillText('Upload a floor plan image to get started', W / 2, H / 2 + 12);
+      ctx.restore();
+    }
+
+    // Anchors (in world coords, convert via calibration)
+    for (const anchor of this.anchors) {
+      this.drawAnchor(ctx, anchor);
+    }
+
+    // Devices (in world coords)
+    for (const mac in this.positions) {
+      const pos = this.positions[mac];
+      if (!pos) continue;
+      const dev = this.devices.find(d => d.mac_address === mac);
+      this.drawDeviceDot(ctx, mac, pos, dev);
+    }
+
+    // FPS counter
+    this.fpsFrames++;
+    const now = performance.now();
+    if (now - this.lastFpsTime >= 1000) {
+      this.fps = this.fpsFrames;
+      this.fpsFrames = 0;
+      this.lastFpsTime = now;
+      document.getElementById('fps-counter').textContent = this.fps;
+    }
+
+    this.animFrame = requestAnimationFrame(() => this.render());
+  },
+
+  drawGrid(ctx, W, H) {
+    const gridSize = 50 * this.zoom;
+    const offsetX = this.panX % gridSize;
+    const offsetY = this.panY % gridSize;
+    ctx.strokeStyle = 'rgba(0,229,255,0.05)';
+    ctx.lineWidth = 0.5;
+    for (let x = offsetX; x < W; x += gridSize) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = offsetY; y < H; y += gridSize) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+  },
+
+  worldToCanvas(wx, wy) {
+    if (!this.currentFP || !this.calibMatrix) {
+      // No calibration — just pass through with zoom/pan
+      return {
+        x: wx * this.zoom + this.panX,
+        y: wy * this.zoom + this.panY,
+      };
+    }
+    const m = this.calibMatrix;
+    const px = m.a * wx + m.b * wy + m.c;
+    const py = m.d * wx + m.e * wy + m.f;
+    return { x: px * this.zoom + this.panX, y: py * this.zoom + this.panY };
+  },
+
+  canvasToWorld(cx, cy) {
+    if (!this.currentFP || !this.calibMatrix) {
+      return { x: (cx - this.panX) / this.zoom, y: (cy - this.panY) / this.zoom };
+    }
+    // Invert affine transform (simplified for non-rotated)
+    const m = this.calibMatrix;
+    const det = m.a * m.e - m.b * m.d;
+    if (Math.abs(det) < 1e-9) return { x: 0, y: 0 };
+    const wx = ( m.e * (cx - this.panX) - m.b * (cy - this.panY)) / (det * this.zoom);
+    const wy = (-m.d * (cx - this.panX) + m.a * (cy - this.panY)) / (det * this.zoom);
+    return { x: wx, y: wy };
+  },
+
+  drawAnchor(ctx, anchor) {
+    if (anchor.pixel_x == null || anchor.pixel_y == null) return;
+
+    const pos = this.worldToCanvas(anchor.pixel_x, anchor.pixel_y);
+    const x = pos.x, y = pos.y;
+    const r = 10 * this.zoom;
+
+    ctx.save();
+    // Outer glow
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2);
+    grad.addColorStop(0, 'rgba(0,229,255,0.3)');
+    grad.addColorStop(1, 'rgba(0,229,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r * 2, 0, Math.PI * 2); ctx.fill();
+
+    // Circle
+    ctx.strokeStyle = anchor.status === 'ACTIVE' ? '#00e5ff' : '#ff4444';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+
+    // Inner dot
+    ctx.fillStyle = anchor.status === 'ACTIVE' ? '#00e5ff' : '#ff4444';
+    ctx.beginPath(); ctx.arc(x, y, 3 * this.zoom, 0, Math.PI * 2); ctx.fill();
+
+    // Label
+    ctx.fillStyle = 'rgba(0,229,255,0.8)';
+    ctx.font = `bold ${9 * this.zoom}px Inter`;
+    ctx.textAlign = 'center';
+    ctx.fillText(anchor.name || anchor.mac_address.slice(-5), x, y + r + 12);
+
+    // RSSI bar
+    if (anchor.avg_rssi != null) {
+      const barW = 20 * this.zoom;
+      const barH = 3 * this.zoom;
+      const strength = Math.max(0, Math.min(1, (anchor.avg_rssi + 100) / 60));
+      ctx.fillStyle = 'rgba(0,229,255,0.2)';
+      ctx.fillRect(x - barW / 2, y - r - 8, barW, barH);
+      ctx.fillStyle = strength > 0.6 ? '#69ff47' : strength > 0.3 ? '#ffb300' : '#ff4444';
+      ctx.fillRect(x - barW / 2, y - r - 8, barW * strength, barH);
+    }
+
+    ctx.restore();
+  },
+
+  drawDeviceDot(ctx, mac, pos, dev) {
+    // Smooth position via lerp
+    if (!this.dots[mac]) this.dots[mac] = { x: pos.x, y: pos.y };
+    const dot = this.dots[mac];
+    dot.x += (pos.x - dot.x) * 0.15;
+    dot.y += (pos.y - dot.y) * 0.15;
+
+    const cpos = this.worldToCanvas(dot.x, dot.y);
+    const x = cpos.x, y = cpos.y;
+    const r = 6 * this.zoom;
+    const isSelected = mac === this.selectedMac;
+
+    ctx.save();
+
+    // Glow ring for selected
+    if (isSelected) {
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+      grad.addColorStop(0, 'rgba(0,229,255,0.4)');
+      grad.addColorStop(1, 'rgba(0,229,255,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(x, y, r * 3, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Accuracy circle (semi-transparent)
+    if (pos.accuracy) {
+      const accR = Math.min(pos.accuracy * this.zoom, 100);
+      ctx.strokeStyle = 'rgba(0,229,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.arc(x, y, accR, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Main dot
+    const color = isSelected ? '#00e5ff' : '#e040fb';
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Type icon (tiny letter)
+    const type = dev?.device_type || 'UNKNOWN';
+    ctx.fillStyle = '#070b18';
+    ctx.font = `bold ${7 * this.zoom}px Inter`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const icons = { SMARTPHONE: 'P', LAPTOP: 'L', TABLET: 'T', IOT_DEVICE: 'I', PERSONNEL_TAG: 'T', UNKNOWN: '?' };
+    ctx.fillText(icons[type] || '?', x, y);
+
+    // Name label for selected or named devices
+    const label = dev?.name || (isSelected ? mac.slice(-8) : null);
+    if (label) {
+      ctx.fillStyle = 'rgba(0,229,255,0.9)';
+      ctx.font = `bold ${9 * this.zoom}px Inter`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(label, x, y + r + 4);
+    }
+
+    ctx.restore();
+  },
+
+  // ── Mouse / Canvas Events ─────────────────────────────────────────────────
+  onMouseDown(e) {
+    const { x, y } = this.canvasXY(e);
+    this.isPanning = true;
+    this.lastMouse = { x, y };
+    this.canvas.style.cursor = 'grabbing';
+  },
+
+  onMouseMove(e) {
+    const { x, y } = this.canvasXY(e);
+    if (this.isPanning) {
+      this.panX += x - this.lastMouse.x;
+      this.panY += y - this.lastMouse.y;
+      this.lastMouse = { x, y };
+    }
+  },
+
+  onMouseUp(e) {
+    this.isPanning = false;
+    this.canvas.style.cursor = this.tool === 'select' ? 'default' : 'crosshair';
+  },
+
+  onWheel(e) {
+    e.preventDefault();
+    const { x, y } = this.canvasXY(e);
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newZoom = Math.max(0.1, Math.min(5, this.zoom * factor));
+    // Zoom around mouse position
+    this.panX = x - (x - this.panX) * (newZoom / this.zoom);
+    this.panY = y - (y - this.panY) * (newZoom / this.zoom);
+    this.zoom = newZoom;
+  },
+
+  onContextMenu(e) {
+    e.preventDefault();
+    const { x, y } = this.canvasXY(e);
+    const world = this.canvasToWorld(x, y);
+
+    if (this.tool === 'anchor') {
+      this.createAnchorAt(world.x, world.y);
+    } else {
+      // Show context menu
+      const anchor = this.anchorNear(x, y);
+      if (anchor) {
+        this.selectedAnchor = anchor;
+        this.showAnchorMenu(e.clientX, e.clientY, anchor);
+      }
+    }
+  },
+
+  onClick(e) {
+    const { x, y } = this.canvasXY(e);
+
+    if (this.tool === 'anchor') {
+      const world = this.canvasToWorld(x, y);
+      this.createAnchorAt(world.x, world.y);
+      return;
+    }
+
+    if (this.tool === 'calib') {
+      document.getElementById('calib-px').value = Math.round(x - this.panX);
+      document.getElementById('calib-py').value = Math.round(y - this.panY);
+      return;
+    }
+
+    // Select a device dot
+    const selected = this.deviceNear(x, y);
+    this.selectedMac = selected?.mac_address || null;
+    if (selected) {
+      this.highlightDevice(selected.mac_address);
+    }
+  },
+
+  canvasXY(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  },
+
+  anchorNear(cx, cy, thresh = 20) {
+    for (const a of this.anchors) {
+      if (a.pixel_x == null) continue;
+      const pos = this.worldToCanvas(a.pixel_x, a.pixel_y);
+      const d = Math.hypot(cx - pos.x, cy - pos.y);
+      if (d < thresh) return a;
+    }
+    return null;
+  },
+
+  deviceNear(cx, cy, thresh = 20) {
+    for (const mac in this.positions) {
+      const pos = this.positions[mac];
+      const cpos = this.worldToCanvas(pos.x, pos.y);
+      const d = Math.hypot(cx - cpos.x, cy - cpos.y);
+      if (d < thresh) return { mac, pos };
+    }
+    return null;
+  },
+
+  // ── Tool switching ────────────────────────────────────────────────────────
+  setTool(tool) {
+    this.tool = tool;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tool-' + tool)?.classList.add('active');
+    document.getElementById('panel-calib').style.display = tool === 'calib' ? 'block' : 'none';
+    this.canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+  },
+
+  // ── Zoom helpers ──────────────────────────────────────────────────────────
+  zoomIn()  { this.zoom = Math.min(5, this.zoom * 1.2); },
+  zoomOut() { this.zoom = Math.max(0.1, this.zoom / 1.2); },
+  resetView() { this.zoom = 1.0; this.panX = 0; this.panY = 0; },
+
+  // ── Floor Plans ───────────────────────────────────────────────────────────
+  async loadFloorPlans() {
+    try {
+      const r = await API.get('/scanner/floorplans');
+      if (!r.ok) return;
+      const data = await r.json();
+      this.floorPlans = data.items || [];
+
+      const sel = document.getElementById('fp-select');
+      sel.innerHTML = '<option value="">— No floor plan —</option>';
+      for (const fp of this.floorPlans) {
+        const opt = document.createElement('option');
+        opt.value = fp.id;
+        opt.textContent = `${fp.name} [L${fp.level}]`;
+        sel.appendChild(opt);
+      }
+
+      // Populate admin tab
+      const list = document.getElementById('floorplan-list');
+      list.innerHTML = this.floorPlans.map(fp => `
+        <div class="anchor-card" style="margin-bottom:4px">
+          <div class="anchor-icon"><i class="fa-solid fa-map"></i></div>
+          <div class="anchor-info">
+            <div class="anchor-name">${fp.name}</div>
+            <div class="anchor-mac">L${fp.level} · ${fp.real_width || '?'}m × ${fp.real_height || '?'}m</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="App.loadFloorPlan(${fp.id})">Load</button>
+        </div>
+      `).join('') || '<div style="font-size:12px;color:var(--text-muted)">No floor plans yet</div>';
+
+    } catch (e) { console.error('[Tracking] Failed to load floor plans', e); }
+  },
+
+  async loadFloorPlan(id) {
+    if (!id) { this.currentFP = null; this.img = null; this.imgLoaded = false; return; }
+    const fp = this.floorPlans.find(f => f.id == id);
+    if (!fp) return;
+    this.currentFP = fp;
+
+    // Load calibration matrix
+    if (fp.calibration) this.calibMatrix = fp.calibration;
+    if (fp.real_width && fp.real_height) {
+      this.fpRealW = fp.real_width;
+      this.fpRealH = fp.real_height;
+    }
+
+    if (fp.image_url) {
+      this.img = new Image();
+      this.img.onload = () => { this.imgLoaded = true; this.fitImageToCanvas(); };
+      this.img.src = fp.image_url;
+    }
+  },
+
+  fitImageToCanvas() {
+    if (!this.img || !this.imgLoaded) return;
+    const W = this.canvas.width, H = this.canvas.height;
+    const scale = Math.min(W / this.img.naturalWidth, H / this.img.naturalHeight) * 0.9;
+    this.zoom = scale;
+    this.panX = (W - this.img.naturalWidth * scale) / 2;
+    this.panY = (H - this.img.naturalHeight * scale) / 2;
+  },
+
+  // ── Anchors ───────────────────────────────────────────────────────────────
+  async loadAnchors() {
+    try {
+      const r = await API.get('/scanner/anchors');
+      if (!r.ok) return;
+      const data = await r.json();
+      this.anchors = data.items || [];
+      document.getElementById('stat-anchors').textContent = this.anchors.length;
+      this.renderAnchorList();
+    } catch (e) { console.error('[Tracking] Failed to load anchors', e); }
+  },
+
+  renderAnchorList() {
+    const list = document.getElementById('anchor-list');
+    if (!this.anchors.length) {
+      list.innerHTML = `<div class="empty-state"><i class="fa-solid fa-map-pin"></i><p>No anchors</p><small>Right-click canvas → "Place Anchor"</small></div>`;
+      return;
+    }
+    list.innerHTML = this.anchors.map(a => `
+      <div class="anchor-card">
+        <div class="anchor-icon"><i class="fa-solid fa-broadcast-tower"></i></div>
+        <div class="anchor-info">
+          <div class="anchor-name">${a.name || 'Unnamed Anchor'}</div>
+          <div class="anchor-mac">${a.mac_address}</div>
+          ${a.avg_rssi != null ? `<div class="anchor-mac" style="color:var(--text-secondary)">RSSI: ${a.avg_rssi} dBm</div>` : ''}
+        </div>
+        <span class="anchor-status ${a.status === 'ACTIVE' ? 'active' : a.status === 'CALIBRATING' ? 'calibrating' : 'offline'}">
+          ${a.status}
+        </span>
+      </div>
+    `).join('');
+  },
+
+  async createAnchorAt(px, py) {
+    const mac = prompt('Enter anchor MAC address (e.g. AA:BB:CC:DD:EE:FF):');
+    if (!mac || !mac.match(/^[0-9A-Fa-f:]{17}$/)) {
+      this.toast('Invalid MAC address format', 'error');
+      return;
+    }
+    const name = prompt('Anchor name (optional):') || '';
+    try {
+      const r = await API.post('/scanner/anchors', {
+        mac_address: mac.toUpperCase(),
+        name,
+        pixel_x: Math.round(px),
+        pixel_y: Math.round(py),
+        floor_plan_id: this.currentFP?.id || null,
+      });
+      if (r.ok) {
+        const data = await r.json();
+        this.anchors.push(data.anchor);
+        this.renderAnchorList();
+        document.getElementById('stat-anchors').textContent = this.anchors.length;
+        this.toast(`Anchor ${name || mac} placed at (${Math.round(px)}, ${Math.round(py)})`);
+      } else {
+        const err = await r.json();
+        this.toast(err.error || 'Failed to create anchor', 'error');
+      }
+    } catch (e) { this.toast('Network error', 'error'); }
+  },
+
+  showAnchorMenu(mx, my, anchor) {
+    // Simple context — use anchor's right-click for now
+    this.selectedAnchor = anchor;
+    this.toast(`${anchor.name || anchor.mac_address} · Right-click to remove`);
+  },
+
+  // ── Devices ───────────────────────────────────────────────────────────────
+  async loadDevices() {
+    try {
+      const r = await API.get('/scanner/devices?active=1&active_within_sec=300');
+      if (!r.ok) return;
+      const data = await r.json();
+      this.devices = data.items || [];
+      this.renderDeviceList();
+    } catch (e) { console.error('[Tracking] Failed to load devices', e); }
+  },
+
+  async loadPositions() {
+    try {
+      const r = await API.get('/scanner/positions/live');
+      if (!r.ok) return;
+      const data = await r.json();
+      for (const dev of (data.devices || [])) {
+        if (dev.position) {
+          this.positions[dev.mac_address] = {
+            x: dev.position.x,
+            y: dev.position.y,
+            z: dev.position.z || 0,
+            accuracy: dev.pos_accuracy,
+          };
+          if (!this.dots[dev.mac_address]) {
+            this.dots[dev.mac_address] = { x: dev.position.x, y: dev.position.y };
+          }
+        }
+      }
+      document.getElementById('stat-devices').textContent = Object.keys(this.positions).length;
+      this.renderDeviceList();
+    } catch (e) { console.error('[Tracking] Failed to load positions', e); }
+  },
+
+  renderDeviceList(filter = '') {
+    const list = document.getElementById('device-list');
+    const f = filter.toLowerCase();
+    const visible = this.devices.filter(d =>
+      !f || (d.mac_address.toLowerCase().includes(f)) ||
+          (d.name && d.name.toLowerCase().includes(f))
+    );
+
+    if (!visible.length && !Object.keys(this.positions).length) {
+      list.innerHTML = `<div class="empty-state"><i class="fa-solid fa-satellite-dish"></i><p>No devices yet</p><small>Start scanner nodes to begin tracking</small></div>`;
+      return;
+    }
+
+    list.innerHTML = visible.map(dev => {
+      const pos = this.positions[dev.mac_address];
+      const isSelected = dev.mac_address === this.selectedMac;
+      const badgeClass = dev.device_type === 'SMARTPHONE' || dev.device_type === 'LAPTOP' || dev.device_type === 'TABLET' ? '' : dev.device_type === 'UNKNOWN' ? 'unknown' : '';
+      return `
+        <div class="device-card ${isSelected ? 'selected' : ''}" onclick="App.selectDevice('${dev.mac_address}')">
+          <div class="card-header">
+            <span class="device-name">${dev.name || '—'}</span>
+            <span class="device-type-badge ${badgeClass}">${dev.device_type || 'UNKNOWN'}</span>
+          </div>
+          <div class="device-mac">${dev.mac_address}</div>
+          ${pos ? `
+          <div class="device-meta">
+            <span><i class="fa-solid fa-location-dot" style="color:var(--cyan)"></i> (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})</span>
+            <span><i class="fa-solid fa-crosshairs" style="color:var(--text-muted)"></i> ±${(pos.accuracy || 0).toFixed(1)}m</span>
+          </div>` : ''}
+        </div>
+      `;
+    }).join('');
+  },
+
+  filterDevices(val) { this.renderDeviceList(val); },
+
+  selectDevice(mac) {
+    this.selectedMac = mac;
+    this.renderDeviceList(document.getElementById('device-search').value);
+    // Pan to device
+    const pos = this.positions[mac];
+    if (pos) {
+      const cpos = this.worldToCanvas(pos.x, pos.y);
+      this.panX = this.canvas.width / 2 - cpos.x;
+      this.panY = this.canvas.height / 2 - cpos.y;
+    }
+  },
+
+  highlightDevice(mac) { this.selectedMac = mac; },
+
+  // ── Calibration ───────────────────────────────────────────────────────────
+  addCalibrationPoint() {
+    const px = parseFloat(document.getElementById('calib-px').value);
+    const py = parseFloat(document.getElementById('calib-py').value);
+    const rx = parseFloat(document.getElementById('calib-rx').value);
+    const ry = parseFloat(document.getElementById('calib-ry').value);
+    if ([px, py, rx, ry].some(isNaN)) {
+      this.toast('Fill in all calibration fields', 'error'); return;
+    }
+    this.calibPoints.push({ px, py, rx, ry });
+    document.getElementById('calib-points').textContent =
+      `${this.calibPoints.length} point(s) added`;
+    document.getElementById('calib-rx').value = '';
+    document.getElementById('calib-ry').value = '';
+    this.toast(`Calibration point ${this.calibPoints.length} added`);
+  },
+
+  async computeCalibration() {
+    if (this.calibPoints.length < 2) {
+      this.toast('Need at least 2 calibration points', 'error'); return;
+    }
+    // Solve affine: real = A * pixel + b
+    // For simplicity with axis-aligned calibration:
+    //   scale_x = (max_r_x - min_r_x) / (max_p_x - min_p_x)
+    //   scale_y = (max_r_y - min_r_y) / (max_p_y - min_p_y)
+    //   offset_x = min_r_x - min_p_x * scale_x
+    //   offset_y = min_r_y - min_p_y * scale_y
+    const minPx = Math.min(...this.calibPoints.map(p => p.px));
+    const maxPx = Math.max(...this.calibPoints.map(p => p.px));
+    const minPy = Math.min(...this.calibPoints.map(p => p.py));
+    const maxPy = Math.max(...this.calibPoints.map(p => p.py));
+    const minRx = Math.min(...this.calibPoints.map(p => p.rx));
+    const maxRx = Math.max(...this.calibPoints.map(p => p.rx));
+    const minRy = Math.min(...this.calibPoints.map(p => p.ry));
+    const maxRy = Math.max(...this.calibPoints.map(p => p.ry));
+
+    const sx = (maxPx - minPx) > 0 ? (maxRx - minRx) / (maxPx - minPx) : 1;
+    const sy = (maxPy - minPy) > 0 ? (maxRy - minRy) / (maxPy - minPy) : 1;
+    const ox = minRx - minPx * sx;
+    const oy = minRy - minPy * sy;
+
+    const m = { a: sx, b: 0, c: ox, d: 0, e: sy, f: oy };
+    this.calibMatrix = m;
+
+    if (this.currentFP) {
+      try {
+        await API.patch(`/scanner/floorplans/${this.currentFP.id}`, {
+          calibration_json: JSON.stringify(m),
+        });
+        this.toast('Calibration saved to floor plan');
+      } catch (e) { this.toast('Failed to save calibration', 'error'); }
+    } else {
+      this.toast('Calibration applied (no floor plan selected — not persisted)');
+    }
+  },
+
+  async clearCalibration() {
+    this.calibMatrix = null;
+    this.calibPoints = [];
+    document.getElementById('calib-points').textContent = 'No calibration points yet.';
+    if (this.currentFP) {
+      await API.patch(`/scanner/floorplans/${this.currentFP.id}`, { calibration_json: null });
+    }
+    this.toast('Calibration cleared');
+  },
+
+  // ── SSE ───────────────────────────────────────────────────────────────────
+  connectSSE() {
+    const token = localStorage.getItem('holo_access_token');
+    if (!token) return;
+
+    this.es = new EventSource(`/api/stream/positions?token=${encodeURIComponent(token)}`);
+
+    this.es.addEventListener('snapshot', e => {
+      const data = JSON.parse(e.data);
+      for (const snap of (data.positions || [])) {
+        if (snap.x != null) {
+          this.positions[snap.hardware_id] = {
+            x: snap.x, y: snap.y, z: snap.z || 0,
+            accuracy: snap.accuracy,
+          };
+          if (!this.dots[snap.hardware_id]) {
+            this.dots[snap.hardware_id] = { x: snap.x, y: snap.y };
+          }
+        }
+      }
+      document.getElementById('stat-devices').textContent = Object.keys(this.positions).length;
+    });
+
+    this.es.addEventListener('position_update', e => {
+      const d = JSON.parse(e.data);
+      if (d.tracker_id && d.x != null) {
+        this.positions[d.tracker_id] = {
+          x: d.x, y: d.y, z: d.z || 0, accuracy: d.accuracy,
+        };
+      }
+    });
+
+    this.es.addEventListener('heartbeat', () => {
+      if (!this.sseConnected) {
+        this.sseConnected = true;
+        document.getElementById('sse-status').textContent = 'live';
+        document.getElementById('sse2-status').textContent = 'live';
+        document.getElementById('sse-dot').className = 'dot green';
+        document.getElementById('sse2-dot').className = 'dot green';
+      }
+      this.scanCount++;
+      document.getElementById('stat-scan').textContent = this.scanCount;
+      document.getElementById('pos-status').textContent = 'active';
+      document.getElementById('pos-dot').className = 'dot cyan';
+    });
+
+    this.es.onerror = () => {
+      this.sseConnected = false;
+      document.getElementById('sse-status').textContent = 'reconnecting…';
+      document.getElementById('sse2-status').textContent = 'reconnecting…';
+      document.getElementById('sse-dot').className = 'dot yellow';
+      document.getElementById('sse2-dot').className = 'dot yellow';
+      // Auto-reconnect
+      setTimeout(() => this.connectSSE(), 3000);
+    };
+  },
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  async refreshPositions() {
+    this.scanCount++;
+    document.getElementById('stat-scan').textContent = this.scanCount;
+    await this.loadPositions();
+    await this.loadDevices();
+    this.toast('Positions refreshed');
+  },
+
+  switchTab(tab) {
+    document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.sidebar-section').forEach(s => s.classList.remove('active'));
+    document.querySelector(`.sidebar-tab[data-tab="${tab}"]`)?.classList.add('active');
+    document.getElementById(`tab-${tab}`)?.classList.add('active');
+  },
+
+  // ── Device registration modal ──────────────────────────────────────────────
+  showDeviceModal() {
+    document.getElementById('device-modal').style.display = 'flex';
+    document.getElementById('reg-mac').value = '';
+    document.getElementById('reg-name').value = '';
+    document.getElementById('reg-type').value = '0';
+    document.getElementById('reg-notes').value = '';
+  },
+
+  hideDeviceModal() {
+    document.getElementById('device-modal').style.display = 'none';
+  },
+
+  async registerDevice() {
+    const mac = document.getElementById('reg-mac').value.trim().toUpperCase();
+    const name = document.getElementById('reg-name').value.trim();
+    const type = parseInt(document.getElementById('reg-type').value);
+    const notes = document.getElementById('reg-notes').value.trim();
+
+    if (!mac.match(/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/)) {
+      this.toast('Invalid MAC address', 'error'); return;
+    }
+
+    try {
+      const r = await API.patch(`/scanner/devices/${mac}`, { name, device_type: type, notes });
+      if (r.ok) {
+        const data = await r.json();
+        const existing = this.devices.findIndex(d => d.mac_address === mac);
+        if (existing >= 0) this.devices[existing] = data.device;
+        else this.devices.push(data.device);
+        this.renderDeviceList();
+        this.hideDeviceModal();
+        this.toast(`Device ${name || mac} registered`);
+      } else {
+        const err = await r.json();
+        this.toast(err.error || 'Failed to register device', 'error');
+      }
+    } catch (e) { this.toast('Network error', 'error'); }
+  },
+
+  // ── Floor plan upload ─────────────────────────────────────────────────────
+  showUploadModal() {
+    const name = prompt('Floor plan name:');
+    if (!name) return;
+    const level = parseInt(prompt('Floor level (0 = ground):') || '0');
+    const w = parseFloat(prompt('Real-world width (metres):') || '0') || null;
+    const h = parseFloat(prompt('Real-world height (metres):') || '0') || null;
+
+    (async () => {
+      try {
+        const r = await API.post('/scanner/floorplans', {
+          name, level, real_width: w, real_height: h,
+        });
+        if (r.ok) {
+          const data = await r.json();
+          const fp = data.floor_plan;
+          this.toast(`Floor plan "${name}" created. Upload the image next.`);
+          await this.loadFloorPlans();
+          // Prompt for image upload
+          const uploadUrl = `/scanner/floorplans/${fp.id}/upload`;
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.onchange = async () => {
+            if (!input.files[0]) return;
+            const fd = new FormData();
+            fd.append('image', input.files[0]);
+            const resp = await fetch(uploadUrl, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${localStorage.getItem('holo_access_token')}` },
+              body: fd,
+            });
+            if (resp.ok) {
+              const d = await resp.json();
+              this.currentFP = d.floor_plan;
+              if (d.image_url) {
+                this.img = new Image();
+                this.img.onload = () => { this.imgLoaded = true; this.fitImageToCanvas(); };
+                this.img.src = d.image_url;
+              }
+              this.toast('Floor plan image uploaded!');
+              await this.loadFloorPlans();
+            }
+          };
+          input.click();
+        }
+      } catch (e) { this.toast('Failed to create floor plan', 'error'); }
+    })();
+  },
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.style.borderColor = type === 'error' ? 'rgba(255,68,68,0.5)' : 'var(--cyan-border)';
+    el.innerHTML = `<i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'}" style="color:${type === 'error' ? 'var(--red)' : 'var(--green)'};margin-right:8px"></i>${msg}`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+  },
+};
+
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
