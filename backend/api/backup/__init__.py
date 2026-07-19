@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify, send_file, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timezone
+from pathlib import Path
 import os, sqlite3, io, gzip, shutil
 from backend.extensions import db
 from backend.models import BackupJob
@@ -71,6 +72,27 @@ def _create_backup_file(trigger: str = "manual", user_id: int = None):
                     db_path = str(cand)
                     break
         shutil.copy2(str(db_path), str(filepath))
+        # Optional at-rest encryption (Fernet) when BACKUP_ENCRYPT_KEY is set
+        enc_key = os.getenv("BACKUP_ENCRYPT_KEY", "").strip()
+        if enc_key:
+            try:
+                import base64, hashlib
+                from cryptography.fernet import Fernet
+                key = base64.urlsafe_b64encode(hashlib.sha256(enc_key.encode()).digest())
+                f = Fernet(key)
+                raw = Path(filepath).read_bytes()
+                enc_path = Path(str(filepath) + ".enc")
+                enc_path.write_bytes(f.encrypt(raw))
+                Path(filepath).unlink(missing_ok=True)
+                filename = enc_path.name
+                filepath = enc_path
+                job.filename = filename
+                job.notes = (job.notes or "") + " encrypted=fernet"
+            except ImportError:
+                pass  # cryptography not installed — leave plaintext
+            except Exception as e:
+                logger = __import__("logging").getLogger(__name__)
+                logger.warning("Backup encryption skipped: %s", e)
         # Retention
         retention = int(getattr(config, "BACKUP_RETENTION_COUNT", 10) or 10)
         jobs = BackupJob.query.filter_by(status="done").order_by(BackupJob.created_at.desc()).all()
@@ -132,15 +154,19 @@ def trigger_backup():
         return jsonify({"error": str(e), "job": job.to_dict() if job else None}), 500
 
 
+# Add encryption status to schedule info
 @backup_bp.route("/schedule", methods=["GET"])
 @jwt_required()
 @require_permission(Permission.TRIGGER_BACKUP)
 def backup_schedule_info():
+    enc = bool(os.getenv("BACKUP_ENCRYPT_KEY", "").strip())
     return jsonify({
         "enabled": True,
         "cron": "30 2 * * *",
         "description": "Daily automated backup at 02:30 UTC",
         "retention": int(getattr(config, "BACKUP_RETENTION_COUNT", 10) or 10),
+        "encryption_enabled": enc,
+        "encryption": "fernet" if enc else None,
     })
 
 
@@ -262,11 +288,58 @@ def restore_backup(job_id):
     filepath = config.BACKUP_DIR / job.filename
     if not filepath.exists():
         return jsonify({"error": "Backup file not found"}), 404
-    # TODO: Validate backup integrity before restoring
-    # For now: require confirmation flag
     body = request.get_json() or {}
     if not body.get("confirm"):
         return jsonify({"error": "Set confirm=true to restore from backup"}), 400
-    db_path = config.DATA_DIR / "holo_rtls.db"
-    shutil.copy2(str(filepath), str(db_path))
-    return jsonify({"message": f"Restored from {job.filename} — restart required"})
+
+    # Resolve live DB path (same logic as backup create)
+    db_uri = config.SQLALCHEMY_DATABASE_URI or ""
+    if not db_uri.startswith("sqlite"):
+        return jsonify({"error": "File restore is SQLite-only. Use pg_restore for Postgres."}), 400
+    db_path = Path(db_uri.replace("sqlite:///", ""))
+    if not db_path.is_absolute():
+        db_path = config.DATA_DIR / "holo_rtls.db"
+
+    # Pre-restore safety snapshot
+    safety = None
+    try:
+        safety = _create_backup_file(trigger="pre_restore", user_id=int(get_jwt_identity()))
+    except Exception as e:
+        return jsonify({"error": f"Could not create safety snapshot before restore: {e}"}), 500
+
+    # Decrypt Fernet backups when needed
+    src = filepath
+    tmp_dec = None
+    if str(filepath).endswith(".enc"):
+        enc_key = os.getenv("BACKUP_ENCRYPT_KEY", "").strip()
+        if not enc_key:
+            return jsonify({"error": "BACKUP_ENCRYPT_KEY required to restore encrypted backup"}), 400
+        try:
+            import base64, hashlib, tempfile
+            from cryptography.fernet import Fernet
+            key = base64.urlsafe_b64encode(hashlib.sha256(enc_key.encode()).digest())
+            raw = Fernet(key).decrypt(Path(filepath).read_bytes())
+            fd, tmp_name = tempfile.mkstemp(suffix=".db", prefix="holo_restore_")
+            os.close(fd)
+            tmp_dec = Path(tmp_name)
+            tmp_dec.write_bytes(raw)
+            src = tmp_dec
+        except ImportError:
+            return jsonify({"error": "cryptography package required to restore encrypted backups"}), 500
+        except Exception as e:
+            return jsonify({"error": f"Decrypt failed: {e}"}), 400
+
+    try:
+        shutil.copy2(str(src), str(db_path))
+    finally:
+        if tmp_dec and tmp_dec.exists():
+            try:
+                tmp_dec.unlink()
+            except Exception:
+                pass
+
+    return jsonify({
+        "message": f"Restored from {job.filename} — restart required",
+        "safety_backup": safety.to_dict() if safety else None,
+        "encrypted": str(filepath).endswith(".enc"),
+    })

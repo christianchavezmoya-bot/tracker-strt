@@ -135,17 +135,28 @@ class AlertService:
                     except Exception:
                         sec_name = None
                     snapped.append(type("ZoneSnap", (), {
+                        "id": z.id,
                         "name": z.name,
                         "pos_x": z.pos_x,
                         "pos_y": z.pos_y,
                         "pos_z": z.pos_z or 0.0,
                         "radius": z.radius or 0.0,
                         "section_name": sec_name,
+                        "rules": z.get_rules() if hasattr(z, "get_rules") else {},
                     })())
                 self._zones_cache = snapped
-                self._sections_cache = self._db.query(MapSection).filter(
-                    MapSection.is_restricted == True
-                ).all()
+                # Snapshot section geometry so evaluate never touches detached ORM
+                sec_snaps = []
+                for s in self._db.query(MapSection).filter(MapSection.is_restricted == True).all():
+                    try:
+                        poly = s.get_polygon_points()
+                    except Exception:
+                        poly = []
+                    sec_snaps.append(type("SecSnap", (), {
+                        "name": s.name,
+                        "polygon": poly,
+                    })())
+                self._sections_cache = sec_snaps
                 self._last_zone_reload = datetime.now(timezone.utc)
                 logger.debug(f"AlertService: {len(self._zones_cache)} restricted zones, "
                              f"{len(self._sections_cache)} restricted sections")
@@ -183,6 +194,9 @@ class AlertService:
 
         # 1. Restricted zone entry (sphere zones)
         alerts.extend(self._check_zone_violation(tracker_id, x, y, z))
+
+        # 1b. Zone dwell-max rules (seconds)
+        alerts.extend(self._check_zone_dwell(tracker_id, x, y, z))
 
         # 2. Restricted section entry (polygon sections)
         alerts.extend(self._check_section_violation(tracker_id, x, y))
@@ -236,24 +250,71 @@ class AlertService:
                 ))
         return alerts
 
+    def _check_zone_dwell(self, tracker_id: int,
+                          x: float, y: float, z: float) -> List[AlertEvent]:
+        """Fire when dwell_max_seconds rule exceeded inside a zone."""
+        if not hasattr(self, "_zone_entry_at"):
+            self._zone_entry_at = {}
+        alerts = []
+        now = datetime.now(timezone.utc)
+        for zone in self._zones_cache:
+            rules = getattr(zone, "rules", None) or {}
+            max_s = rules.get("dwell_max_seconds")
+            if not max_s:
+                continue
+            try:
+                max_s = float(max_s)
+            except (TypeError, ValueError):
+                continue
+            inside = point_in_sphere(x, y, z, zone.pos_x, zone.pos_y, zone.pos_z, zone.radius)
+            key = (tracker_id, getattr(zone, "id", zone.name))
+            if inside:
+                if key not in self._zone_entry_at:
+                    self._zone_entry_at[key] = now
+                dwell = (now - self._zone_entry_at[key]).total_seconds()
+                if dwell >= max_s:
+                    alerts.append(AlertEvent(
+                        tracker_id=tracker_id,
+                        alert_type=3,
+                        message=f"Dwell limit exceeded in zone {zone.name} ({int(dwell)}s > {int(max_s)}s)",
+                        pos_x=x, pos_y=y, pos_z=z,
+                        section_name=getattr(zone, "section_name", None),
+                        zone_name=zone.name,
+                    ))
+            else:
+                self._zone_entry_at.pop(key, None)
+        return alerts
+
     def _check_section_violation(self, tracker_id: int,
                                    x: float, y: float) -> List[AlertEvent]:
         """Check if tracker entered any restricted section polygon."""
         alerts = []
         for section in self._sections_cache:
-            polygon_json = getattr(section, "polygon_json", None)
-            if not polygon_json:
+            ring = None
+            poly = getattr(section, "polygon", None)
+            if poly:
+                ring = []
+                for p in poly:
+                    if isinstance(p, dict):
+                        ring.append([p.get("x", 0), p.get("y", 0)])
+                    elif isinstance(p, (list, tuple)) and len(p) >= 2:
+                        ring.append([p[0], p[1]])
+            else:
+                polygon_json = getattr(section, "polygon_json", None)
+                if polygon_json:
+                    try:
+                        import json
+                        coords = json.loads(polygon_json) if isinstance(polygon_json, str) else polygon_json
+                        if isinstance(coords, dict):
+                            coords = coords.get("coordinates", [])
+                        if coords:
+                            ring = coords[0] if (isinstance(coords[0], list) and coords[0] and isinstance(coords[0][0], list)) else coords
+                    except Exception as e:
+                        logger.warning(f"Section polygon parse error: {e}")
+                        continue
+            if not ring or len(ring) < 3:
                 continue
             try:
-                import json
-                coords = json.loads(polygon_json)
-                # Support GeoJSON format or simple list
-                if isinstance(coords, dict):
-                    coords = coords.get("coordinates", [])
-                if not coords:
-                    continue
-                # First ring only for now
-                ring = coords[0] if isinstance(coords[0], list) else coords
                 if point_in_polygon(x, y, ring):
                     alerts.append(AlertEvent(
                         tracker_id=tracker_id,
@@ -263,9 +324,8 @@ class AlertService:
                         section_name=section.name,
                     ))
             except Exception as e:
-                logger.warning(f"Section polygon parse error: {e}")
+                logger.warning(f"Section polygon check error: {e}")
         return alerts
-
     def _check_low_battery(self, tracker_id: int, battery: float) -> List[AlertEvent]:
         """Low battery alert at 20% and 10%."""
         alerts = []

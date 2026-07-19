@@ -309,6 +309,9 @@ def create_zone():
     ===
     """
     body = request.get_json() or {}
+    import json
+    rules = body.get("rules")
+    rules_json = json.dumps(rules) if isinstance(rules, dict) else (body.get("rules_json") or None)
     zone = Zone(
         name=body.get("name", "").strip() or "Unnamed Zone",
         zone_type=_parse_zone_type(body.get("zone_type", 1)),
@@ -316,6 +319,7 @@ def create_zone():
         pos_y=float(body.get("pos_y", body.get("center_y", 0)) or 0),
         pos_z=float(body.get("pos_z", 0) or 0),
         radius=float(body.get("radius", 5) or 5),
+        rules_json=rules_json,
         is_visible=body.get("is_visible", True),
         color_hex=body.get("color_hex", "#00e5ff"),
         section_id=body.get("section_id"),
@@ -373,6 +377,7 @@ def update_zone(zone_id):
     """
     zone = Zone.query.get_or_404(zone_id)
     body = request.get_json() or {}
+    import json
     for field in ["name", "zone_type", "pos_x", "pos_y", "pos_z",
                    "radius", "is_visible", "color_hex", "section_id"]:
         if field in body:
@@ -380,6 +385,10 @@ def update_zone(zone_id):
             if field == "zone_type":
                 val = _parse_zone_type(val)
             setattr(zone, field, val)
+    if "rules" in body and isinstance(body["rules"], dict):
+        zone.rules_json = json.dumps(body["rules"])
+    elif "rules_json" in body:
+        zone.rules_json = body["rules_json"]
     db.session.commit()
     AuditLog.log(action="zone.update", user_id=int(get_jwt_identity()),
                  entity_type="Zone", entity_id=zone.id)

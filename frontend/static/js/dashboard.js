@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     const role = (API.getUser() || {}).role;
     if (String(role).toUpperCase() === 'VIEWER') {
-      ['nodePlacementBtn','zoneDrawBtn','coverageBtn','btnAlarm'].forEach(id => {
+      ['nodePlacementBtn','zoneDrawBtn','sectionDrawBtn','coverageBtn','btnAlarm'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });

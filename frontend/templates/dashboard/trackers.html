@@ -1,31 +1,21 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trackers — HOLO-RTLS</title>
-  <link rel="manifest" href="/static/manifest.json">
-  <meta name="theme-color" content="#0ea5a4">
-  <link rel="stylesheet" href="/static/css/main.css">
-  <link rel="stylesheet" href="/static/css/shell.css">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-</head>
-<body class="shell-page">
-<header class="topbar shell-topbar">
-  <div class="topbar-left">
-    <a href="/" class="brand"><div class="brand-icon">◈</div><span class="brand-name">HOLO-RTLS</span></a>
-    <div class="breadcrumb"><span>Trackers</span></div>
-  </div>
-  <div class="topbar-right">
-    <a href="/" class="btn btn-ghost btn-sm"><i class="fa-solid fa-map-location-dot"></i> Live Map</a>
-    <div class="user-menu">
-      <button class="user-btn" id="userAvatarBtn"><div class="user-avatar" id="userAvatar">A</div></button>
-    </div>
-  </div>
-</header>
-
-<main class="shell-main">
+{% extends "base.html" %}
+{% block title %}Trackers — HOLO-RTLS{% endblock %}
+{% block breadcrumb %}<span>Trackers</span>{% endblock %}
+{% block topbar_actions %}
+<a href="/" class="btn btn-ghost btn-sm"><i class="fa-solid fa-map-location-dot"></i> Live Map</a>
+{% endblock %}
+{% block head %}
+<style>
+.detail-drawer{position:fixed;top:0;right:0;bottom:0;width:min(380px,92vw);background:#0f172a;border-left:1px solid rgba(148,163,184,.2);z-index:9000;padding:18px;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.4)}
+.detail-drawer[hidden]{display:none!important}
+.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.drawer-body{flex:1;overflow:auto;font-size:13px;line-height:1.7;color:#cbd5e1}
+.drawer-body .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.1)}
+.drawer-body .k{color:#64748b}
+.drawer-actions{display:flex;gap:8px;padding-top:12px;border-top:1px solid rgba(148,163,184,.15)}
+</style>
+{% endblock %}
+{% block content %}
   <div class="page-header">
     <div>
       <h1 class="page-title">Trackers</h1>
@@ -87,7 +77,6 @@
       </tbody>
     </table>
   </div>
-</main>
 
 <!-- Create / Edit modal -->
 <div class="modal-backdrop" id="modal" hidden>
@@ -165,15 +154,11 @@
 .drawer-body .k{color:#64748b}
 .drawer-actions{display:flex;gap:8px;padding-top:12px;border-top:1px solid rgba(148,163,184,.15)}
 </style>
-
-<script src="/static/js/api.js"></script>
+{% endblock %}
+{% block scripts %}
 <script src="/static/js/shell.js"></script>
-<script src="/static/js/nav.js" defer></script>
 <script>
 if (!API.isLoggedIn()) location.href = '/login';
-const user = API.getUser() || {};
-document.getElementById('userAvatar').textContent = (user.display_name || user.username || 'A')[0].toUpperCase();
-
 let page = 1;
 const CAT = {1:'Personnel',2:'Machine',3:'Phone',4:'Watch',5:'Sensor',6:'UWB'};
 const STATE = {1:'Active',2:'Offline',3:'Maintenance',4:'Decommissioned'};
@@ -362,6 +347,6 @@ if (window.HoloRBAC) HoloRBAC.hideViewerActions();
 });
 
 loadTrackers();
+
 </script>
-</body>
-</html>
+{% endblock %}

@@ -252,6 +252,8 @@ class Zone(db.Model):
     pos_y         = db.Column(db.Float, default=0.0)
     pos_z         = db.Column(db.Float, default=0.0)
     radius        = db.Column(db.Float, default=5.0)    # meters
+    # Advanced rules JSON: {"dwell_max_seconds": 120, "debounce_seconds": 5, "on_enter": true, "on_exit": true}
+    rules_json    = db.Column(db.Text, nullable=True)
     is_visible    = db.Column(db.Boolean, default=True)
     color_hex     = db.Column(db.String(8), default="#00e5ff")
     section_id    = db.Column(db.Integer, db.ForeignKey("map_sections.id"), nullable=True)
@@ -280,7 +282,17 @@ class Zone(db.Model):
             "zone_type_id": int(self.zone_type) if str(self.zone_type).isdigit() else None,
             "position": {"x": self.pos_x, "y": self.pos_y, "z": self.pos_z},
             "radius": self.radius,
+            "rules": self.get_rules(),
             "is_visible": self.is_visible,
             "color_hex": self.color_hex,
             "section_id": self.section_id,
         }
+
+    def get_rules(self) -> dict:
+        import json
+        if not self.rules_json:
+            return {"on_enter": True, "on_exit": False, "dwell_max_seconds": None}
+        try:
+            return json.loads(self.rules_json)
+        except Exception:
+            return {}

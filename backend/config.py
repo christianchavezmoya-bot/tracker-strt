@@ -19,6 +19,8 @@ DATA_DIR.mkdir(exist_ok=True)
 
 # ── Database ────────────────────────────────────────────────────────────────
 # Prefer absolute SQLite path so CWD does not break relative URIs from .env
+# Production: set DATABASE_URL=postgresql://user:pass@host:5432/holo_rtls
+# See docs/POSTGRES.md. File backup/restore is SQLite-only.
 _raw_db = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'holo_rtls.db'}")
 if _raw_db.startswith("sqlite:///") and not _raw_db.startswith("sqlite:////"):
     _rel = _raw_db[len("sqlite:///"):]

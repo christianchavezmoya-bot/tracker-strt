@@ -495,6 +495,14 @@
 </head>
 <body>
 
+<!-- Location Core banner: Live Map is the primary ops surface -->
+<div id="locCoreBanner" style="flex-shrink:0;display:flex;align-items:center;gap:12px;padding:8px 16px;background:rgba(245,158,11,0.12);border-bottom:1px solid rgba(245,158,11,0.35);font-size:12px;color:#fcd34d;z-index:60">
+  <i class="fa-solid fa-circle-info"></i>
+  <span style="flex:1"><strong>Legacy /tracking view</strong> — prefer <a href="/" style="color:#fbbf24;font-weight:600">Live Map</a> for Location Core (anchors, zones, sections, SSE). This page remains for lab Wi‑Fi scan tooling.</span>
+  <a href="/" class="btn btn-primary btn-sm" style="text-decoration:none;white-space:nowrap"><i class="fa-solid fa-map"></i> Open Live Map</a>
+  <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:#fcd34d;cursor:pointer;padding:4px" aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button>
+</div>
+
 <!-- ══ Top Bar ═══════════════════════════════════════════════════════════════ -->
 <div class="tracking-topbar">
   <div class="brand" style="margin-right:4px">

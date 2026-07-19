@@ -345,6 +345,7 @@ def _init_positioning(app):
 
     from backend.models.positioning import TrackingHistory, PositionSnapshot
     db.create_all()
+    _ensure_schema_columns()
 
     _seed_demo_if_needed(app)
 
@@ -411,6 +412,23 @@ def _init_positioning(app):
         f"alerts: {'running' if alert_svc else 'disabled'}, "
         f"ingestion: {'running' if ingestion else 'FAILED'}"
     )
+
+
+def _ensure_schema_columns():
+    """Add newly introduced columns on existing SQLite DBs (create_all won't alter)."""
+    import logging
+    from sqlalchemy import text, inspect
+    log = logging.getLogger(__name__)
+    try:
+        insp = inspect(db.engine)
+        if "zones" in insp.get_table_names():
+            cols = {c["name"] for c in insp.get_columns("zones")}
+            if "rules_json" not in cols:
+                with db.engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE zones ADD COLUMN rules_json TEXT"))
+                log.info("Added zones.rules_json column")
+    except Exception as e:
+        log.warning("Schema ensure skipped: %s", e)
 
 
 def _seed_demo_if_needed(app):

@@ -572,6 +572,10 @@ function closeNodeForm() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function onMapClick(e) {
+  if (_sectionDrawMode || _mapMode === 'section_draw') {
+    _addSectionVertex(e.latlng);
+    return;
+  }
   if (_zoneDrawMode || _mapMode === 'zone_draw') {
     _placeZoneAt(e.latlng);
     return;
@@ -852,54 +856,308 @@ function toggleZoneLayer(show) { _zoneLayers.forEach(l => show ? l.addTo(window.
 function toggleSectionLayer(show) { _sectionLayers.forEach(l => show ? l.addTo(window._map2d) : window._map2d.removeLayer(l)); }
 function toggleGridLayer(show) { _gridLines.forEach(l => show ? l.addTo(window._map2d) : window._map2d.removeLayer(l)); }
 
-// ── Map-native zone draw / coverage / trajectory ─────────────────────────────
+// ── Map-native zone draw / section polygon / coverage / trajectory ───────────
 let _zoneDrawMode = false;
 let _zoneDrawRadius = 5;
+let _sectionDrawMode = false;
+let _sectionVertices = [];
+let _sectionDraftLayer = null;
+let _sectionDraftMarkers = [];
 let _coverageLayers = [];
 let _trajectoryLayer = null;
 
 function enterZoneDrawMode() {
+  exitSectionDrawMode();
   _zoneDrawMode = true;
   _mapMode = 'zone_draw';
-  if (window.showToast) window.showToast('Click map to place a zone center', 'info');
+  if (window.showToast) window.showToast('Click map to place zone center', 'info');
   const btn = document.getElementById('zoneDrawBtn');
   if (btn) btn.classList.add('active');
 }
 
 function exitZoneDrawMode() {
   _zoneDrawMode = false;
-  _mapMode = 'normal';
+  if (_mapMode === 'zone_draw') _mapMode = 'normal';
   const btn = document.getElementById('zoneDrawBtn');
   if (btn) btn.classList.remove('active');
+  document.getElementById('zoneDrawForm')?.remove();
+}
+
+function enterSectionDrawMode() {
+  exitZoneDrawMode();
+  _sectionDrawMode = true;
+  _mapMode = 'section_draw';
+  _sectionVertices = [];
+  _clearSectionDraft();
+  if (window.showToast) window.showToast('Click vertices · Finish when ≥3 points', 'info');
+  const btn = document.getElementById('sectionDrawBtn');
+  if (btn) btn.classList.add('active');
+  _showSectionDrawHint();
+}
+
+function exitSectionDrawMode() {
+  _sectionDrawMode = false;
+  if (_mapMode === 'section_draw') _mapMode = 'normal';
+  _sectionVertices = [];
+  _clearSectionDraft();
+  document.getElementById('sectionDrawHint')?.remove();
+  document.getElementById('sectionDrawForm')?.remove();
+  const btn = document.getElementById('sectionDrawBtn');
+  if (btn) btn.classList.remove('active');
+}
+
+function _clearSectionDraft() {
+  if (_sectionDraftLayer && window._map2d) {
+    try { window._map2d.removeLayer(_sectionDraftLayer); } catch (e) {}
+  }
+  _sectionDraftLayer = null;
+  (_sectionDraftMarkers || []).forEach(m => {
+    try { window._map2d.removeLayer(m); } catch (e) {}
+  });
+  _sectionDraftMarkers = [];
+}
+
+function _showSectionDrawHint() {
+  document.getElementById('sectionDrawHint')?.remove();
+  const mapEl = document.getElementById('map2d');
+  if (!mapEl) return;
+  const hint = document.createElement('div');
+  hint.id = 'sectionDrawHint';
+  Object.assign(hint.style, {
+    position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)',
+    zIndex: '1001', background: 'rgba(8,15,30,0.95)', border: '1px solid rgba(0,229,255,0.35)',
+    borderRadius: '10px', padding: '10px 14px', display: 'flex', gap: '10px', alignItems: 'center',
+    fontSize: '12px', color: '#c8d6e5', boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+  });
+  hint.innerHTML = `
+    <span><i class="fa-solid fa-draw-polygon" style="color:#00e5ff;margin-right:6px"></i>
+      Section polygon — <strong id="secVertCount">0</strong> vertices</span>
+    <button id="secFinishBtn" style="padding:6px 10px;background:#00e5ff;border:none;border-radius:6px;color:#081f3e;font-weight:700;cursor:pointer;font-size:11px">Finish</button>
+    <button id="secUndoBtn" style="padding:6px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#aaa;cursor:pointer;font-size:11px">Undo</button>
+    <button id="secCancelBtn" style="padding:6px 10px;background:none;border:none;color:#888;cursor:pointer;font-size:11px">Cancel</button>
+  `;
+  mapEl.appendChild(hint);
+  hint.querySelector('#secFinishBtn').onclick = () => _finishSectionPolygon();
+  hint.querySelector('#secUndoBtn').onclick = () => {
+    _sectionVertices.pop();
+    _redrawSectionDraft();
+  };
+  hint.querySelector('#secCancelBtn').onclick = () => exitSectionDrawMode();
+}
+
+function _addSectionVertex(latlng) {
+  const pt = L.CRS.Simple.project(latlng);
+  _sectionVertices.push([pt.x, pt.y]);
+  _redrawSectionDraft();
+}
+
+function _redrawSectionDraft() {
+  _clearSectionDraft();
+  const countEl = document.getElementById('secVertCount');
+  if (countEl) countEl.textContent = String(_sectionVertices.length);
+  if (!_sectionVertices.length || !window._map2d) return;
+  const latlngs = _sectionVertices.map(([x, y]) => L.CRS.Simple.unproject(L.point(x, y)));
+  if (latlngs.length >= 3) {
+    _sectionDraftLayer = L.polygon(latlngs, {
+      color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 0.08, weight: 2, dashArray: '4,4',
+    }).addTo(window._map2d);
+  } else {
+    _sectionDraftLayer = L.polyline(latlngs, {
+      color: '#00e5ff', weight: 2, dashArray: '4,4',
+    }).addTo(window._map2d);
+  }
+  latlngs.forEach(ll => {
+    const m = L.circleMarker(ll, { radius: 4, color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 1, weight: 1 });
+    m.addTo(window._map2d);
+    _sectionDraftMarkers.push(m);
+  });
+}
+
+function _finishSectionPolygon() {
+  if (_sectionVertices.length < 3) {
+    if (window.showToast) window.showToast('Need at least 3 vertices', 'error');
+    return;
+  }
+  const polygon = _sectionVertices.map(([x, y]) => [x, y]);
+  document.getElementById('sectionDrawHint')?.remove();
+  _showSectionForm(polygon);
+}
+
+function _showSectionForm(polygon) {
+  document.getElementById('sectionDrawForm')?.remove();
+  const mapEl = document.getElementById('map2d');
+  if (!mapEl) return;
+  const panel = document.createElement('div');
+  panel.id = 'sectionDrawForm';
+  Object.assign(panel.style, {
+    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+    zIndex: '1002', background: 'rgba(8,15,30,0.97)',
+    border: '1px solid rgba(0,229,255,0.3)', borderRadius: '14px', padding: '20px 24px',
+    width: '360px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(12px)', fontFamily: 'var(--font-body, system-ui)',
+  });
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:700;color:var(--cyan,#00e5ff)">
+        <i class="fa-solid fa-draw-polygon"></i> New Section
+      </div>
+      <button id="secFormClose" style="background:none;border:none;color:#888;cursor:pointer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:11px;color:#aaa;margin-bottom:12px">${polygon.length} vertices</div>
+    <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">NAME *</label>
+    <input id="secNameInput" type="text" value="New section"
+      style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:12px">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c8d6e5;margin-bottom:12px;cursor:pointer">
+      <input type="checkbox" id="secRestrictedInput"> Restricted (alerts on enter)
+    </label>
+    <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">COLOR</label>
+    <input id="secColorInput" type="color" value="#00e5ff" style="margin-bottom:16px;width:48px;height:32px;border:none;background:transparent">
+    <div style="display:flex;gap:8px">
+      <button id="secSaveBtn" style="flex:1;padding:9px;background:var(--cyan,#00e5ff);border:none;border-radius:8px;color:#081f3e;font-weight:700;font-size:13px;cursor:pointer">
+        <i class="fa-solid fa-floppy-disk"></i> Save Section
+      </button>
+      <button id="secFormCancel" style="padding:9px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#888;cursor:pointer">Cancel</button>
+    </div>
+  `;
+  mapEl.appendChild(panel);
+  const close = () => exitSectionDrawMode();
+  panel.querySelector('#secFormClose').onclick = close;
+  panel.querySelector('#secFormCancel').onclick = close;
+  panel.querySelector('#secSaveBtn').onclick = async () => {
+    const name = (panel.querySelector('#secNameInput').value || '').trim();
+    if (!name) { panel.querySelector('#secNameInput').focus(); return; }
+    const btn = panel.querySelector('#secSaveBtn');
+    btn.disabled = true;
+    try {
+      const res = await API.post('/zones/sections', {
+        name,
+        polygon,
+        is_restricted: !!panel.querySelector('#secRestrictedInput').checked,
+        color_hex: panel.querySelector('#secColorInput').value || '#00e5ff',
+      });
+      const data = await API.json(res);
+      if (res && res.ok) {
+        if (window.showToast) window.showToast('Section created', 'success');
+        renderZones();
+        exitSectionDrawMode();
+      } else {
+        if (window.showToast) window.showToast((data && data.error) || 'Failed', 'error');
+        btn.disabled = false;
+      }
+    } catch (e) {
+      if (window.showToast) window.showToast('Network error', 'error');
+      btn.disabled = false;
+    }
+  };
 }
 
 async function _placeZoneAt(latlng) {
   const pt = L.CRS.Simple.project(latlng);
-  const name = prompt('Zone name', 'New zone');
-  if (!name) { exitZoneDrawMode(); return; }
-  const type = prompt('Type: RESTRICTED | DANGER | CHECK_IN | SAFE (default RESTRICTED)', 'RESTRICTED') || 'RESTRICTED';
-  const radiusStr = prompt('Radius (meters)', String(_zoneDrawRadius));
-  const radius = parseFloat(radiusStr || _zoneDrawRadius) || 5;
-  try {
-    const res = await API.post('/zones', {
-      name,
-      zone_type: type,
-      pos_x: pt.x,
-      pos_y: pt.y,
-      pos_z: 0,
-      radius,
-    });
-    const data = await API.json(res);
-    if (res && res.ok) {
-      if (window.showToast) window.showToast('Zone created', 'success');
-      renderZones();
-    } else {
-      if (window.showToast) window.showToast((data && data.error) || 'Failed to create zone', 'error');
+  _showZoneForm(pt.x, pt.y);
+}
+
+function _showZoneForm(x, y) {
+  document.getElementById('zoneDrawForm')?.remove();
+  const mapEl = document.getElementById('map2d');
+  if (!mapEl) return;
+  const panel = document.createElement('div');
+  panel.id = 'zoneDrawForm';
+  Object.assign(panel.style, {
+    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+    zIndex: '1002', background: 'rgba(8,15,30,0.97)',
+    border: '1px solid rgba(0,229,255,0.3)', borderRadius: '14px', padding: '20px 24px',
+    width: '380px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(12px)', fontFamily: 'var(--font-body, system-ui)',
+  });
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:700;color:var(--cyan,#00e5ff)">
+        <i class="fa-solid fa-circle"></i> New Zone
+      </div>
+      <button id="zoneFormClose" style="background:none;border:none;color:#888;cursor:pointer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:14px;padding:8px 10px;background:rgba(0,229,255,0.06);border-radius:6px">
+      Center X=${x.toFixed(2)} · Y=${y.toFixed(2)} m
+    </div>
+    <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">NAME *</label>
+    <input id="zoneNameInput" type="text" value="New zone"
+      style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">TYPE</label>
+        <select id="zoneTypeInput" style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none">
+          <option value="RESTRICTED">RESTRICTED</option>
+          <option value="DANGER">DANGER</option>
+          <option value="CHECK_IN">CHECK_IN</option>
+          <option value="CHECK_OUT">CHECK_OUT</option>
+          <option value="NORMAL">NORMAL</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">RADIUS (m)</label>
+        <input id="zoneRadiusInput" type="number" min="0.5" step="0.5" value="${_zoneDrawRadius}"
+          style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+    </div>
+    <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#888;margin-bottom:8px;letter-spacing:0.06em">RULES</div>
+      <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:6px">DWELL MAX (seconds, blank = none)</label>
+      <input id="zoneDwellInput" type="number" min="1" step="1" placeholder="e.g. 120"
+        style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);border-radius:6px;padding:9px 12px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c8d6e5;margin-bottom:6px;cursor:pointer">
+        <input type="checkbox" id="zoneOnEnterInput" checked> Alert on enter
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c8d6e5;cursor:pointer">
+        <input type="checkbox" id="zoneOnExitInput"> Alert on exit
+      </label>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button id="zoneSaveBtn" style="flex:1;padding:9px;background:var(--cyan,#00e5ff);border:none;border-radius:8px;color:#081f3e;font-weight:700;font-size:13px;cursor:pointer">
+        <i class="fa-solid fa-floppy-disk"></i> Save Zone
+      </button>
+      <button id="zoneFormCancel" style="padding:9px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#888;cursor:pointer">Cancel</button>
+    </div>
+  `;
+  mapEl.appendChild(panel);
+  const close = () => exitZoneDrawMode();
+  panel.querySelector('#zoneFormClose').onclick = close;
+  panel.querySelector('#zoneFormCancel').onclick = close;
+  panel.querySelector('#zoneSaveBtn').onclick = async () => {
+    const name = (panel.querySelector('#zoneNameInput').value || '').trim();
+    if (!name) { panel.querySelector('#zoneNameInput').focus(); return; }
+    const radius = parseFloat(panel.querySelector('#zoneRadiusInput').value) || _zoneDrawRadius;
+    const dwellRaw = panel.querySelector('#zoneDwellInput').value;
+    const rules = {
+      on_enter: !!panel.querySelector('#zoneOnEnterInput').checked,
+      on_exit: !!panel.querySelector('#zoneOnExitInput').checked,
+      dwell_max_seconds: dwellRaw ? parseFloat(dwellRaw) : null,
+    };
+    const btn = panel.querySelector('#zoneSaveBtn');
+    btn.disabled = true;
+    try {
+      const res = await API.post('/zones', {
+        name,
+        zone_type: panel.querySelector('#zoneTypeInput').value,
+        pos_x: x,
+        pos_y: y,
+        pos_z: 0,
+        radius,
+        rules,
+      });
+      const data = await API.json(res);
+      if (res && res.ok) {
+        if (window.showToast) window.showToast('Zone created', 'success');
+        renderZones();
+        exitZoneDrawMode();
+      } else {
+        if (window.showToast) window.showToast((data && data.error) || 'Failed to create zone', 'error');
+        btn.disabled = false;
+      }
+    } catch (e) {
+      if (window.showToast) window.showToast('Network error creating zone', 'error');
+      btn.disabled = false;
     }
-  } catch (e) {
-    if (window.showToast) window.showToast('Network error creating zone', 'error');
-  }
-  exitZoneDrawMode();
+  };
 }
 
 function renderCoverageRings() {
@@ -956,6 +1214,8 @@ function clearTrajectory() {
 
 window.enterZoneDrawMode = enterZoneDrawMode;
 window.exitZoneDrawMode = exitZoneDrawMode;
+window.enterSectionDrawMode = enterSectionDrawMode;
+window.exitSectionDrawMode = exitSectionDrawMode;
 window.toggleCoverageLayer = toggleCoverageLayer;
 window.renderCoverageRings = renderCoverageRings;
 window.showTrajectory = showTrajectory;
