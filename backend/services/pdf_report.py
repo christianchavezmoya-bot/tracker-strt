@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 
 def rows_to_pdf(title: str, rows: list, *, subtitle: str = None, site_name: str = None) -> bytes:
-    """Build a multi-line PDF with HOLO-RTLS header + table-like text."""
+    """Build a multi-line PDF with HOLO-RTLS header + optional chart + table."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     brand = site_name or "HOLO-RTLS"
     lines = [
@@ -17,11 +17,13 @@ def rows_to_pdf(title: str, rows: list, *, subtitle: str = None, site_name: str 
         "=" * 72,
         "",
     ]
+    chart_lines = _summary_bar_chart_lines(rows)
+    if chart_lines:
+        lines.extend(chart_lines)
     if not rows:
         lines.append("No data for this report window.")
     else:
         keys = list(rows[0].keys())
-        # Column header
         header = " | ".join(str(k) for k in keys)
         lines.append(header)
         lines.append("-" * min(72, max(len(header), 20)))
@@ -32,6 +34,31 @@ def rows_to_pdf(title: str, rows: list, *, subtitle: str = None, site_name: str 
             lines.append(f"… {len(rows) - 200} additional rows omitted")
     lines.extend(["", "-" * 72, "Confidential — HOLO-RTLS operations report"])
     return _text_pdf("\n".join(lines), title=title)
+
+
+def _summary_bar_chart_lines(rows: list) -> list:
+    """ASCII bar chart for summary metric rows (metric + numeric value)."""
+    if not rows or "metric" not in rows[0]:
+        return []
+    numeric = []
+    for row in rows:
+        metric = row.get("metric")
+        if not metric or metric == "generated_at":
+            continue
+        try:
+            numeric.append((str(metric), float(row.get("value", 0))))
+        except (TypeError, ValueError):
+            continue
+    if len(numeric) < 2:
+        return []
+    max_v = max(v for _, v in numeric) or 1.0
+    out = ["Summary chart", ""]
+    for label, val in numeric:
+        bar_len = max(1, int(36 * val / max_v))
+        disp = str(int(val)) if val == int(val) else f"{val:.1f}"
+        out.append(f"{label.replace('_', ' ')[:22]:22} |{'#' * bar_len}| {disp}")
+    out.append("")
+    return out
 
 
 def _text_pdf(text: str, title: str = "HOLO-RTLS Report") -> bytes:

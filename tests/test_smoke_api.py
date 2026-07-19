@@ -149,6 +149,22 @@ def test_pdf_bytes_are_valid_pdf():
     assert b"HOLO-RTLS" in pdf
 
 
+def test_pdf_summary_includes_bar_chart():
+    from backend.services.pdf_report import rows_to_pdf, _summary_bar_chart_lines
+    rows = [
+        {"metric": "trackers", "value": 120},
+        {"metric": "alerts_24h", "value": 8},
+        {"metric": "history_samples_24h", "value": 4500},
+        {"metric": "generated_at", "value": "2026-07-19T00:00:00Z"},
+    ]
+    chart = _summary_bar_chart_lines(rows)
+    assert len(chart) >= 3
+    assert any("trackers" in line for line in chart)
+    pdf = rows_to_pdf("Summary", rows, site_name="Test")
+    assert b"Summary chart" in pdf
+    assert b"trackers" in pdf
+
+
 def test_create_report_schedule(client, auth_headers):
     res = client.post(
         "/api/reports/schedules",

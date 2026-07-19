@@ -6,25 +6,57 @@
 const API = {
   base: '/api',
 
-  _token: localStorage.getItem('holo_access_token'),
-  _refresh: localStorage.getItem('holo_refresh_token'),
-  _user: JSON.parse(localStorage.getItem('holo_user') || 'null'),
+  _remember: localStorage.getItem('holo_remember') !== '0',
+  _token: null,
+  _refresh: null,
+  _user: null,
+
+  _store() {
+    return this._remember ? localStorage : sessionStorage;
+  },
+
+  _otherStore() {
+    return this._remember ? sessionStorage : localStorage;
+  },
+
+  _readStored(key, asJson) {
+    const primary = this._store().getItem(key);
+    if (primary != null) return asJson ? JSON.parse(primary) : primary;
+    const fallback = this._otherStore().getItem(key);
+    if (fallback == null) return asJson ? null : null;
+    return asJson ? JSON.parse(fallback) : fallback;
+  },
+
+  setRemember(remember) {
+    this._remember = remember !== false;
+    localStorage.setItem('holo_remember', this._remember ? '1' : '0');
+  },
 
   // ── Token management ───────────────────────────────────────────────────────
   setTokens(access, refresh, user) {
     this._token = access;
     this._refresh = refresh;
     this._user = user;
-    if (access) localStorage.setItem('holo_access_token', access);
-    else        localStorage.removeItem('holo_access_token');
-    if (refresh) localStorage.setItem('holo_refresh_token', refresh);
-    else         localStorage.removeItem('holo_refresh_token');
-    if (user)    localStorage.setItem('holo_user', JSON.stringify(user));
-    else         localStorage.removeItem('holo_user');
+    const store = this._store();
+    const other = this._otherStore();
+    const pairs = [
+      ['holo_access_token', access],
+      ['holo_refresh_token', refresh],
+      ['holo_user', user ? JSON.stringify(user) : null],
+    ];
+    pairs.forEach(([key, val]) => {
+      if (val) store.setItem(key, val);
+      else store.removeItem(key);
+      other.removeItem(key);
+    });
   },
 
   clearTokens() {
     this.setTokens(null, null, null);
+    ['holo_access_token', 'holo_refresh_token', 'holo_user'].forEach(k => {
+      localStorage.removeItem(k);
+      sessionStorage.removeItem(k);
+    });
   },
 
   getUser() { return this._user; },
@@ -107,6 +139,46 @@ const API = {
     try { return JSON.parse(text); } catch { return { error: text }; }
   },
 };
+
+// Hydrate tokens from preferred storage (remember-me)
+API._token = API._readStored('holo_access_token');
+API._refresh = API._readStored('holo_refresh_token');
+API._user = API._readStored('holo_user', true);
+
+// ── Global toast (shell + admin pages) ───────────────────────────────────────
+window.showToast = function (message, type = 'info') {
+  const colors = {
+    success: { border: '#34d399', text: '#34d399' },
+    error: { border: '#f87171', text: '#f87171' },
+    warning: { border: '#fbbf24', text: '#fbbf24' },
+    info: { border: '#0ea5a4', text: '#2dd4bf' },
+  };
+  const c = colors[type] || colors.info;
+  let host = document.getElementById('holoToastHost');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'holoToastHost';
+    host.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none';
+    document.body.appendChild(host);
+  }
+  const t = document.createElement('div');
+  t.setAttribute('role', 'status');
+  t.style.cssText = `padding:10px 18px;background:rgba(8,15,30,0.96);border:1px solid ${c.border};color:${c.text};border-radius:10px;font-size:13px;font-family:IBM Plex Sans,system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45);animation:holoToastIn .2s ease`;
+  t.textContent = message;
+  host.appendChild(t);
+  setTimeout(() => {
+    t.style.opacity = '0';
+    t.style.transition = 'opacity .25s';
+    setTimeout(() => t.remove(), 280);
+  }, 3200);
+};
+
+if (!document.getElementById('holoToastStyles')) {
+  const s = document.createElement('style');
+  s.id = 'holoToastStyles';
+  s.textContent = '@keyframes holoToastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}';
+  document.head.appendChild(s);
+}
 
 // ── Utility: time ago ────────────────────────────────────────────────────────
 function timeAgo(isoString) {

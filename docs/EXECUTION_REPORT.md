@@ -2,43 +2,35 @@
 
 **Branch:** `cursor/holo-rtls-execute-plan-af22` (not merged to `master`)  
 **Date:** 2026-07-19  
-**Tests:** `pytest` → **94 passed** (3 optional Playwright E2E skipped)
+**Tests:** `pytest` → **95 passed** (3 optional Playwright E2E skipped)
 
 ---
 
 ## This pass
 
-### Web Push (VAPID) — Phase C N01 / PWA
-- `PushSubscription` model + `/api/push/*` (VAPID key, subscribe, unsubscribe, list)
-- Alert notifications dispatch Web Push via `push_service.py` (pywebpush)
-- Settings → Location Core: **Enable Web Push** + status line
-- Integrations tab shows VAPID configured chip
-- Env: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CLAIMS_EMAIL`
+### UX polish (Phase B §2.3 / §4.1)
+- **Global `showToast`** in `api.js` — all shell/admin pages share toast notifications
+- **Settings**: replaced all `alert()` calls with toasts (floor plans, 2FA, logo, save)
+- **Remember me** works: checked → `localStorage`; unchecked → `sessionStorage` (cleared on browser close)
 
-### Login polish (Phase B A06)
-- Password reset uses **in-card success banner** (no `alert()` / `confirm()`)
-- Dev reset link shown as clickable anchor on reset card
-- 2FA confirm uses login success banner instead of `alert()`
+### Reports (Phase C R07)
+- PDF **summary bar chart** (ASCII `#` bars for metric rows in summary reports)
 
-### Hardening (Phase D)
-- **GitHub Actions CI** — `.github/workflows/ci.yml` runs pytest on push/PR
-- **Stress test** — 300 trackers list API completes under 5s
-- **Audit export** smoke test
-- **Push subscribe** API tests
-- Production warning when SQLite + non-debug mode
+### Documentation (Phase D §10)
+- **`docs/CURRENT_SYSTEM.md`** — canonical description of the shipped web product (supersedes Unity-era docs for ops)
 
 ---
 
 ## Prior passes (summary)
-- Proximity map viz, settings integrations tab (SMTP test)
-- Schedule modal, branded PDF, shell/a11y/PWA, Location Core, trackers UI, muster, API keys
+- Web Push VAPID, proximity map viz, integrations tab, CI workflow, stress tests
+- Location Core, shell, trackers, muster, API keys, branded PDF, login reset banner
 
 ---
 
 ## Still intentionally thin / later
-- Playwright in CI (optional `PLAYWRIGHT_E2E=1` + running app)
+- Playwright in CI (optional `PLAYWRIGHT_E2E=1`)
 - Delete `/tracking` template entirely
 - Full a11y audit suite
-- LLM / Unity / multi-tenant (non-goals)
+- Remaining `alert()` on hardware/zones/users pages
 
 Default login: `admin@holo-rtls.local` / `ChangeMe123!`

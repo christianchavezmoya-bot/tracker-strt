@@ -8,8 +8,11 @@ let pendingSetup2FA = false;
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  const rememberEl = document.querySelector('input[name="remember"]');
+  const remembered = localStorage.getItem('holo_remember') !== '0';
+  if (rememberEl) rememberEl.checked = remembered;
+  API.setRemember(remembered);
   if (API.isLoggedIn()) {
-    // Redirect to dashboard if already logged in
     window.location.href = '/';
   }
 });
@@ -32,6 +35,8 @@ async function handleLogin(event) {
   const email = document.getElementById('emailInput').value.trim();
   const password = document.getElementById('passwordInput').value;
   const totpCode = document.getElementById('totpInput')?.value?.trim() || null;
+  const remember = document.querySelector('input[name="remember"]')?.checked !== false;
+  API.setRemember(remember);
 
   try {
     const res = await API.post('/auth/login', { email_or_username: email, password, totp_code: totpCode || undefined });
