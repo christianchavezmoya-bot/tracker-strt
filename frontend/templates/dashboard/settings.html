@@ -63,6 +63,26 @@
 .table-loading { text-align:center; color:var(--text-muted); font-size:13px; padding:20px; }
 .table-loading i { color:var(--cyan); margin-right:8px; }
 @keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+.fp-coord-wizard { position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:300; backdrop-filter:blur(6px); padding:20px; box-sizing:border-box; }
+.fp-wizard-panel { background:var(--bg-card,#0d1525); border:1px solid var(--border); border-radius:14px; width:min(720px,96vw); max-height:92vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 24px 80px rgba(0,0,0,.55); }
+.fp-wizard-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); }
+.fp-wizard-body { padding:20px; overflow-y:auto; flex:1; }
+.fp-wizard-intro-list { margin:12px 0 0; padding-left:18px; color:var(--text-secondary); font-size:13px; line-height:1.7; }
+.fp-wizard-picker { display:none; flex-direction:column; gap:12px; }
+.fp-wizard-pick-banner { font-size:12px; color:var(--cyan); background:rgba(0,229,255,.08); border:1px solid rgba(0,229,255,.2); border-radius:8px; padding:10px 14px; }
+.fp-wizard-image-wrap { position:relative; background:#fff; border-radius:10px; border:1px solid var(--border); min-height:280px; max-height:58vh; display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:crosshair; }
+.fp-wizard-image-wrap img { max-width:100%; max-height:58vh; width:auto; height:auto; object-fit:contain; display:block; user-select:none; pointer-events:none; }
+.fp-wizard-markers { position:absolute; inset:0; pointer-events:none; }
+.fp-wizard-marker { position:absolute; width:28px; height:28px; margin:-14px 0 0 -14px; border-radius:50%; background:#0a84ff; border:3px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:700; }
+.fp-wizard-crosshair { position:absolute; width:32px; height:32px; margin:-16px 0 0 -16px; pointer-events:none; display:none; }
+.fp-wizard-crosshair::before, .fp-wizard-crosshair::after { content:''; position:absolute; background:rgba(10,132,255,.85); }
+.fp-wizard-crosshair::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
+.fp-wizard-crosshair::after { top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); }
+.fp-wizard-coord-panel { display:none; margin-top:14px; padding:16px; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:10px; }
+.fp-wizard-coord-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:12px 0; }
+.fp-wizard-status { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; padding:3px 8px; border-radius:10px; }
+.fp-wizard-status.ok { color:var(--green); background:rgba(105,255,71,.12); }
+.fp-wizard-status.pending { color:var(--yellow,#ffb020); background:rgba(255,176,32,.12); }
 </style>
 <style>.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)}</style>
 {% endblock %}
@@ -197,7 +217,7 @@
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
         <div>
           <h2 style="font-size:18px;font-weight:700;margin:0 0 4px;display:flex;align-items:center;gap:8px"><i class="fa-solid fa-map" style="color:var(--cyan)"></i> Floor Plan Manager</h2>
-          <p style="color:var(--text-muted);font-size:12px;margin:0">Upload mine floor plan images, calibrate real-world coordinates, and manage map sections.</p>
+          <p style="color:var(--text-muted);font-size:12px;margin:0">Upload floor plan images and set GPS coordinates here — the live map uses these tie-points automatically.</p>
         </div>
         <button class="btn btn-primary" onclick="openUploadModal()"><i class="fa-solid fa-upload"></i> Upload Floor Plan</button>
       </div>
@@ -221,10 +241,10 @@
       <div class="hw-config-table-wrap">
         <table class="hw-config-table">
           <thead>
-            <tr><th>Preview</th><th>Name</th><th>Color</th><th>Z-Index</th><th>Visible</th><th>Actions</th></tr>
+            <tr><th>Preview</th><th>Name</th><th>Coordinates</th><th>Color</th><th>Z-Index</th><th>Visible</th><th>Actions</th></tr>
           </thead>
           <tbody id="floorPlanTable">
-            <tr><td colspan="6" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading floor plans…</td></tr>
+            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading floor plans…</td></tr>
           </tbody>
         </table>
       </div>
@@ -381,8 +401,68 @@
     </div>
   </div>
 </div>
+
+<!-- Floor Plan Coordinate Setup Wizard -->
+<div class="fp-coord-wizard" id="fpCoordWizardModal" role="dialog" aria-modal="true" aria-labelledby="fpWizardTitle">
+  <div class="fp-wizard-panel" onclick="event.stopPropagation()">
+    <div class="fp-wizard-header">
+      <div>
+        <div id="fpWizardTitle" style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">
+          <i class="fa-solid fa-location-crosshairs" style="color:var(--cyan)"></i> Map Coordinate Setup
+        </div>
+        <div id="fpWizardPlanName" style="font-size:12px;color:var(--text-muted);margin-top:4px"></div>
+      </div>
+      <button type="button" class="modal-close" id="fpWizardCloseBtn" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="fp-wizard-body">
+      <div id="fpWizardIntro">
+        <p style="font-size:13px;color:var(--text-secondary);margin:0 0 8px;line-height:1.6">
+          Link your floor plan to real-world GPS using two known corners (e.g. survey lat/long labels printed on the drawing).
+        </p>
+        <ol class="fp-wizard-intro-list">
+          <li>Click <strong>Start</strong> — your cursor becomes a crosshair on the plan.</li>
+          <li>Click the <strong>first corner</strong>, then enter its latitude and longitude.</li>
+          <li>Click the <strong>second corner</strong> on the opposite side, enter coordinates, and save.</li>
+        </ol>
+        <p style="font-size:11px;color:var(--text-muted);margin:14px 0 0">Southern hemisphere latitudes are negative (e.g. <code>-32.214525</code>). Eastern longitudes are positive (e.g. <code>149.808612</code>).</p>
+        <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+          <button type="button" class="btn btn-secondary" id="fpWizardCancelBtn">Cancel</button>
+          <button type="button" class="btn btn-primary" id="fpWizardStartBtn"><i class="fa-solid fa-play"></i> Start</button>
+        </div>
+      </div>
+      <div class="fp-wizard-picker" id="fpWizardPicker">
+        <div class="fp-wizard-pick-banner" id="fpWizardPickBanner"></div>
+        <div class="fp-wizard-image-wrap" id="fpWizardImageWrap">
+          <img id="fpWizardImage" alt="Floor plan for coordinate picking">
+          <div class="fp-wizard-markers" id="fpWizardMarkers"></div>
+          <div class="fp-wizard-crosshair" id="fpWizardCrosshair"></div>
+        </div>
+        <div class="fp-wizard-coord-panel" id="fpWizardCoordPanel">
+          <div style="font-size:13px;font-weight:600" id="fpWizardCoordTitle">Point coordinates</div>
+          <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0" id="fpWizardCoordHelp"></p>
+          <div class="fp-wizard-coord-grid">
+            <div>
+              <label class="form-label">Latitude</label>
+              <input class="form-input mono" id="fpWizardLat" type="number" step="0.000001" placeholder="-32.214525">
+            </div>
+            <div>
+              <label class="form-label">Longitude</label>
+              <input class="form-input mono" id="fpWizardLng" type="number" step="0.000001" placeholder="149.808612">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+            <button type="button" class="btn btn-secondary" id="fpWizardBackToPickBtn"><i class="fa-solid fa-crosshairs"></i> Repick on plan</button>
+            <button type="button" class="btn btn-primary" id="fpWizardNextBtn"><i class="fa-solid fa-arrow-right"></i> Continue to point 2</button>
+            <button type="button" class="btn btn-primary" id="fpWizardSaveBtn" style="display:none"><i class="fa-solid fa-check"></i> Save coordinates</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
+<script src="/static/js/floor-plan-coord-wizard.js?v=9"></script>
 <script>
 
 'use strict';
@@ -397,6 +477,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   await Promise.all([loadSettings(), loadLogo()]);
   renderAllSections();
   applyLogo();
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('tab') === 'floorplans') {
+    switchTab('floorplans');
+    await loadFloorPlans();
+    const cfg = params.get('configure');
+    if (cfg) {
+      const id = cfg === '1' ? (floorPlans[0]?.id) : parseInt(cfg, 10);
+      if (id) openCoordWizard(id);
+    }
+  }
 });
 
 async function loadUserInfo() {
@@ -872,37 +963,56 @@ function logout() { API.clearTokens(); window.location.href = '/login'; }
 // ── Floor Plan Manager ──────────────────────────────────────────────────────
 let floorPlans = [];
 let selectedFpFile = null;
+let fpCalibrationStatus = {};
 
 async function loadFloorPlans() {
-  const res = await API.get('/settings/floor-plans');
-  const data = await API.json(res);
-  if (!res || !res.ok) { document.getElementById('floorPlanTable').innerHTML = `<tr><td colspan="6" class="table-empty">Failed to load floor plans</td></tr>`; return; }
+  const [fpRes, calRes] = await Promise.all([
+    API.get('/settings/floor-plans'),
+    API.get('/positioning/calibration'),
+  ]);
+  const data = await API.json(fpRes);
+  const calData = await API.json(calRes);
+  if (!fpRes || !fpRes.ok) {
+    document.getElementById('floorPlanTable').innerHTML = `<tr><td colspan="7" class="table-empty">Failed to load floor plans</td></tr>`;
+    return;
+  }
   floorPlans = data.items || [];
+  fpCalibrationStatus = (calData && calData.status) || {};
   document.getElementById('fpCount').textContent = floorPlans.length;
   document.getElementById('fpVisible').textContent = floorPlans.filter(f => f.is_visible).length;
   document.getElementById('fpHidden').textContent = floorPlans.filter(f => !f.is_visible).length;
   renderFloorPlanTable();
 }
 
+function fpCoordStatus(sectionId) {
+  const cal = fpCalibrationStatus[sectionId] || fpCalibrationStatus[String(sectionId)] || {};
+  if (cal.is_georef || (cal.georef_points && cal.georef_points.length >= 2)) {
+    return '<span class="fp-wizard-status ok"><i class="fa-solid fa-check-circle"></i> GPS set</span>';
+  }
+  return '<span class="fp-wizard-status pending"><i class="fa-solid fa-circle-exclamation"></i> Not configured</span>';
+}
+
 function renderFloorPlanTable() {
   const tbody = document.getElementById('floorPlanTable');
   if (!floorPlans.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No floor plans. <a href="#" onclick="openUploadModal();return false">Upload one →</a></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No floor plans. <a href="#" onclick="openUploadModal();return false">Upload one →</a></td></tr>`;
     return;
   }
   tbody.innerHTML = floorPlans.map(f => {
     const img = f.image_url
-      ? `<img src="${f.image_url}" style="height:40px;max-width:70px;object-fit:cover;border-radius:4px;border:1px solid var(--border)" onerror="this.style.display='none'">`
+      ? `<img src="${f.image_url}" style="height:40px;max-width:70px;object-fit:contain;border-radius:4px;border:1px solid var(--border);background:#fff" onerror="this.style.display='none'">`
       : `<div style="width:70px;height:40px;background:rgba(255,255,255,0.05);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)"><i class="fa-solid fa-image"></i></div>`;
     const esc = s => String(s || '').replace(/'/g, "\\'");
     return `<tr>
       <td>${img}</td>
       <td><span style="font-weight:600">${escapeHtml(f.name)}</span></td>
+      <td>${fpCoordStatus(f.id)}</td>
       <td><span class="mono" style="color:${f.color_hex}">${f.color_hex}</span></td>
       <td class="mono">${f.z_index}</td>
       <td>${f.is_visible ? '<i class="fa-solid fa-eye" style="color:var(--green)"></i>' : '<i class="fa-solid fa-eye-slash" style="color:var(--text-muted)"></i>'}</td>
       <td>
         <div class="action-btns">
+          <button class="action-btn" onclick="openCoordWizard(${f.id})" title="Configure GPS coordinates"><i class="fa-solid fa-location-crosshairs"></i></button>
           <button class="action-btn" onclick="toggleFpVisibility(${f.id})" title="Toggle visibility"><i class="fa-solid fa-eye${f.is_visible ? '-slash' : ''}"></i></button>
           <button class="action-btn" onclick="editFp(${f.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
           <button class="action-btn danger" onclick="deleteFp(${f.id}, '${esc(f.name)}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
@@ -910,6 +1020,17 @@ function renderFloorPlanTable() {
       </td>
     </tr>`;
   }).join('');
+}
+
+function openCoordWizard(sectionId) {
+  const fp = floorPlans.find(f => f.id === sectionId);
+  if (!fp) { showToast('Floor plan not found', 'error'); return; }
+  const cal = fpCalibrationStatus[sectionId] || fpCalibrationStatus[String(sectionId)] || {};
+  const existing = cal.georef_points && cal.georef_points.length >= 2 ? cal.georef_points : null;
+  window.FpCoordWizard.open(fp, {
+    existingPoints: existing,
+    onComplete: async () => { await loadFloorPlans(); },
+  });
 }
 
 function openUploadModal() {

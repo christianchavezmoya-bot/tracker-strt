@@ -35,17 +35,21 @@ let _mapMode = 'normal';
 
 let _viewMode = 'mine';
 let _floorPlanUrl = null;
+let _isGeoref = false;
+let _hasUploadedFloorPlan = false;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initMap2D() {
   if (window.MapGeoref) await MapGeoref.loadSiteContext();
+  _hasUploadedFloorPlan = await checkUploadedFloorPlan();
   await loadCalibration();
 
-  if (_isCalibrated) {
+  if (_isCalibrated || _hasUploadedFloorPlan) {
     initMineMapCore();
-    loadFloorPlanImage();
+    await loadFloorPlanImage();
     renderZones();
     renderNodeMarkers();
+    fitMapToFloorPlan();
   } else {
     await initRegionalMapView();
   }
@@ -112,10 +116,22 @@ async function resolveFloorPlanUrl() {
     const res = await API.get('/zones/sections');
     const data = await API.json(res);
     if (res && res.ok && data.items && data.items.length > 0 && data.items[0].image_url) {
-      return data.items[0].image_url;
+      const url = data.items[0].image_url;
+      if (!url.includes('placeholder')) return url;
     }
   } catch (e) { /* ignore */ }
   return '/static/assets/floor-plan-placeholder.png';
+}
+
+async function checkUploadedFloorPlan() {
+  try {
+    const res = await API.get('/zones/sections');
+    const data = await API.json(res);
+    if (res && res.ok && data.items && data.items.length > 0 && data.items[0].image_url) {
+      return !data.items[0].image_url.includes('placeholder');
+    }
+  } catch (e) { /* ignore */ }
+  return false;
 }
 
 async function preloadFloorPlanDimensions(url) {
@@ -158,8 +174,8 @@ async function switchToRegionalView() {
 }
 
 async function switchToMineView() {
-  if (!_isCalibrated) {
-    if (window.showToast) window.showToast('Calibrate mine grid (metres) first — or stay in Site map view.', 'warning');
+  if (!_isCalibrated && !_hasUploadedFloorPlan) {
+    if (window.showToast) window.showToast('Upload a floor plan in Settings first, or calibrate the mine grid.', 'warning');
     return;
   }
   initMineMapCore();
@@ -245,7 +261,12 @@ function fitMapToFloorPlan() {
   if (!window._map2d) return;
   try {
     const bounds = _floorPlanLayer ? _floorPlanLayer.getBounds() : getFloorPlanBounds();
-    window._map2d.fitBounds(bounds, { padding: [32, 32], maxZoom: 18, animate: false });
+    const mapEl = document.getElementById('map2d');
+    const w = mapEl?.clientWidth || 800;
+    const h = mapEl?.clientHeight || 600;
+    const padX = Math.max(8, Math.round(w * 0.025));
+    const padY = Math.max(8, Math.round(h * 0.025));
+    window._map2d.fitBounds(bounds, { padding: [padY, padX], maxZoom: 18, animate: false });
   } catch (e) {
     const b = getRealWorldBounds();
     window._map2d.setView([(b.minY + b.maxY) / 2, (b.minX + b.maxX) / 2], 0);
@@ -307,6 +328,9 @@ async function loadCalibration() {
     }
     if (cal.georef_points && cal.georef_points.length >= 2 && window.MapGeoref) {
       MapGeoref.loadGeorefPoints(cal.georef_points);
+      _isGeoref = true;
+    } else {
+      _isGeoref = !!(cal.is_georef);
     }
   } catch (e) {
     console.warn('Could not load calibration:', e);
@@ -318,6 +342,8 @@ async function loadCalibration() {
 function showCalibrationBadge(calibrated) {
   const existing = document.getElementById('mapCalibrationBadge');
   if (existing) existing.remove();
+  if (!_hasUploadedFloorPlan && !calibrated && !_isGeoref) return;
+
   const el = document.createElement('div');
   el.id = 'mapCalibrationBadge';
   Object.assign(el.style, {
@@ -327,157 +353,23 @@ function showCalibrationBadge(calibrated) {
     fontWeight: '600', cursor: 'pointer', pointerEvents: 'auto',
     backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: '6px',
   });
-  if (calibrated) {
+  if (_isGeoref) {
     Object.assign(el.style, { background: 'rgba(255,255,255,0.94)', border: '1px solid rgba(10,132,255,0.45)', color: '#0a84ff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)' });
-    el.innerHTML = '<i class="fa-solid fa-check-circle"></i> Map calibrated — click to recalibrate';
+    el.innerHTML = '<i class="fa-solid fa-check-circle"></i> GPS coordinates set — edit in Settings';
+  } else if (calibrated) {
+    Object.assign(el.style, { background: 'rgba(255,255,255,0.94)', border: '1px solid rgba(10,132,255,0.45)', color: '#0a84ff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)' });
+    el.innerHTML = '<i class="fa-solid fa-check-circle"></i> Mine grid calibrated — edit in Settings';
   } else {
     Object.assign(el.style, { background: 'rgba(255,255,255,0.94)', border: '1px solid rgba(255,149,0,0.55)', color: '#c93400', boxShadow: '0 2px 10px rgba(0,0,0,0.12)' });
-    el.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Calibrate map — click to start';
+    el.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Set map coordinates in Settings → Floor Plans';
   }
-  el.onclick = enterCalibrationMode;
+  el.onclick = () => { window.location.href = '/settings?tab=floorplans&configure=1'; };
   const mapEl = document.getElementById('map2d');
   if (mapEl) { mapEl.style.position = 'relative'; mapEl.appendChild(el); }
 }
 
 function enterCalibrationMode() {
-  if (_isNodePlacementMode) exitPlacementMode();
-  _mapMode = 'calibrate';
-  _calibrationPoints = [];
-  document.getElementById('calibrationForm')?.remove();
-  document.getElementById('coordReadout')?.remove();
-  showCalibrationBadge(false);
-  const mapEl = document.getElementById('map2d');
-  if (!mapEl) return;
-  mapEl.style.position = 'relative';
-
-  const panel = document.createElement('div');
-  panel.id = 'calibrationForm';
-  Object.assign(panel.style, {
-    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-    zIndex: '1001', background: 'rgba(8,15,30,0.97)',
-    border: '1px solid rgba(0,229,255,0.25)', borderRadius: '14px', padding: '20px 24px',
-    width: '360px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
-    backdropFilter: 'blur(12px)', fontFamily: 'var(--font-body, system-ui)',
-  });
-  panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div style="font-size:14px;font-weight:700;color:var(--cyan,#00e5ff)">
-        <i class="fa-solid fa-wand-magic-sparkles"></i> Map Calibration
-      </div>
-      <button id="calCloseBtn" style="background:none;border:none;color:var(--text-muted,#888);cursor:pointer;font-size:14px">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
-    </div>
-    <p style="font-size:12px;color:var(--text-muted,#aaa);margin:0 0 14px;line-height:1.6">
-      Click <strong style="color:#fff">2 reference points</strong> on the map image.
-      For each, enter the real-world coordinates shown on your floor plan.
-    </p>
-    <div id="calStep1">
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted,#888);margin-bottom:8px;letter-spacing:0.06em">POINT 1</div>
-      <div id="cal1Info" style="font-size:11px;color:var(--cyan,#00e5ff);margin-bottom:8px">
-        <i class="fa-solid fa-hand-pointer"></i> Click a reference point on the map…
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div>
-          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">X (meters)</label>
-          <input id="calX1" type="number" step="0.1" placeholder="e.g. -142.5"
-            style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);
-            border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;outline:none;box-sizing:border-box">
-        </div>
-        <div>
-          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Y (meters)</label>
-          <input id="calY1" type="number" step="0.1" placeholder="e.g. 87.3"
-            style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);
-            border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;outline:none;box-sizing:border-box">
-        </div>
-      </div>
-      <button id="calSave1Btn" disabled style="width:100%;padding:8px;
-        background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.3);
-        border-radius:6px;color:#666;font-size:12px;cursor:not-allowed;font-weight:600">
-        Save Point 1
-      </button>
-    </div>
-    <div id="calStep2" style="display:none;margin-top:16px">
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted,#888);margin-bottom:8px;letter-spacing:0.06em">POINT 2</div>
-      <div id="cal2Info" style="font-size:11px;color:var(--cyan,#00e5ff);margin-bottom:8px">
-        <i class="fa-solid fa-hand-pointer"></i> Click second reference point…
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div>
-          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">X (meters)</label>
-          <input id="calX2" type="number" step="0.1" placeholder="e.g. 156.2"
-            style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);
-            border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;outline:none;box-sizing:border-box">
-        </div>
-        <div>
-          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Y (meters)</label>
-          <input id="calY2" type="number" step="0.1" placeholder="e.g. 203.8"
-            style="width:100%;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);
-            border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;outline:none;box-sizing:border-box">
-        </div>
-      </div>
-      <button id="calSave2Btn" disabled style="width:100%;padding:8px;
-        background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.3);
-        border-radius:6px;color:#666;font-size:12px;cursor:not-allowed;font-weight:600">
-        Save Point 2 &amp; Apply
-      </button>
-    </div>
-    <div id="calDone" style="display:none;text-align:center;padding:16px 0">
-      <div style="font-size:24px;margin-bottom:8px">&#127881;</div>
-      <div style="font-size:14px;font-weight:700;color:#6bff47;margin-bottom:4px">Calibration Complete!</div>
-      <div style="font-size:12px;color:var(--text-muted,#aaa)">
-        Coordinates will be calculated automatically. Go to Hardware Setup to register nodes first.
-      </div>
-    </div>
-  `;
-  mapEl.appendChild(panel);
-
-  panel.querySelector('#calCloseBtn').onclick = exitCalibrationMode;
-
-  const enableBtn = (xId, yId, btnId) => {
-    const btn = document.getElementById(btnId);
-    const enable = () => {
-      const x = document.getElementById(xId).value.trim();
-      const y = document.getElementById(yId).value.trim();
-      const ok = !!(x && y);
-      btn.disabled = !ok;
-      btn.style.background = ok ? 'rgba(0,229,255,0.15)' : 'rgba(0,229,255,0.1)';
-      btn.style.color = ok ? 'var(--cyan,#00e5ff)' : '#666';
-      btn.style.cursor = ok ? 'pointer' : 'not-allowed';
-    };
-    document.getElementById(xId).addEventListener('input', enable);
-    document.getElementById(yId).addEventListener('input', enable);
-    return btn;
-  };
-
-  const btn1 = enableBtn('calX1', 'calY1', 'calSave1Btn');
-  btn1.onclick = () => {
-    _calibrationPoints[0] = {
-      _px: _calibrationPoints[0]?._px, _py: _calibrationPoints[0]?._py,
-      real_x: parseFloat(document.getElementById('calX1').value),
-      real_y: parseFloat(document.getElementById('calY1').value),
-    };
-    document.getElementById('cal1Info').innerHTML = '<i class="fa-solid fa-check" style="color:#6bff47"></i> Point 1 saved';
-    document.getElementById('calStep1').style.opacity = '0.5';
-    document.getElementById('calStep2').style.display = 'block';
-    document.getElementById('cal2Info').innerHTML = '<i class="fa-solid fa-hand-pointer" style="color:#ffa500"></i> Click second point on map, then enter coords…';
-    const btn2 = enableBtn('calX2', 'calY2', 'calSave2Btn');
-    btn2.onclick = async () => {
-      _calibrationPoints[1] = {
-        _px: _calibrationPoints[1]?._px, _py: _calibrationPoints[1]?._py,
-        real_x: parseFloat(document.getElementById('calX2').value),
-        real_y: parseFloat(document.getElementById('calY2').value),
-      };
-      const p1 = _calibrationPoints[0], p2 = _calibrationPoints[1];
-      if (!p1._px || !p2._px) { showToast('Click both points on the map before saving.', 'error'); return; }
-      p1.pixel_x = p1._px; p1.pixel_y = p1._py;
-      p2.pixel_x = p2._px; p2.pixel_y = p2._py;
-      computeAffineTransform(_calibrationPoints);
-      await saveCalibration();
-      document.getElementById('calStep2').style.display = 'none';
-      document.getElementById('calDone').style.display = 'block';
-    };
-  };
+  window.location.href = '/settings?tab=floorplans&configure=1';
 }
 
 function exitCalibrationMode() {
@@ -487,148 +379,11 @@ function exitCalibrationMode() {
   showCalibrationBadge(_isCalibrated);
 }
 
-// ── Georeference (GPS tie-points for street map overlay) ─────────────────────
+// ── Georeference — configured in Settings → Floor Plans ─────────────────────
 let _georefPickPoints = [];
 
 async function enterGeorefMode() {
-  if (_isNodePlacementMode) exitPlacementMode();
-  if (_mapMode === 'calibrate') exitCalibrationMode();
-  _mapMode = 'georef';
-  _georefPickPoints = [];
-  document.getElementById('georefForm')?.remove();
-
-  if (_viewMode === 'regional') {
-    initMineMapCore();
-    _viewMode = 'mine';
-    _floorPlanUrl = await resolveFloorPlanUrl();
-    await preloadFloorPlanDimensions(_floorPlanUrl);
-    loadFloorPlanFromURL(_floorPlanUrl);
-    fitMapToFloorPlan();
-  }
-
-  const mapEl = document.getElementById('map2d');
-  if (!mapEl) return;
-  mapEl.style.position = 'relative';
-
-  const panel = document.createElement('div');
-  panel.id = 'georefForm';
-  Object.assign(panel.style, {
-    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-    zIndex: '1001', background: 'rgba(8,15,30,0.97)',
-    border: '1px solid rgba(10,132,255,0.35)', borderRadius: '14px', padding: '20px 24px',
-    width: '380px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
-    backdropFilter: 'blur(12px)', fontFamily: 'var(--font-body, system-ui)',
-  });
-  panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div style="font-size:14px;font-weight:700;color:#0a84ff">
-        <i class="fa-solid fa-earth-americas"></i> Georeference (GPS)
-      </div>
-      <button id="georefCloseBtn" type="button" style="background:none;border:none;color:var(--text-muted,#888);cursor:pointer;font-size:14px">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
-    </div>
-    <p style="font-size:12px;color:var(--text-muted,#aaa);margin:0 0 14px;line-height:1.6">
-      Click <strong style="color:#fff">2 corners</strong> on your floor plan (e.g. survey lat/long labels on the drawing).
-      Enter the matching <strong>latitude</strong> and <strong>longitude</strong> for each.
-    </p>
-    <div id="georefStep1">
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted,#888);margin-bottom:8px">POINT 1</div>
-      <div id="georef1Info" style="font-size:11px;color:#0a84ff;margin-bottom:8px">
-        <i class="fa-solid fa-hand-pointer"></i> Click a corner on the plan…
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div>
-          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Latitude</label>
-          <input id="georefLat1" type="number" step="0.000001" placeholder="-32.214525"
-            style="width:100%;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;box-sizing:border-box">
-        </div>
-        <div>
-          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Longitude</label>
-          <input id="georefLng1" type="number" step="0.000001" placeholder="149.808612"
-            style="width:100%;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;box-sizing:border-box">
-        </div>
-      </div>
-      <button id="georefSave1Btn" type="button" disabled style="width:100%;padding:8px;border-radius:6px;font-size:12px;font-weight:600">Save Point 1</button>
-    </div>
-    <div id="georefStep2" style="display:none;margin-top:16px">
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted,#888);margin-bottom:8px">POINT 2</div>
-      <div id="georef2Info" style="font-size:11px;color:#0a84ff;margin-bottom:8px">Click second corner…</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div>
-          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Latitude</label>
-          <input id="georefLat2" type="number" step="0.000001" placeholder="-32.340944"
-            style="width:100%;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;box-sizing:border-box">
-        </div>
-        <div>
-          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Longitude</label>
-          <input id="georefLng2" type="number" step="0.000001" placeholder="149.759408"
-            style="width:100%;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;box-sizing:border-box">
-        </div>
-      </div>
-      <button id="georefSave2Btn" type="button" disabled style="width:100%;padding:8px;border-radius:6px;font-size:12px;font-weight:600">Save &amp; show on street map</button>
-    </div>
-    <div id="georefDone" style="display:none;text-align:center;padding:12px 0;color:#30d158;font-size:13px;font-weight:600">
-      Georeference saved — switching to site map…
-    </div>
-  `;
-  mapEl.appendChild(panel);
-  panel.querySelector('#georefCloseBtn').onclick = exitGeorefMode;
-
-  const enableGeorefBtn = (latId, lngId, btnId) => {
-    const btn = document.getElementById(btnId);
-    const enable = () => {
-      const ok = document.getElementById(latId).value.trim() && document.getElementById(lngId).value.trim();
-      btn.disabled = !ok;
-      btn.style.background = ok ? 'rgba(10,132,255,0.2)' : 'rgba(10,132,255,0.08)';
-      btn.style.color = ok ? '#0a84ff' : '#666';
-      btn.style.cursor = ok ? 'pointer' : 'not-allowed';
-      btn.style.border = '1px solid rgba(10,132,255,0.35)';
-    };
-    document.getElementById(latId).addEventListener('input', enable);
-    document.getElementById(lngId).addEventListener('input', enable);
-    return btn;
-  };
-
-  const btn1 = enableGeorefBtn('georefLat1', 'georefLng1', 'georefSave1Btn');
-  btn1.onclick = () => {
-    _georefPickPoints[0] = {
-      ...(_georefPickPoints[0] || {}),
-      lat: parseFloat(document.getElementById('georefLat1').value),
-      lng: parseFloat(document.getElementById('georefLng1').value),
-    };
-    document.getElementById('georefStep1').style.opacity = '0.5';
-    document.getElementById('georefStep2').style.display = 'block';
-    const btn2 = enableGeorefBtn('georefLat2', 'georefLng2', 'georefSave2Btn');
-    btn2.onclick = async () => {
-      _georefPickPoints[1] = {
-        ...(_georefPickPoints[1] || {}),
-        lat: parseFloat(document.getElementById('georefLat2').value),
-        lng: parseFloat(document.getElementById('georefLng2').value),
-      };
-      const p1 = _georefPickPoints[0];
-      const p2 = _georefPickPoints[1];
-      if (!p1 || !p2 || p1.pixel_x == null || p2.pixel_x == null) {
-        if (window.showToast) window.showToast('Click both corners on the plan first.', 'error');
-        return;
-      }
-      const ok = await MapGeoref.saveGeorefPoints([
-        { pixel_x: p1.pixel_x, pixel_y: p1.pixel_y, lat: p1.lat, lng: p1.lng },
-        { pixel_x: p2.pixel_x, pixel_y: p2.pixel_y, lat: p2.lat, lng: p2.lng },
-      ]);
-      if (ok) {
-        document.getElementById('georefStep2').style.display = 'none';
-        document.getElementById('georefDone').style.display = 'block';
-        setTimeout(async () => {
-          exitGeorefMode();
-          await switchToRegionalView();
-          if (window.showToast) window.showToast('Floor plan placed on street map', 'success');
-        }, 800);
-      } else if (window.showToast) {
-        window.showToast('Failed to save georeference', 'error');
-      }
-    };
-  };
+  window.location.href = '/settings?tab=floorplans&configure=1';
 }
 
 function exitGeorefMode() {
