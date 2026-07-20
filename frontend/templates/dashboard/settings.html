@@ -901,6 +901,19 @@ function applyLogo() {
     return;
   }
   const img = document.getElementById('logoImg');
+  if (!logo.url) {
+    document.getElementById('logoPlaceholder').style.display = 'flex';
+    img.style.display = 'none';
+    document.getElementById('removeLogoBtn').style.display = 'inline-flex';
+    document.getElementById('logoFilename').textContent = logo.logo.original_name;
+    document.getElementById('logoSize').textContent = fmtBytes(logo.logo.size_bytes);
+    document.getElementById('logoMeta').style.display = 'flex';
+    return;
+  }
+  img.onerror = () => {
+    img.style.display = 'none';
+    document.getElementById('logoPlaceholder').style.display = 'flex';
+  };
   img.src = logo.url;
   img.style.display = 'block';
   document.getElementById('logoPlaceholder').style.display = 'none';

@@ -17,11 +17,29 @@ ALLOWED_LOGO_EXT = config.ALLOWED_LOGO_EXTENSIONS
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "webp", "tiff", "bmp"}
 FLOOR_PLAN_DIR = config.BASE_DIR / "frontend" / "static" / "assets" / "floor-plans"
 FLOOR_PLAN_DIR.mkdir(parents=True, exist_ok=True)
+LOGO_DIR = config.LOGO_DIR
 MAX_IMAGE_MB = 20
 
 
 def allowed_ext(filename, allowed_set):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_set
+
+
+def _logo_public_url(filename: str) -> str:
+    return f"/static/assets/logos/{filename}"
+
+
+def _resolve_logo_file(filename: str):
+    """Return path to logo on disk, migrating legacy uploads/ copies if needed."""
+    import shutil
+    target = LOGO_DIR / filename
+    if target.exists():
+        return target
+    legacy = config.UPLOAD_DIR / filename
+    if legacy.exists():
+        shutil.copy2(legacy, target)
+        return target
+    return None
 
 
 @settings_bp.route("", methods=["GET"])
@@ -200,7 +218,7 @@ def upload_logo():
     # Unique name: logo_YYYYMMDD_<original>
     from datetime import datetime
     unique_name = f"logo_{datetime.now().strftime('%Y%m%d%H%M%S')}_{filename}"
-    filepath = config.UPLOAD_DIR / unique_name
+    filepath = LOGO_DIR / unique_name
     file.save(str(filepath))
     size = os.path.getsize(filepath)
     if size > config.MAX_LOGO_SIZE_MB * 1024 * 1024:
@@ -209,10 +227,10 @@ def upload_logo():
     # Update or create logo record
     logo = BusinessLogo.query.first()
     if logo:
-        # Delete old file
-        old_path = config.UPLOAD_DIR / logo.filename
-        if old_path.exists():
-            os.remove(str(old_path))
+        # Delete old file (static dir or legacy uploads/)
+        for old_path in (LOGO_DIR / logo.filename, config.UPLOAD_DIR / logo.filename):
+            if old_path.exists():
+                os.remove(str(old_path))
         logo.filename = unique_name
         logo.original_name = filename
         logo.mime_type = file.content_type
@@ -228,7 +246,7 @@ def upload_logo():
     db.session.commit()
     AuditLog.log(action="settings.logo_upload", user_id=int(get_jwt_identity()),
                  entity_type="BusinessLogo", entity_id=logo.id)
-    return jsonify({"logo": logo.to_dict(), "url": f"/static/assets/logos/{unique_name}"})
+    return jsonify({"logo": logo.to_dict(), "url": _logo_public_url(unique_name)})
 
 
 @settings_bp.route("/logo", methods=["GET"])
@@ -252,9 +270,16 @@ def get_logo():
     logo = BusinessLogo.query.first()
     if not logo:
         return jsonify({"logo": None})
+    path = _resolve_logo_file(logo.filename)
+    if not path:
+        return jsonify({
+            "logo": logo.to_dict(),
+            "url": None,
+            "missing_file": True,
+        })
     return jsonify({
         "logo": logo.to_dict(),
-        "url": f"/static/assets/logos/{logo.filename}",
+        "url": _logo_public_url(logo.filename),
     })
 
 

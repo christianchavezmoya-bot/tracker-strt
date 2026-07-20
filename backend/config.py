@@ -99,6 +99,8 @@ UWB_BAUD_RATE = int(os.getenv("UWB_BAUD_RATE", 115200))
 # ── File Storage ────────────────────────────────────────────────────────────
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+LOGO_DIR = BASE_DIR / "frontend" / "static" / "assets" / "logos"
+LOGO_DIR.mkdir(parents=True, exist_ok=True)
 MAX_LOGO_SIZE_MB = int(os.getenv("MAX_LOGO_SIZE_MB", 2))
 ALLOWED_LOGO_EXTENSIONS = {"png", "jpg", "jpeg", "svg", "webp"}
 

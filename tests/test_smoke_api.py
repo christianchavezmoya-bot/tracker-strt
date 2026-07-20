@@ -317,6 +317,36 @@ def test_floor_plan_upload(client, admin_headers):
     assert body.get("section", {}).get("image_url", "").startswith("/static/assets/floor-plans/")
 
 
+def test_logo_upload_serves_from_static(client, admin_headers):
+    """Logo files must land under frontend/static/assets/logos/ (not uploads/)."""
+    import io
+    from backend import config
+
+    png = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+        b"\x01\x01\x01\x00\x18\xdd\x8d\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    res = client.post(
+        "/api/settings/logo",
+        headers=admin_headers,
+        data={"logo": (io.BytesIO(png), "strata.png")},
+        content_type="multipart/form-data",
+    )
+    assert res.status_code == 200, res.get_data(as_text=True)
+    body = res.get_json()
+    url = body.get("url") or ""
+    assert url.startswith("/static/assets/logos/logo_")
+    filename = url.rsplit("/", 1)[-1]
+    assert (config.LOGO_DIR / filename).is_file()
+
+    get_res = client.get("/api/settings/logo")
+    assert get_res.status_code == 200
+    get_body = get_res.get_json()
+    assert get_body.get("url") == url
+    assert get_body.get("missing_file") is not True
+
+
 def test_map_context_endpoint(client, admin_headers):
     res = client.get("/api/positioning/map-context", headers=admin_headers)
     assert res.status_code == 200
