@@ -14,6 +14,15 @@ let _zoneLayers = [];
 let _sectionLayers = [];
 let _gridLines = [];
 let _nodeMarkers = [];
+let _nodeMarkerRenderGen = 0;
+
+function clearAllNodeMarkers() {
+  if (!window._map2d) return;
+  window._map2d.eachLayer(layer => {
+    if (layer._isNodeMarker) window._map2d.removeLayer(layer);
+  });
+  _nodeMarkers = [];
+}
 
 // ── Calibration state ─────────────────────────────────────────────────────────
 let _isCalibrated = false;
@@ -49,7 +58,6 @@ async function initMap2D() {
     initMineMapCore();
     await loadFloorPlanImage();
     renderZones();
-    renderNodeMarkers();
     fitMapToFloorPlan();
   } else {
     await initRegionalMapView();
@@ -183,7 +191,6 @@ async function switchToMineView() {
   await loadCalibration();
   loadFloorPlanImage();
   renderZones();
-  renderNodeMarkers();
   if (window.renderTrackerDots) window.renderTrackerDots();
   fitMapToFloorPlan();
 }
@@ -265,8 +272,8 @@ function fitMapToFloorPlan() {
     const mapEl = document.getElementById('map2d');
     const w = mapEl?.clientWidth || 800;
     const h = mapEl?.clientHeight || 600;
-    const padX = Math.max(8, Math.round(w * 0.025));
-    const padY = Math.max(8, Math.round(h * 0.025));
+    const padX = Math.max(8, Math.round(w * 0.015));
+    const padY = Math.max(8, Math.round(h * 0.015));
     window._map2d.fitBounds(bounds, { padding: [padY, padX], maxZoom: 18, animate: false });
   } catch (e) {
     const b = getRealWorldBounds();
@@ -770,11 +777,13 @@ function onMapMouseMove(e) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function renderNodeMarkers() {
-  _nodeMarkers.forEach(m => window._map2d.removeLayer(m));
-  _nodeMarkers = [];
+  if (!window._map2d) return;
+  const gen = ++_nodeMarkerRenderGen;
+  clearAllNodeMarkers();
   try {
     const res = await API.get('/nodes');
     const data = await API.json(res);
+    if (gen !== _nodeMarkerRenderGen) return;
     if (!res || !res.ok || !data.items) return;
     data.items.forEach(node => {
       const rx = node.pos_x ?? node.position?.x;

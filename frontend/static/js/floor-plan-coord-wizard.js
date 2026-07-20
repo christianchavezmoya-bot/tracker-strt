@@ -40,13 +40,24 @@ const FpCoordWizard = (() => {
     if (label) label.textContent = Math.round((viewZoom / baseFitZoom) * 100) + '%';
   }
 
+  const FIT_RATIO = 0.97;
+
+  function syncImageDimensionsFromElement() {
+    const img = el('fpWizardImage');
+    if (!img || !img.naturalWidth || !img.naturalHeight) return false;
+    imageWidth = img.naturalWidth;
+    imageHeight = img.naturalHeight;
+    setupImageDimensions();
+    return true;
+  }
+
   function fitViewToImage() {
     const vp = el('fpWizardViewport');
-    if (!vp || !imageWidth || !imageHeight) return;
+    if (!vp || !syncImageDimensionsFromElement()) return;
     const vw = vp.clientWidth;
     const vh = vp.clientHeight;
     if (vw < 10 || vh < 10) return;
-    baseFitZoom = Math.min(vw / imageWidth, vh / imageHeight) * 0.95;
+    baseFitZoom = Math.min(vw / imageWidth, vh / imageHeight) * FIT_RATIO;
     viewZoom = baseFitZoom;
     viewPanX = (vw - imageWidth * viewZoom) / 2;
     viewPanY = (vh - imageHeight * viewZoom) / 2;
@@ -150,9 +161,6 @@ const FpCoordWizard = (() => {
     el('fpWizardMapToolbar').style.display = name === 'pick' ? 'flex' : 'none';
     updatePickerBanner();
     updateConfirmButton();
-    if (name === 'pick') {
-      requestAnimationFrame(() => requestAnimationFrame(fitViewToImage));
-    }
   }
 
   function updatePickerBanner() {
@@ -405,6 +413,7 @@ const FpCoordWizard = (() => {
       renderMarkers();
       requestAnimationFrame(() => requestAnimationFrame(fitViewToImage));
     };
+    // Note: do not refit when moving pick ↔ coords — preserves zoom/pan between points.
     el('fpWizardCancelBtn').onclick = close;
     el('fpWizardCloseBtn').onclick = close;
     el('fpWizardBackToPickBtn').onclick = () => showStep('pick');
@@ -452,8 +461,11 @@ const FpCoordWizard = (() => {
       if (e.target === el('fpCoordWizardModal')) close();
     });
 
+    let resizeTimer = null;
     window.addEventListener('resize', () => {
-      if (step === 'pick' || step === 'coords') fitViewToImage();
+      if (step !== 'pick' && step !== 'coords') return;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(fitViewToImage, 120);
     });
   }
 

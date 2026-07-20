@@ -70,7 +70,7 @@
 .fp-wizard-intro-list { margin:12px 0 0; padding-left:18px; color:var(--text-secondary); font-size:13px; line-height:1.7; }
 .fp-wizard-picker { display:none; flex-direction:column; gap:12px; }
 .fp-wizard-pick-banner { font-size:12px; color:var(--cyan); background:rgba(0,229,255,.08); border:1px solid rgba(0,229,255,.2); border-radius:8px; padding:10px 14px; }
-.fp-wizard-viewport { position:relative; background:#fff; border-radius:10px; border:1px solid var(--border); height:min(52vh,480px); overflow:hidden; cursor:crosshair; touch-action:none; }
+.fp-wizard-viewport { position:relative; background:#fff; border-radius:10px; border:1px solid var(--border); flex:1; min-height:min(58vh,520px); height:min(58vh,520px); overflow:hidden; cursor:crosshair; touch-action:none; }
 .fp-wizard-canvas { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; }
 .fp-wizard-canvas img { display:block; user-select:none; pointer-events:none; }
 .fp-wizard-markers { position:absolute; inset:0; pointer-events:none; }
@@ -484,7 +484,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/floor-plan-coord-wizard.js?v=12"></script>
+<script src="/static/js/floor-plan-coord-wizard.js?v=13"></script>
 <script>
 
 'use strict';
