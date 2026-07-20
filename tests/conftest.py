@@ -31,6 +31,12 @@ def app():
         from backend.services.notification_service import init_notification_service
         init_notification_service(db.session, app)
         db.create_all()
+        from backend.models.org import PersonnelPosition, OrgSection
+        for i, name in enumerate(["Manager", "Supervisor", "Operator", "Visitor", "Contractor"]):
+            db.session.add(PersonnelPosition(name=name, sort_order=i))
+        for i, name in enumerate(["Underground", "Surface", "Inbye", "Workshop", "Surface office"]):
+            db.session.add(OrgSection(name=name, sort_order=i))
+        db.session.commit()
         yield app
         db.drop_all()
 

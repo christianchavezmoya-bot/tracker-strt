@@ -117,6 +117,12 @@
       <button class="hw-tab" data-tab="appearance" onclick="switchTab('appearance')">
         <i class="fa-solid fa-palette"></i> Appearance
       </button>
+      <button class="hw-tab" data-tab="positions" onclick="switchTab('positions'); loadPersonnelPositions()">
+        <i class="fa-solid fa-id-badge"></i> Positions
+      </button>
+      <button class="hw-tab" data-tab="orgsections" onclick="switchTab('orgsections'); loadOrgSections()">
+        <i class="fa-solid fa-layer-group"></i> Sections
+      </button>
       <button class="hw-tab" data-tab="floorplans" onclick="switchTab('floorplans'); loadFloorPlans()">
         <i class="fa-solid fa-map"></i> Floor Plans
       </button>
@@ -216,6 +222,42 @@
           <table class="hw-config-table">
             <thead><tr><th>IP</th><th>Agent</th><th>Created</th><th>Current</th><th></th></tr></thead>
             <tbody id="sessionsBody"><tr><td colspan="5">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Personnel Positions ───────────────────────────────────── -->
+    <div class="settings-section" id="section-positions" style="display:none">
+      <div class="settings-card">
+        <div class="settings-card-header"><i class="fa-solid fa-id-badge"></i> Personnel positions</div>
+        <div style="padding:16px">
+          <p class="page-subtitle" style="margin-bottom:12px">Job titles shown when acknowledging tags (Manager, Operator, etc.).</p>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <input class="form-input" id="newPositionName" placeholder="New position name" style="max-width:240px">
+            <button class="btn btn-primary" onclick="addPersonnelPosition()"><i class="fa-solid fa-plus"></i> Add</button>
+          </div>
+          <table class="hw-config-table">
+            <thead><tr><th>Name</th><th>Order</th><th></th></tr></thead>
+            <tbody id="positionsBody"><tr><td colspan="3">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Org Sections (business areas) ─────────────────────────── -->
+    <div class="settings-section" id="section-orgsections" style="display:none">
+      <div class="settings-card">
+        <div class="settings-card-header"><i class="fa-solid fa-layer-group"></i> Site sections</div>
+        <div style="padding:16px">
+          <p class="page-subtitle" style="margin-bottom:12px">Business areas assigned to personnel (Underground, Surface, Workshop, etc.).</p>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <input class="form-input" id="newOrgSectionName" placeholder="New section name" style="max-width:240px">
+            <button class="btn btn-primary" onclick="addOrgSection()"><i class="fa-solid fa-plus"></i> Add</button>
+          </div>
+          <table class="hw-config-table">
+            <thead><tr><th>Name</th><th>Order</th><th></th></tr></thead>
+            <tbody id="orgSectionsBody"><tr><td colspan="3">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -517,7 +559,7 @@ async function applySettingsRoute() {
   if (hash) {
     const parts = hash.split('/').filter(Boolean);
     const hashTab = parts[0];
-    const knownTabs = ['business', 'alerts', 'system', 'appearance', 'floorplans', 'profile', 'location', 'integrations'];
+    const knownTabs = ['business', 'alerts', 'system', 'appearance', 'positions', 'orgsections', 'floorplans', 'profile', 'location', 'integrations'];
     if (knownTabs.includes(hashTab)) tab = hashTab;
     if (hashTab === 'floorplans' && parts[1] === 'configure') {
       configure = parts[2] || 'first';
@@ -1317,6 +1359,90 @@ async function revokeAllSessions() {
   if (!(await holoConfirm('Revoke all other sessions?', { danger: true, title: 'Confirm' }))) return;
   await API.post('/sessions/revoke-all', { keep_current: true });
   loadProfileSecurity();
+}
+
+async function loadPersonnelPositions() {
+  const tbody = document.getElementById('positionsBody');
+  try {
+    const res = await API.get('/settings/org/positions');
+    const data = await API.json(res);
+    const items = data.items || [];
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="3">No positions — add one above.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map(p => `
+      <tr>
+        <td><input class="form-input" value="${esc(p.name)}" onchange="renamePosition(${p.id}, this.value)"></td>
+        <td>${p.sort_order}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deletePosition(${p.id})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="3">Failed to load</td></tr>';
+  }
+}
+
+async function addPersonnelPosition() {
+  const name = document.getElementById('newPositionName').value.trim();
+  if (!name) return;
+  const res = await API.post('/settings/org/positions', { name });
+  if (res.ok) {
+    document.getElementById('newPositionName').value = '';
+    loadPersonnelPositions();
+    showToast('Position added', 'success');
+  }
+}
+
+async function renamePosition(id, name) {
+  await API.patch('/settings/org/positions/' + id, { name: name.trim() });
+}
+
+async function deletePosition(id) {
+  if (!(await holoConfirm('Remove this position?', { danger: true }))) return;
+  await API.del('/settings/org/positions/' + id);
+  loadPersonnelPositions();
+}
+
+async function loadOrgSections() {
+  const tbody = document.getElementById('orgSectionsBody');
+  try {
+    const res = await API.get('/settings/org/sections');
+    const data = await API.json(res);
+    const items = data.items || [];
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="3">No sections — add one above.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map(s => `
+      <tr>
+        <td><input class="form-input" value="${esc(s.name)}" onchange="renameOrgSection(${s.id}, this.value)"></td>
+        <td>${s.sort_order}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteOrgSection(${s.id})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="3">Failed to load</td></tr>';
+  }
+}
+
+async function addOrgSection() {
+  const name = document.getElementById('newOrgSectionName').value.trim();
+  if (!name) return;
+  const res = await API.post('/settings/org/sections', { name });
+  if (res.ok) {
+    document.getElementById('newOrgSectionName').value = '';
+    loadOrgSections();
+    showToast('Section added', 'success');
+  }
+}
+
+async function renameOrgSection(id, name) {
+  await API.patch('/settings/org/sections/' + id, { name: name.trim() });
+}
+
+async function deleteOrgSection(id) {
+  if (!(await holoConfirm('Remove this section?', { danger: true }))) return;
+  await API.del('/settings/org/sections/' + id);
+  loadOrgSections();
 }
 
 </script>

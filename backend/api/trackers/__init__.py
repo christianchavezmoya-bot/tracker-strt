@@ -1,10 +1,15 @@
-"""Trackers API — Phase 2 stub (CRUD only, full logic in Phase 3)."""
+"""Trackers API — CRUD, discovery scan, acknowledge, purge."""
+import json
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.extensions import db
-from backend.models import Tracker, AuditLog, AssetState, TagType, DeviceCategory
+from backend.models import Tracker, AuditLog, AssetState, TagType, DeviceCategory, TrackerAckStatus
 from backend.utils.decorators import require_permission
 from backend.services.rbac_service import Permission
+from backend.services.tracker_discovery import (
+    get_scan_config, save_scan_config, run_discovery, purge_trackers,
+    acknowledge_tracker, FEATURES_BY_SCAN_TYPE, SCAN_TYPES,
+)
 
 trackers_bp = Blueprint("trackers", __name__, url_prefix="/api/trackers")
 
@@ -24,6 +29,8 @@ def list_trackers():
         query = query.filter_by(asset_state=int(request.args["asset_state"]))
     if request.args.get("alert_status"):
         query = query.filter_by(alert_status=int(request.args["alert_status"]))
+    if request.args.get("ack_status"):
+        query = query.filter_by(ack_status=int(request.args["ack_status"]))
     if request.args.get("q"):
         q = f"%{request.args['q']}%"
         query = query.filter(
@@ -100,9 +107,14 @@ def update_tracker(tracker_id):
     tracker = Tracker.query.get_or_404(tracker_id)
     body = request.get_json() or {}
     for field in ["assigned_name", "tag_type", "category", "icon_index",
-                   "asset_state", "metadata_json"]:
+                   "asset_state", "metadata_json", "nickname", "first_name",
+                   "surname", "username", "position_id", "org_section_id",
+                   "date_of_birth", "phone", "features_json", "device_model",
+                   "scan_type", "ack_status"]:
         if field in body:
             setattr(tracker, field, body[field])
+    if "features" in body and isinstance(body["features"], dict):
+        tracker.features_json = json.dumps(body["features"])
     db.session.commit()
     AuditLog.log(action="tracker.update", user_id=int(get_jwt_identity()),
                  entity_type="Tracker", entity_id=tracker.id)
@@ -195,3 +207,81 @@ def reassign_tracker(tracker_id):
         details=f'{{"old_hardware_id": "{old_id}", "new_hardware_id": "{new_hardware_id}"}}',
     )
     return jsonify({"message": "Reassigned", "tracker": tracker.to_dict()})
+
+
+@trackers_bp.route("/scan/config", methods=["GET"])
+@jwt_required()
+def scan_config_get():
+    return jsonify(get_scan_config())
+
+
+@trackers_bp.route("/scan/config", methods=["PATCH"])
+@jwt_required()
+@require_permission(Permission.MANAGE_TRACKER)
+def scan_config_patch():
+    body = request.get_json() or {}
+    cfg = save_scan_config(
+        body.get("scan_types", []),
+        int(body.get("interval_sec", 60)),
+    )
+    return jsonify(cfg)
+
+
+@trackers_bp.route("/scan/run", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.MANAGE_TRACKER)
+def scan_run():
+    result = run_discovery()
+    return jsonify(result)
+
+
+@trackers_bp.route("/scan/types", methods=["GET"])
+@jwt_required()
+def scan_types_catalog():
+    return jsonify({
+        "scan_types": [
+            {"id": k, "label": v["label"], "model": v.get("model", k),
+             "features": FEATURES_BY_SCAN_TYPE.get(k, [])}
+            for k, v in SCAN_TYPES.items()
+        ],
+    })
+
+
+@trackers_bp.route("/bulk/purge", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.MANAGE_TRACKER)
+def bulk_purge():
+    body = request.get_json() or {}
+    ids = body.get("ids") or []
+    if not ids:
+        return jsonify({"error": "ids required"}), 400
+    n = purge_trackers([int(i) for i in ids])
+    AuditLog.log(action="tracker.purge", user_id=int(get_jwt_identity()),
+                 entity_type="Tracker", entity_id=None,
+                 details=json.dumps({"count": n, "ids": ids[:50]}))
+    return jsonify({"purged": n})
+
+
+@trackers_bp.route("/<int:tracker_id>/acknowledge", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.MANAGE_TRACKER)
+def acknowledge(tracker_id):
+    body = request.get_json() or {}
+    t = acknowledge_tracker(tracker_id, body)
+    if not t:
+        return jsonify({"error": "Not found"}), 404
+    AuditLog.log(action="tracker.acknowledge", user_id=int(get_jwt_identity()),
+                 entity_type="Tracker", entity_id=tracker_id)
+    return jsonify({"tracker": t.to_dict()})
+
+
+@trackers_bp.route("/<int:tracker_id>/features", methods=["GET"])
+@jwt_required()
+def tracker_features(tracker_id):
+    t = Tracker.query.get_or_404(tracker_id)
+    st = t.scan_type or "UNKNOWN_BLE"
+    return jsonify({
+        "scan_type": st,
+        "available": FEATURES_BY_SCAN_TYPE.get(st, []),
+        "enabled": t.get_features(),
+    })

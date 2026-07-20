@@ -44,6 +44,13 @@ class CheckInStatus(IntEnum):
     CHECKED_OUT = 2
 
 
+class TrackerAckStatus(IntEnum):
+    UNACKNOWLEDGED = 0
+    ACTIVE         = 1
+    INACTIVE       = 2
+    UNKNOWN        = 3
+
+
 # ── Tracker (Tag) Model ───────────────────────────────────────────────────────
 class Tracker(db.Model):
     __tablename__ = "trackers"
@@ -55,6 +62,21 @@ class Tracker(db.Model):
     category      = db.Column(db.Integer, nullable=False, default=DeviceCategory.PERSONNEL_TAG)
     icon_index    = db.Column(db.Integer, default=0)
     asset_state   = db.Column(db.Integer, nullable=False, default=AssetState.ACTIVE)
+    ack_status    = db.Column(db.Integer, nullable=False, default=TrackerAckStatus.UNACKNOWLEDGED)
+    device_model  = db.Column(db.String(120), nullable=True)
+    scan_type     = db.Column(db.String(64), nullable=True)
+    nickname      = db.Column(db.String(120), nullable=True)
+    first_name    = db.Column(db.String(120), nullable=True)
+    surname       = db.Column(db.String(120), nullable=True)
+    username      = db.Column(db.String(120), nullable=True)
+    position_id   = db.Column(db.Integer, db.ForeignKey("personnel_positions.id"), nullable=True)
+    org_section_id = db.Column(db.Integer, db.ForeignKey("org_sections.id"), nullable=True)
+    date_of_birth = db.Column(db.String(32), nullable=True)
+    phone         = db.Column(db.String(32), nullable=True)
+    last_rssi     = db.Column(db.Float, nullable=True)
+    nearest_node  = db.Column(db.String(200), nullable=True)
+    beacon_json   = db.Column(db.Text, nullable=True)
+    features_json = db.Column(db.Text, nullable=True)
     # Position (updated by positioning engine)
     pos_x         = db.Column(db.Float, default=0.0)
     pos_y         = db.Column(db.Float, default=0.0)
@@ -115,7 +137,35 @@ class Tracker(db.Model):
     def is_online(self) -> bool:
         return self.alert_status != AlertStatus.NO_SIGNAL and self.asset_state == AssetState.ACTIVE
 
+    @property
+    def ack_status_name(self) -> str:
+        try:
+            return TrackerAckStatus(self.ack_status).name
+        except ValueError:
+            return "UNKNOWN"
+
+    def get_beacon_detections(self) -> list:
+        import json
+        if not self.beacon_json:
+            return []
+        try:
+            data = json.loads(self.beacon_json)
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    def get_features(self) -> dict:
+        import json
+        if not self.features_json:
+            return {}
+        try:
+            data = json.loads(self.features_json)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
     def to_dict(self) -> dict:
+        feats = self.get_features()
         return {
             "id": self.id,
             "hardware_id": self.hardware_id,
@@ -126,6 +176,22 @@ class Tracker(db.Model):
             "category_id": int(self.category) if self.category is not None else None,
             "asset_state": self.asset_state_name,
             "asset_state_id": int(self.asset_state) if self.asset_state is not None else None,
+            "ack_status": self.ack_status_name,
+            "ack_status_id": int(self.ack_status) if self.ack_status is not None else 0,
+            "device_model": self.device_model,
+            "scan_type": self.scan_type,
+            "nickname": self.nickname,
+            "first_name": self.first_name,
+            "surname": self.surname,
+            "username": self.username,
+            "position_id": self.position_id,
+            "org_section_id": self.org_section_id,
+            "date_of_birth": self.date_of_birth,
+            "phone": self.phone,
+            "last_rssi": self.last_rssi,
+            "nearest_node": self.nearest_node,
+            "beacon_detections": self.get_beacon_detections(),
+            "features": feats,
             "position": {"x": self.pos_x, "y": self.pos_y, "z": self.pos_z},
             "battery_level": self.battery_level,
             "heart_rate": self.heart_rate,
@@ -137,6 +203,7 @@ class Tracker(db.Model):
             "current_section": self.current_section_name,
             "check_status": CheckInStatus(self.check_status).name,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "is_online": self.is_online,
         }
 
 

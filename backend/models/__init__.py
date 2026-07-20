@@ -6,8 +6,9 @@ from backend.models.user import User, UserRole, UserSession
 from backend.models.tracker import (
     Tracker, WifiNode, MapSection, Zone,
     DeviceCategory, TagType, AssetState, AlertStatus,
-    CheckInStatus, NodeType, NodeStatus, ZoneType,
+    CheckInStatus, TrackerAckStatus, NodeType, NodeStatus, ZoneType,
 )
+from backend.models.org import PersonnelPosition, OrgSection
 from backend.models.alert import Alert, Notification, AlertType, AlertState, NotificationType
 from backend.models.audit import AuditLog
 from backend.models.settings import Setting, BusinessLogo, SettingScope
@@ -24,7 +25,8 @@ __all__ = [
     "User", "UserRole", "UserSession",
     "Tracker", "WifiNode", "MapSection", "Zone",
     "DeviceCategory", "TagType", "AssetState", "AlertStatus",
-    "CheckInStatus", "NodeType", "NodeStatus", "ZoneType",
+    "CheckInStatus", "TrackerAckStatus", "NodeType", "NodeStatus", "ZoneType",
+    "PersonnelPosition", "OrgSection",
     "Alert", "Notification", "AlertType", "AlertState", "NotificationType",
     "AuditLog",
     "Setting", "BusinessLogo", "SettingScope",

@@ -6,55 +6,57 @@
 {% endblock %}
 {% block head %}
 <style>
-.detail-drawer{position:fixed;top:0;right:0;bottom:0;width:min(380px,92vw);background:#0f172a;border-left:1px solid rgba(148,163,184,.2);z-index:9000;padding:18px;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.4)}
-.detail-drawer[hidden]{display:none!important}
-.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.drawer-body{flex:1;overflow:auto;font-size:13px;line-height:1.7;color:#cbd5e1}
-.drawer-body .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.1)}
-.drawer-body .k{color:#64748b}
-.drawer-actions{display:flex;gap:8px;padding-top:12px;border-top:1px solid rgba(148,163,184,.15)}
+.trackers-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; }
+.trackers-toolbar .search-field { flex:1; min-width:200px; }
+.table-panel { overflow-x:auto; }
+.data-table { min-width:1400px; font-size:12px; }
+.data-table th, .data-table td { white-space:nowrap; padding:8px 10px; }
+.beacon-col { max-width:180px; overflow:hidden; text-overflow:ellipsis; }
+.muted { color:var(--text-muted); }
+.scan-type-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; max-height:240px; overflow-y:auto; margin:12px 0; }
+.scan-type-item { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; }
+.feat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+.feat-check { display:flex; align-items:flex-start; gap:8px; font-size:12px; }
+.ack-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+@media (max-width:720px) { .ack-form-grid { grid-template-columns:1fr; } }
 </style>
 {% endblock %}
 {% block content %}
   <div class="page-header">
     <div>
       <h1 class="page-title">Trackers</h1>
-      <p class="page-subtitle">Register and manage personnel, machine, and sensor tags</p>
+      <p class="page-subtitle">Discover BLE/WiFi tags, acknowledge assets, and manage personnel assignments</p>
     </div>
     <div class="page-actions">
-      <button class="btn btn-ghost" id="btnImport" data-role-min="operator"><i class="fa-solid fa-upload"></i> Import CSV</button>
-      <input type="file" id="importFile" accept=".csv,text/csv" hidden>
-      <button class="btn btn-ghost" id="btnExport"><i class="fa-solid fa-download"></i> Export CSV</button>
-      <button class="btn btn-primary" id="btnCreate" data-role-min="operator"><i class="fa-solid fa-plus"></i> Add Tracker</button>
+      <button class="btn btn-ghost" id="btnScanSettings" data-role-min="operator" title="Scan settings">
+        <i class="fa-solid fa-sliders"></i> Scan settings
+      </button>
+      <button class="btn btn-ghost" id="btnRefresh" data-role-min="operator">
+        <i class="fa-solid fa-rotate"></i> Refresh
+      </button>
     </div>
   </div>
 
-  <div class="stat-strip" id="statStrip">
+  <div class="stat-strip">
     <div class="stat-chip"><span class="stat-num" id="statTotal">—</span><span class="stat-label">Total</span></div>
+    <div class="stat-chip"><span class="stat-num" id="statUnack">—</span><span class="stat-label">Unacknowledged</span></div>
     <div class="stat-chip"><span class="stat-num" id="statActive">—</span><span class="stat-label">Active</span></div>
     <div class="stat-chip"><span class="stat-num" id="statOffline">—</span><span class="stat-label">Offline</span></div>
-    <div class="stat-chip"><span class="stat-num" id="statAlert">—</span><span class="stat-label">Alerting</span></div>
   </div>
 
-  <div class="toolbar-row">
+  <div class="trackers-toolbar">
     <div class="search-field">
       <i class="fa-solid fa-magnifying-glass"></i>
-      <input id="qInput" type="search" placeholder="Search name or hardware ID…" />
+      <input id="qInput" type="search" placeholder="Search tag ID, name, nickname…" />
     </div>
-    <select id="filterCategory" class="select-field" aria-label="Filter by category">
-      <option value="">All categories</option>
-      <option value="1">Personnel</option>
-      <option value="2">Machine</option>
-      <option value="3">Smartphone</option>
-      <option value="4">Smartwatch</option>
-      <option value="5">Env sensor</option>
-    </select>
-    <select id="filterState" class="select-field" aria-label="Filter by asset state">
-      <option value="">All states</option>
-      <option value="1">Active</option>
-      <option value="2">Offline</option>
-      <option value="3">Maintenance</option>
-      <option value="4">Decommissioned</option>
+    <button class="btn btn-secondary btn-sm" id="btnPurge" data-role-min="operator"><i class="fa-solid fa-trash"></i> Purge</button>
+    <button class="btn btn-primary btn-sm" id="btnAcknowledge" data-role-min="operator"><i class="fa-solid fa-circle-check"></i> Acknowledge</button>
+    <select id="filterAck" class="select-field" aria-label="Filter by status">
+      <option value="">All statuses</option>
+      <option value="0">Unacknowledged</option>
+      <option value="1">Active (acknowledged)</option>
+      <option value="2">Inactive</option>
+      <option value="3">Unknown</option>
     </select>
   </div>
 
@@ -62,291 +64,90 @@
     <table class="data-table" id="trackersTable">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Hardware ID</th>
-          <th>Category</th>
-          <th>State</th>
+          <th><input type="checkbox" id="selectAll" title="Select all"></th>
+          <th>Tag ID</th>
+          <th>Model</th>
+          <th>Status</th>
           <th>Battery</th>
-          <th>Position</th>
-          <th>Alert</th>
-          <th></th>
+          <th>Nickname</th>
+          <th>Name</th>
+          <th>RSSI</th>
+          <th>Proximity</th>
+          <th>Lone worker</th>
+          <th>No-go</th>
+          <th>Low batt.</th>
+          <th>SOS</th>
+          <th>Coordinates</th>
+          <th>Nearest node</th>
+          <th>Beacons</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="trackersBody">
-        <tr><td colspan="8" class="empty-cell">Loading…</td></tr>
+        <tr><td colspan="18" class="empty-cell">Loading…</td></tr>
       </tbody>
     </table>
   </div>
 
-<!-- Create / Edit modal -->
-<div class="modal-backdrop" id="modal" hidden>
-  <div class="modal-card">
+<!-- Scan settings modal -->
+<div class="modal-backdrop" id="scanModal" hidden>
+  <div class="modal-card" style="max-width:520px">
     <div class="modal-head">
-      <h2 id="modalTitle">Add Tracker</h2>
-      <button class="icon-btn" id="modalClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      <h2>Tag scan settings</h2>
+      <button class="icon-btn" id="scanModalClose"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <form id="trackerForm" class="modal-body">
-      <input type="hidden" id="editId" />
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-muted)">Select BLE/WiFi device types to discover. Scan runs automatically at the chosen interval.</p>
       <label class="field">
-        <span>Hardware ID / MAC</span>
-        <input id="fHardware" required placeholder="TAG_004 or AA:BB:CC:DD:EE:FF" />
-      </label>
-      <label class="field">
-        <span>Assigned name</span>
-        <input id="fName" placeholder="Operator Delta" />
-      </label>
-      <div class="field-row">
-        <label class="field">
-          <span>Tag type</span>
-          <select id="fTagType">
-            <option value="1">Personnel</option>
-            <option value="2">Machine</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Category</span>
-          <select id="fCategory">
-            <option value="1">Personnel tag</option>
-            <option value="2">Machine tag</option>
-            <option value="3">Smartphone</option>
-            <option value="4">Smartwatch</option>
-            <option value="5">Env sensor</option>
-          </select>
-        </label>
-      </div>
-      <label class="field" id="stateField" hidden>
-        <span>Asset state</span>
-        <select id="fState">
-          <option value="1">Active</option>
-          <option value="2">Offline</option>
-          <option value="3">Maintenance</option>
-          <option value="4">Decommissioned</option>
+        <span>Scan interval</span>
+        <select id="scanIntervalSelect" class="select-field">
+          <option value="30">Every 30 seconds</option>
+          <option value="60" selected>Every 60 seconds</option>
+          <option value="120">Every 120 seconds</option>
         </select>
       </label>
-      <p class="form-error" id="formError" hidden></p>
+      <div style="font-size:12px;font-weight:600;margin-top:12px">Device types to scan</div>
+      <div class="scan-type-grid" id="scanTypeChecks"></div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" id="btnCancel">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="btnSave">Save</button>
+        <button type="button" class="btn btn-ghost" id="scanCancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="scanSave">Save</button>
       </div>
-    </form>
+    </div>
   </div>
 </div>
 
-<!-- Detail drawer -->
-<aside class="detail-drawer" id="detailDrawer" hidden>
-  <div class="drawer-head">
-    <h2 id="drawerTitle">Tracker</h2>
-    <button class="icon-btn" id="drawerClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+<!-- Acknowledge / Edit modal -->
+<div class="modal-backdrop" id="ackModal" hidden>
+  <div class="modal-card" style="max-width:640px;max-height:90vh;overflow:auto">
+    <div class="modal-head">
+      <h2 id="ackTitle">Acknowledge tag</h2>
+      <button class="icon-btn" onclick="document.getElementById('ackModal').hidden=true"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="ack-form-grid">
+        <label class="field"><span>Nickname</span><input id="ackNickname" class="form-input" placeholder="Site callsign"></label>
+        <label class="field"><span>Username</span><input id="ackUsername" class="form-input" placeholder="login ID"></label>
+        <label class="field"><span>First name</span><input id="ackFirstName" class="form-input"></label>
+        <label class="field"><span>Surname</span><input id="ackSurname" class="form-input"></label>
+        <label class="field"><span>Position</span><select id="ackPosition" class="select-field"></select></label>
+        <label class="field"><span>Section</span><select id="ackSection" class="select-field"></select></label>
+        <label class="field"><span>Date of birth</span><input id="ackDob" type="date" class="form-input"></label>
+        <label class="field"><span>Phone</span><input id="ackPhone" type="tel" class="form-input"></label>
+      </div>
+      <div style="margin-top:16px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">Enabled tracking features</div>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px">Only features supported by this tag model are shown.</p>
+        <div class="feat-grid" id="ackFeatures"></div>
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button type="button" class="btn btn-ghost" id="ackCancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="ackSave">Save</button>
+      </div>
+    </div>
   </div>
-  <div class="drawer-body" id="drawerBody"></div>
-  <div class="drawer-actions">
-    <a class="btn btn-ghost" id="drawerMap" href="/"><i class="fa-solid fa-map"></i> Map</a>
-    <button class="btn btn-secondary" id="drawerEdit" data-role-min="operator"><i class="fa-solid fa-pen"></i> Edit</button>
-    <button class="btn btn-danger" id="drawerDecom" data-role-min="operator"><i class="fa-solid fa-box-archive"></i> Decommission</button>
-  </div>
-</aside>
-<style>
-.detail-drawer{position:fixed;top:0;right:0;bottom:0;width:min(380px,92vw);background:#0f172a;border-left:1px solid rgba(148,163,184,.2);z-index:9000;padding:18px;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.4)}
-.detail-drawer[hidden]{display:none!important}
-.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.drawer-body{flex:1;overflow:auto;font-size:13px;line-height:1.7;color:#cbd5e1}
-.drawer-body .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.1)}
-.drawer-body .k{color:#64748b}
-.drawer-actions{display:flex;gap:8px;padding-top:12px;border-top:1px solid rgba(148,163,184,.15)}
-</style>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/shell.js"></script>
-<script>
-if (!API.isLoggedIn()) location.href = '/login';
-let page = 1;
-const CAT = {1:'Personnel',2:'Machine',3:'Phone',4:'Watch',5:'Sensor',6:'UWB'};
-const STATE = {1:'Active',2:'Offline',3:'Maintenance',4:'Decommissioned'};
-const ALERT = {0:'Normal',1:'No movement',2:'No signal',3:'Restricted',4:'Low battery',5:'Vitals',6:'Env'};
-
-async function loadTrackers() {
-  const q = document.getElementById('qInput').value.trim();
-  const category = document.getElementById('filterCategory').value;
-  const asset_state = document.getElementById('filterState').value;
-  const params = new URLSearchParams({ page, per_page: 100 });
-  if (q) params.set('q', q);
-  if (category) params.set('category', category);
-  if (asset_state) params.set('asset_state', asset_state);
-
-  const res = await API.get('/trackers?' + params.toString());
-  const data = await res.json();
-  const items = data.items || [];
-  document.getElementById('statTotal').textContent = data.total ?? items.length;
-  document.getElementById('statActive').textContent = items.filter(t => t.asset_state === 'ACTIVE' || t.asset_state === 1).length;
-  document.getElementById('statOffline').textContent = items.filter(t => t.asset_state === 'OFFLINE' || t.asset_state === 2).length;
-  document.getElementById('statAlert').textContent = items.filter(t => t.alert_status && t.alert_status !== 'NORMAL' && t.alert_status !== 0).length;
-
-  const body = document.getElementById('trackersBody');
-  if (!items.length) {
-    body.innerHTML = '<tr><td colspan="8" class="empty-cell">No trackers yet. <button class="linkish" onclick="openCreate()">Add the first tag</button></td></tr>';
-    return;
-  }
-  body.innerHTML = items.map(t => {
-    const bat = t.battery_level != null ? Math.round(t.battery_level) + '%' : '—';
-    const pos = t.position ? `${Number(t.position.x||0).toFixed(1)}, ${Number(t.position.y||0).toFixed(1)}` : '—';
-    const cat = typeof t.category === 'string' ? t.category : (CAT[t.category] || t.category);
-    const st = typeof t.asset_state === 'string' ? t.asset_state : (STATE[t.asset_state] || t.asset_state);
-    const al = typeof t.alert_status === 'string' ? t.alert_status : (ALERT[t.alert_status] || t.alert_status);
-    const alertClass = (al && al !== 'NORMAL' && al !== 'Normal') ? 'chip warn' : 'chip';
-    return `<tr>
-      <td><strong>${esc(t.assigned_name || 'Unnamed')}</strong></td>
-      <td class="mono">${esc(t.hardware_id)}</td>
-      <td>${esc(cat)}</td>
-      <td><span class="chip">${esc(st)}</span></td>
-      <td>${bat}</td>
-      <td class="mono">${pos}</td>
-      <td><span class="${alertClass}">${esc(al)}</span></td>
-      <td class="row-actions">
-        <button class="icon-btn" title="Details" onclick='openDetail(${JSON.stringify(t).replace(/'/g,"&#39;")})'><i class="fa-solid fa-eye"></i></button>
-        <a class="icon-btn" title="Show on map" href="/?tracker=${t.id}"><i class="fa-solid fa-location-crosshairs"></i></a>
-        <button class="icon-btn" title="Edit" data-role-min="operator" onclick='openEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'><i class="fa-solid fa-pen"></i></button>
-        <button class="icon-btn danger" title="Decommission" data-role-min="operator" onclick="removeTracker(${t.id})"><i class="fa-solid fa-box-archive"></i></button>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function openCreate() {
-  document.getElementById('modalTitle').textContent = 'Add Tracker';
-  document.getElementById('editId').value = '';
-  document.getElementById('fHardware').value = '';
-  document.getElementById('fHardware').disabled = false;
-  document.getElementById('fName').value = '';
-  document.getElementById('fTagType').value = '1';
-  document.getElementById('fCategory').value = '1';
-  document.getElementById('stateField').hidden = true;
-  document.getElementById('formError').hidden = true;
-  document.getElementById('modal').hidden = false;
-}
-function openEdit(t) {
-  document.getElementById('modalTitle').textContent = 'Edit Tracker';
-  document.getElementById('editId').value = t.id;
-  document.getElementById('fHardware').value = t.hardware_id;
-  document.getElementById('fHardware').disabled = true;
-  document.getElementById('fName').value = t.assigned_name || '';
-  document.getElementById('fTagType').value = String(t.tag_type_id || t.tag_type || 1);
-  document.getElementById('fCategory').value = String(t.category_id || (typeof t.category === 'number' ? t.category : 1));
-  document.getElementById('stateField').hidden = false;
-  document.getElementById('fState').value = String(t.asset_state_id || (typeof t.asset_state === 'number' ? t.asset_state : 1));
-  document.getElementById('formError').hidden = true;
-  document.getElementById('modal').hidden = false;
-}
-function closeModal() { document.getElementById('modal').hidden = true; }
-
-document.getElementById('btnCreate').onclick = openCreate;
-document.getElementById('btnCancel').onclick = closeModal;
-document.getElementById('modalClose').onclick = closeModal;
-document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
-
-document.getElementById('trackerForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const id = document.getElementById('editId').value;
-  const err = document.getElementById('formError');
-  err.hidden = true;
-  let res;
-  if (id) {
-    res = await API.patch('/trackers/' + id, {
-      assigned_name: document.getElementById('fName').value.trim() || null,
-      tag_type: Number(document.getElementById('fTagType').value),
-      category: Number(document.getElementById('fCategory').value),
-      asset_state: Number(document.getElementById('fState').value),
-    });
-  } else {
-    res = await API.post('/trackers', {
-      hardware_id: document.getElementById('fHardware').value.trim(),
-      assigned_name: document.getElementById('fName').value.trim() || null,
-      tag_type: Number(document.getElementById('fTagType').value),
-      category: Number(document.getElementById('fCategory').value),
-    });
-  }
-  if (!res || !res.ok) {
-    const data = res ? await res.json().catch(() => ({})) : {};
-    err.textContent = data.error || 'Save failed';
-    err.hidden = false;
-    return;
-  }
-  closeModal();
-  loadTrackers();
-});
-
-async function removeTracker(id) {
-  if (!(await holoConfirm('Decommission this tracker? It will be archived (soft delete).', { danger: true, title: 'Confirm' }))) return;
-  await API.del('/trackers/' + id);
-  closeDrawer();
-  loadTrackers();
-}
-
-let _detailTracker = null;
-function openDetail(t) {
-  _detailTracker = t;
-  document.getElementById('drawerTitle').textContent = t.assigned_name || t.hardware_id;
-  document.getElementById('drawerMap').href = '/?tracker=' + t.id;
-  const rows = [
-    ['Hardware ID', t.hardware_id],
-    ['Category', t.category],
-    ['State', t.asset_state],
-    ['Alert', t.alert_status],
-    ['Battery', t.battery_level != null ? Math.round(t.battery_level) + '%' : '—'],
-    ['Position', t.position ? `${Number(t.position.x||0).toFixed(2)}, ${Number(t.position.y||0).toFixed(2)}` : '—'],
-    ['Section', t.current_section || '—'],
-    ['Check-in', t.check_status || '—'],
-    ['Created', (t.created_at || '').slice(0, 19) || '—'],
-  ];
-  document.getElementById('drawerBody').innerHTML = rows.map(r =>
-    `<div class="row"><span class="k">${esc(r[0])}</span><span>${esc(r[1])}</span></div>`
-  ).join('');
-  document.getElementById('detailDrawer').hidden = false;
-}
-function closeDrawer() { document.getElementById('detailDrawer').hidden = true; _detailTracker = null; }
-document.getElementById('drawerClose').onclick = closeDrawer;
-document.getElementById('drawerEdit').onclick = () => { if (_detailTracker) openEdit(_detailTracker); };
-document.getElementById('drawerDecom').onclick = () => { if (_detailTracker) removeTracker(_detailTracker.id); };
-
-document.getElementById('btnExport').onclick = async () => {
-  const res = await API.get('/trackers?per_page=500&include_decommissioned=true');
-  const data = await res.json();
-  const items = data.items || [];
-  const header = ['hardware_id','assigned_name','category','asset_state','battery_level'];
-  const lines = [header.join(',')].concat(items.map(t =>
-    [t.hardware_id, JSON.stringify(t.assigned_name||''), t.category, t.asset_state, t.battery_level].join(',')
-  ));
-  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'trackers.csv';
-  a.click();
-};
-
-document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
-document.getElementById('importFile').onchange = async (e) => {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-  const text = await file.text();
-  const res = await API.post('/trackers/import', { csv: text });
-  const data = await res.json();
-  if (res.ok) showToast(`Imported ${data.created} (skipped ${data.skipped})`, 'success');
-  else showToast(data.error || 'Import failed', 'error');
-  e.target.value = '';
-  loadTrackers();
-};
-
-if (window.HoloRBAC) HoloRBAC.hideViewerActions();
-
-['qInput','filterCategory','filterState'].forEach(id => {
-  document.getElementById(id).addEventListener('change', loadTrackers);
-  document.getElementById(id).addEventListener('keyup', e => { if (e.key === 'Enter') loadTrackers(); });
-});
-
-loadTrackers();
-
-</script>
+<script src="/static/js/trackers-page.js?v=1"></script>
 {% endblock %}

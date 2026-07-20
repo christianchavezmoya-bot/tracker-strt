@@ -153,6 +153,7 @@ def create_app(test_config: dict = None) -> Flask:
     from backend.api.webhooks import webhooks_bp, schedules_bp
     from backend.api.inject import inject_bp
     from backend.api.push import push_bp
+    from backend.api.org import org_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trackers_bp)
@@ -178,6 +179,7 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(schedules_bp)
     app.register_blueprint(inject_bp)
     app.register_blueprint(push_bp)
+    app.register_blueprint(org_bp)
 
     if os.getenv("PLAYWRIGHT_E2E") == "1":
         from backend.api.e2e import e2e_bp
@@ -485,8 +487,19 @@ def _seed_demo_if_needed(app):
     from backend.services.settings_defaults import SETTING_DEFAULTS
     from backend.models.hardware import ConnectionStatus, HardwareType, Protocol
     from backend.models.tracker import TagType, DeviceCategory, NodeType, NodeStatus
+    from backend.models.org import PersonnelPosition, OrgSection
 
     log = logging.getLogger(__name__)
+
+    default_positions = ["Manager", "Supervisor", "Operator", "Visitor", "Contractor"]
+    for i, name in enumerate(default_positions):
+        if not PersonnelPosition.query.filter_by(name=name).first():
+            db.session.add(PersonnelPosition(name=name, sort_order=i))
+
+    default_sections = ["Underground", "Surface", "Inbye", "Workshop", "Surface office"]
+    for i, name in enumerate(default_sections):
+        if not OrgSection.query.filter_by(name=name).first():
+            db.session.add(OrgSection(name=name, sort_order=i))
 
     if User.query.count() == 0:
         admin = User(
