@@ -35,12 +35,19 @@ let _touchMid = { x: 0, y: 0 };
 function initMap3D() {
   const container = document.getElementById('map3d');
   const canvas = document.getElementById('threeCanvas');
+  if (!container || !canvas) {
+    throw new Error('3D map container not found');
+  }
+  if (typeof THREE === 'undefined') {
+    throw new Error('Three.js not loaded');
+  }
 
   // ── Renderer ────────────────────────────────────────────────────────────
   window._renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
     alpha: true,
+    failIfMajorPerformanceCaveat: false,
   });
   const w = container.clientWidth || 800;
   const h = container.clientHeight || 600;
@@ -663,3 +670,28 @@ window.toggleZoneLayer3D = toggleZoneLayer3D;
 window.toggleSectionLayer3D = toggleSectionLayer3D;
 window.toggleGridLayer3D = toggleGridLayer3D;
 window.toggleTrackerLayer3D = toggleTrackerLayer3D;
+
+/** Probe whether WebGL is available (GPU or software). */
+function isWebGLAvailable() {
+  if (typeof THREE === 'undefined') return false;
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
+      || canvas.getContext('experimental-webgl');
+    return !!gl;
+  } catch {
+    return false;
+  }
+}
+
+/** Lazy-safe 3D init; returns false when WebGL unavailable. */
+function ensureMap3D() {
+  if (window._map3dReady) return true;
+  if (!isWebGLAvailable()) return false;
+  initMap3D();
+  window._map3dReady = true;
+  return true;
+}
+
+window.isWebGLAvailable = isWebGLAvailable;
+window.ensureMap3D = ensureMap3D;

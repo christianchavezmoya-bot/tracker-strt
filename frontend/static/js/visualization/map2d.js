@@ -744,8 +744,12 @@ function loadFloorPlanFromURL(url) {
     _floorPlanLayer = L.imageOverlay(url, [southWest, northEast], { opacity: 0.92, crossOrigin: true }).addTo(window._map2d);
     drawGridOverlay();
     renderNodeMarkers();
+    if (window.renderTrackerDots) window.renderTrackerDots();
   };
-  img.onerror = () => drawGridOverlay();
+  img.onerror = () => {
+    drawGridOverlay();
+    if (window.renderTrackerDots) window.renderTrackerDots();
+  };
   img.src = url;
 }
 
