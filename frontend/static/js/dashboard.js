@@ -15,7 +15,7 @@ let filters = { people: true, machines: true, sensors: true, offline: true, aler
 
 // ── Layer panel state ───────────────────────────────────────────────────────
 let layerPanelOpen = false;
-let layerState = { streetMap: true, satelliteMap: false, zones: true, sections: true, grid: true, trackers: true, heatmap: true, proximity: true };
+let layerState = { streetMap: false, satelliteMap: false, zones: true, sections: true, grid: true, trackers: true, heatmap: true, proximity: true };
 // Expose globally so map2d.js / map3d.js can read it
 window.layerState = layerState;
 window.proximityMeters = 2.0;
@@ -600,23 +600,45 @@ function syncLayerCheckboxes() {
 }
 window.syncLayerCheckboxes = syncLayerCheckboxes;
 
-function toggleStreetMapLayer() {
+async function toggleStreetMapLayer() {
   layerState.streetMap = document.getElementById('layerStreetMap')?.checked !== false;
-  if (window.toggleStreetMapLayer) window.toggleStreetMapLayer(layerState.streetMap);
-  if (layerState.streetMap && document.getElementById('layerSatellite')?.checked) {
-    document.getElementById('layerSatellite').checked = false;
-    layerState.satelliteMap = false;
-    if (window.toggleSatelliteMapLayer) window.toggleSatelliteMapLayer(false);
+  if (layerState.streetMap) {
+    if (document.getElementById('layerSatellite')?.checked) {
+      document.getElementById('layerSatellite').checked = false;
+      layerState.satelliteMap = false;
+    }
+    const inRegional = window.MapGeoref && MapGeoref.getViewMode() === 'regional';
+    if (!inRegional) {
+      if (window.switchToRegionalView) await window.switchToRegionalView();
+    } else if (window.toggleStreetMapLayer) {
+      window.toggleStreetMapLayer(true);
+    }
+  } else {
+    if (window.toggleStreetMapLayer) window.toggleStreetMapLayer(false);
+    if (!layerState.satelliteMap && window.MapGeoref?.getViewMode() === 'regional' && window.switchToMineView) {
+      await window.switchToMineView();
+    }
   }
 }
 
-function toggleSatelliteMapLayer() {
+async function toggleSatelliteMapLayer() {
   layerState.satelliteMap = document.getElementById('layerSatellite')?.checked === true;
-  if (window.toggleSatelliteMapLayer) window.toggleSatelliteMapLayer(layerState.satelliteMap);
-  if (layerState.satelliteMap && document.getElementById('layerStreetMap')) {
-    document.getElementById('layerStreetMap').checked = false;
-    layerState.streetMap = false;
-    if (window.toggleStreetMapLayer) window.toggleStreetMapLayer(false);
+  if (layerState.satelliteMap) {
+    if (document.getElementById('layerStreetMap')?.checked) {
+      document.getElementById('layerStreetMap').checked = false;
+      layerState.streetMap = false;
+    }
+    const inRegional = window.MapGeoref && MapGeoref.getViewMode() === 'regional';
+    if (!inRegional) {
+      if (window.switchToRegionalView) await window.switchToRegionalView();
+    } else if (window.toggleSatelliteMapLayer) {
+      window.toggleSatelliteMapLayer(true);
+    }
+  } else {
+    if (window.toggleSatelliteMapLayer) window.toggleSatelliteMapLayer(false);
+    if (!layerState.streetMap && window.MapGeoref?.getViewMode() === 'regional' && window.switchToMineView) {
+      await window.switchToMineView();
+    }
   }
 }
 

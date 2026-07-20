@@ -257,7 +257,7 @@
         </button>
       </div>
       <label class="layer-item">
-        <input type="checkbox" id="layerStreetMap" checked onchange="toggleStreetMapLayer()">
+        <input type="checkbox" id="layerStreetMap" onchange="toggleStreetMapLayer()">
         <span class="layer-dot" style="background:#0a84ff"></span>
         Street map
       </label>
@@ -467,9 +467,9 @@
 <script src="/static/vendor/three/three.min.js"></script>
 <script src="/static/js/api.js"></script>
 <script src="/static/js/visualization/map-georef.js?v=10"></script>
-<script src="/static/js/visualization/map2d.js?v=11"></script>
+<script src="/static/js/visualization/map2d.js?v=12"></script>
 <script src="/static/js/visualization/map3d.js?v=10"></script>
-<script src="/static/js/dashboard.js?v=10"></script>
+<script src="/static/js/dashboard.js?v=11"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js?v=7').catch(() => {});

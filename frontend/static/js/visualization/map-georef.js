@@ -144,8 +144,12 @@ window.MapGeoref = (function () {
       attribution: '&copy; Esri',
       maxZoom: 19,
     });
-    const showStreet = !window.layerState || window.layerState.streetMap !== false;
-    if (showStreet) {
+    const wantSat = window.layerState && window.layerState.satelliteMap;
+    const wantStreet = !wantSat && (!window.layerState || window.layerState.streetMap !== false);
+    if (wantSat) {
+      satelliteLayer.addTo(map);
+      activeBasemap = 'satellite';
+    } else if (wantStreet) {
       streetLayer.addTo(map);
       activeBasemap = 'street';
     }

@@ -56,15 +56,20 @@ async function initMap2D() {
 
   if (_isCalibrated || _hasUploadedFloorPlan) {
     initMineMapCore();
+    if (window.layerState) {
+      window.layerState.streetMap = false;
+      window.layerState.satelliteMap = false;
+    }
+    if (window.syncLayerCheckboxes) window.syncLayerCheckboxes();
     await loadFloorPlanImage();
     renderZones();
     fitMapToFloorPlan();
   } else {
+    if (window.layerState) window.layerState.streetMap = true;
     await initRegionalMapView();
   }
 
-  window._map2d.on('click', onMapClick);
-  window._map2d.on('mousemove', onMapMouseMove);
+  bindMap2DEvents();
 
   window.renderTrackerDots = renderTrackerDots;
   window.updateTrackerDot = updateTrackerDot;
@@ -84,6 +89,14 @@ async function initMap2D() {
   window.switchToMineView = switchToMineView;
   window.toggleStreetMapLayer = (show) => MapGeoref && MapGeoref.toggleStreetLayer(show);
   window.toggleSatelliteMapLayer = (show) => MapGeoref && MapGeoref.toggleSatelliteLayer(show);
+}
+
+function bindMap2DEvents() {
+  if (!window._map2d) return;
+  window._map2d.off('click', onMapClick);
+  window._map2d.off('mousemove', onMapMouseMove);
+  window._map2d.on('click', onMapClick);
+  window._map2d.on('mousemove', onMapMouseMove);
 }
 
 function destroyMap2D() {
@@ -179,6 +192,12 @@ async function initRegionalMapView() {
 
 async function switchToRegionalView() {
   await initRegionalMapView();
+  bindMap2DEvents();
+  if (window.layerState?.satelliteMap) {
+    MapGeoref.toggleSatelliteLayer(true);
+  } else if (window.layerState?.streetMap !== false) {
+    MapGeoref.toggleStreetLayer(true);
+  }
   if (window.syncLayerCheckboxes) window.syncLayerCheckboxes();
 }
 
@@ -188,10 +207,16 @@ async function switchToMineView() {
     return;
   }
   initMineMapCore();
+  if (window.layerState) {
+    window.layerState.streetMap = false;
+    window.layerState.satelliteMap = false;
+  }
+  if (window.syncLayerCheckboxes) window.syncLayerCheckboxes();
   await loadCalibration();
   loadFloorPlanImage();
   renderZones();
   if (window.renderTrackerDots) window.renderTrackerDots();
+  bindMap2DEvents();
   fitMapToFloorPlan();
 }
 
