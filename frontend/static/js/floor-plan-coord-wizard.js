@@ -11,44 +11,68 @@ const FpCoordWizard = (() => {
   let imageWidth = 1000;
   let imageHeight = 1000;
   let step = 'intro';
+  let activePointIndex = 0;
   let points = [{}, {}];
   let onComplete = null;
+
+  let viewZoom = 1;
+  let viewPanX = 0;
+  let viewPanY = 0;
+  let baseFitZoom = 1;
+  let isPanning = false;
+  let panStart = null;
+  let suppressClick = false;
 
   function el(id) {
     return document.getElementById(id);
   }
 
-  function clickToPixel(img, clientX, clientY) {
-    const rect = img.getBoundingClientRect();
-    const nw = img.naturalWidth || imageWidth;
-    const nh = img.naturalHeight || imageHeight;
-    const scale = Math.min(rect.width / nw, rect.height / nh);
-    const renderedW = nw * scale;
-    const renderedH = nh * scale;
-    const offsetX = (rect.width - renderedW) / 2;
-    const offsetY = (rect.height - renderedH) / 2;
-    const relX = clientX - rect.left - offsetX;
-    const relY = clientY - rect.top - offsetY;
-    if (relX < 0 || relY < 0 || relX > renderedW || relY > renderedH) return null;
-    return {
-      pixel_x: (relX / renderedW) * nw,
-      pixel_y: (relY / renderedH) * nh,
-    };
+  function clamp(v, min, max) {
+    return Math.min(max, Math.max(min, v));
   }
 
-  function markerPosition(img, px, py) {
-    const rect = img.getBoundingClientRect();
-    const nw = img.naturalWidth || imageWidth;
-    const nh = img.naturalHeight || imageHeight;
-    const scale = Math.min(rect.width / nw, rect.height / nh);
-    const renderedW = nw * scale;
-    const renderedH = nh * scale;
-    const offsetX = (rect.width - renderedW) / 2;
-    const offsetY = (rect.height - renderedH) / 2;
-    return {
-      left: offsetX + (px / nw) * renderedW,
-      top: offsetY + (py / nh) * renderedH,
-    };
+  function applyViewTransform() {
+    const canvas = el('fpWizardCanvas');
+    if (!canvas) return;
+    canvas.style.transform = `translate(${viewPanX}px, ${viewPanY}px) scale(${viewZoom})`;
+    const label = el('fpWizardZoomLabel');
+    if (label) label.textContent = Math.round((viewZoom / baseFitZoom) * 100) + '%';
+  }
+
+  function fitViewToImage() {
+    const vp = el('fpWizardViewport');
+    if (!vp || !imageWidth || !imageHeight) return;
+    const vw = vp.clientWidth || 400;
+    const vh = vp.clientHeight || 300;
+    baseFitZoom = Math.min(vw / imageWidth, vh / imageHeight) * 0.95;
+    viewZoom = baseFitZoom;
+    viewPanX = (vw - imageWidth * viewZoom) / 2;
+    viewPanY = (vh - imageHeight * viewZoom) / 2;
+    applyViewTransform();
+  }
+
+  function setupImageDimensions() {
+    const img = el('fpWizardImage');
+    const canvas = el('fpWizardCanvas');
+    if (!img || !canvas) return;
+    img.style.width = imageWidth + 'px';
+    img.style.height = imageHeight + 'px';
+    canvas.style.width = imageWidth + 'px';
+    canvas.style.height = imageHeight + 'px';
+    fitViewToImage();
+  }
+
+  /** Viewport client coords → image pixel (accounts for pan/zoom). */
+  function clientToImagePixel(clientX, clientY) {
+    const vp = el('fpWizardViewport');
+    if (!vp) return null;
+    const rect = vp.getBoundingClientRect();
+    const vx = clientX - rect.left;
+    const vy = clientY - rect.top;
+    const cx = (vx - viewPanX) / viewZoom;
+    const cy = (vy - viewPanY) / viewZoom;
+    if (cx < 0 || cy < 0 || cx > imageWidth || cy > imageHeight) return null;
+    return { pixel_x: cx, pixel_y: cy };
   }
 
   function showStep(name) {
@@ -56,31 +80,47 @@ const FpCoordWizard = (() => {
     el('fpWizardIntro').style.display = name === 'intro' ? 'block' : 'none';
     el('fpWizardPicker').style.display = (name === 'pick' || name === 'coords') ? 'flex' : 'none';
     el('fpWizardCoordPanel').style.display = name === 'coords' ? 'block' : 'none';
+    el('fpWizardConfirmPointBtn').style.display = name === 'pick' ? 'inline-flex' : 'none';
+    el('fpWizardMapToolbar').style.display = name === 'pick' ? 'flex' : 'none';
     updatePickerBanner();
+    updateConfirmButton();
+    if (name === 'pick') {
+      requestAnimationFrame(fitViewToImage);
+    }
   }
 
   function updatePickerBanner() {
     const banner = el('fpWizardPickBanner');
-    if (!banner) return;
-    if (step !== 'pick') return;
-    const idx = points[0].pixel_x == null ? 0 : 1;
-    banner.innerHTML = idx === 0
-      ? '<i class="fa-solid fa-crosshairs"></i> Click the <strong>first corner</strong> on your floor plan (e.g. a survey lat/long label)'
-      : '<i class="fa-solid fa-crosshairs"></i> Click the <strong>second corner</strong> on the opposite side of the plan';
+    if (!banner || step !== 'pick') return;
+    const n = activePointIndex + 1;
+    banner.innerHTML =
+      `<i class="fa-solid fa-crosshairs"></i> `
+      + `Place <strong>point ${n}</strong> on the map — click as many times as you need to adjust. `
+      + `Use scroll wheel or <strong>+ / −</strong> to zoom the map only. `
+      + `When the marker is correct, click <strong>Enter coordinates</strong>.`;
+  }
+
+  function updateConfirmButton() {
+    const btn = el('fpWizardConfirmPointBtn');
+    if (!btn) return;
+    const pt = points[activePointIndex];
+    const hasPoint = pt && pt.pixel_x != null;
+    btn.disabled = !hasPoint;
+    btn.innerHTML = hasPoint
+      ? `<i class="fa-solid fa-keyboard"></i> Enter coordinates for point ${activePointIndex + 1}`
+      : `<i class="fa-solid fa-crosshairs"></i> Click the map to place point ${activePointIndex + 1}`;
   }
 
   function renderMarkers() {
     const layer = el('fpWizardMarkers');
-    const img = el('fpWizardImage');
-    if (!layer || !img) return;
+    if (!layer) return;
     layer.innerHTML = '';
     points.forEach((pt, i) => {
       if (pt.pixel_x == null) return;
-      const pos = markerPosition(img, pt.pixel_x, pt.pixel_y);
       const dot = document.createElement('div');
-      dot.className = 'fp-wizard-marker';
-      dot.style.left = pos.left + 'px';
-      dot.style.top = pos.top + 'px';
+      dot.className = 'fp-wizard-marker' + (i === activePointIndex ? ' active' : '');
+      dot.style.left = pt.pixel_x + 'px';
+      dot.style.top = pt.pixel_y + 'px';
       dot.innerHTML = `<span>${i + 1}</span>`;
       layer.appendChild(dot);
     });
@@ -97,40 +137,44 @@ const FpCoordWizard = (() => {
     el('fpWizardCoordPanel').dataset.pointIndex = String(pointIndex);
     el('fpWizardSaveBtn').style.display = pointIndex === 1 ? 'inline-flex' : 'none';
     el('fpWizardNextBtn').style.display = pointIndex === 0 ? 'inline-flex' : 'none';
-    el('fpWizardNextBtn').disabled = !(el('fpWizardLat').value.trim() && el('fpWizardLng').value.trim());
+    syncCoordButtons();
+  }
+
+  function syncCoordButtons() {
+    const lat = el('fpWizardLat');
+    const lng = el('fpWizardLng');
+    const ok = lat.value.trim() && lng.value.trim();
+    el('fpWizardNextBtn').disabled = !ok;
+    el('fpWizardSaveBtn').disabled = !ok;
   }
 
   function bindCoordInputs() {
-    const lat = el('fpWizardLat');
-    const lng = el('fpWizardLng');
-    const sync = () => {
-      const ok = lat.value.trim() && lng.value.trim();
-      el('fpWizardNextBtn').disabled = !ok;
-      el('fpWizardSaveBtn').disabled = !ok;
-    };
-    lat.oninput = sync;
-    lng.oninput = sync;
+    el('fpWizardLat').oninput = syncCoordButtons;
+    el('fpWizardLng').oninput = syncCoordButtons;
   }
 
-  function handleImageClick(e) {
-    if (step !== 'pick') return;
-    const img = el('fpWizardImage');
-    const px = clickToPixel(img, e.clientX, e.clientY);
+  function handleMapClick(e) {
+    if (step !== 'pick' || isPanning || suppressClick) {
+      suppressClick = false;
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    const px = clientToImagePixel(e.clientX, e.clientY);
     if (!px) return;
-    const idx = points[0].pixel_x == null ? 0 : 1;
-    points[idx] = { ...points[idx], pixel_x: px.pixel_x, pixel_y: px.pixel_y };
+    points[activePointIndex] = { ...points[activePointIndex], pixel_x: px.pixel_x, pixel_y: px.pixel_y };
     renderMarkers();
-    openCoordPanel(idx);
+    updateConfirmButton();
   }
 
   function handleCrosshairMove(e) {
     const overlay = el('fpWizardCrosshair');
-    const wrap = el('fpWizardImageWrap');
-    if (!overlay || !wrap || step !== 'pick') {
+    const vp = el('fpWizardViewport');
+    if (!overlay || !vp || step !== 'pick') {
       if (overlay) overlay.style.display = 'none';
       return;
     }
-    const rect = wrap.getBoundingClientRect();
+    const rect = vp.getBoundingClientRect();
     if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
       overlay.style.display = 'none';
       return;
@@ -138,6 +182,66 @@ const FpCoordWizard = (() => {
     overlay.style.display = 'block';
     overlay.style.left = (e.clientX - rect.left) + 'px';
     overlay.style.top = (e.clientY - rect.top) + 'px';
+  }
+
+  function zoomAt(factor, clientX, clientY) {
+    const vp = el('fpWizardViewport');
+    if (!vp) return;
+    const rect = vp.getBoundingClientRect();
+    const mx = clientX != null ? clientX - rect.left : rect.width / 2;
+    const my = clientY != null ? clientY - rect.top : rect.height / 2;
+    const newZoom = clamp(viewZoom * factor, baseFitZoom * 0.35, baseFitZoom * 10);
+    viewPanX = mx - (mx - viewPanX) * (newZoom / viewZoom);
+    viewPanY = my - (my - viewPanY) * (newZoom / viewZoom);
+    viewZoom = newZoom;
+    applyViewTransform();
+  }
+
+  function onWheel(e) {
+    if (step !== 'pick') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    zoomAt(factor, e.clientX, e.clientY);
+  }
+
+  function onPointerDown(e) {
+    if (step !== 'pick') return;
+    if (e.button === 1 || e.shiftKey) {
+      isPanning = true;
+      suppressClick = false;
+      panStart = { x: e.clientX, y: e.clientY, panX: viewPanX, panY: viewPanY };
+      el('fpWizardViewport').setPointerCapture(e.pointerId);
+      e.preventDefault();
+    }
+  }
+
+  function onPointerMove(e) {
+    if (!isPanning || !panStart) return;
+    if (Math.abs(e.clientX - panStart.x) > 4 || Math.abs(e.clientY - panStart.y) > 4) {
+      suppressClick = true;
+    }
+    viewPanX = panStart.panX + (e.clientX - panStart.x);
+    viewPanY = panStart.panY + (e.clientY - panStart.y);
+    applyViewTransform();
+    e.preventDefault();
+  }
+
+  function onPointerUp(e) {
+    if (!isPanning) return;
+    isPanning = false;
+    panStart = null;
+    try { el('fpWizardViewport').releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  }
+
+  function resetViewState() {
+    viewZoom = 1;
+    viewPanX = 0;
+    viewPanY = 0;
+    baseFitZoom = 1;
+    isPanning = false;
+    panStart = null;
+    suppressClick = false;
   }
 
   async function saveGeoref() {
@@ -162,9 +266,7 @@ const FpCoordWizard = (() => {
         })),
       });
       const data = await API.json(res);
-      if (!res || !res.ok) {
-        throw new Error((data && data.error) || 'Save failed');
-      }
+      if (!res || !res.ok) throw new Error((data && data.error) || 'Save failed');
       if (window.showToast) showToast('Map coordinates saved', 'success');
       close();
       if (typeof onComplete === 'function') onComplete(sectionId, data);
@@ -179,9 +281,13 @@ const FpCoordWizard = (() => {
     sectionId = 0;
     planName = '';
     imageUrl = '';
-    points = [{}, {}];
+    imageWidth = 1000;
+    imageHeight = 1000;
     step = 'intro';
+    activePointIndex = 0;
+    points = [{}, {}];
     onComplete = null;
+    resetViewState();
   }
 
   function close() {
@@ -202,8 +308,7 @@ const FpCoordWizard = (() => {
     onComplete = options.onComplete || null;
 
     el('fpWizardPlanName').textContent = planName;
-    const modal = el('fpCoordWizardModal');
-    modal.style.display = 'flex';
+    el('fpCoordWizardModal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
 
     showStep('intro');
@@ -213,6 +318,7 @@ const FpCoordWizard = (() => {
       img.onload = () => {
         imageWidth = img.naturalWidth || 1000;
         imageHeight = img.naturalHeight || 1000;
+        setupImageDimensions();
         resolve();
       };
       img.onerror = () => resolve();
@@ -227,30 +333,60 @@ const FpCoordWizard = (() => {
   function init() {
     bindCoordInputs();
 
-    el('fpWizardStartBtn').onclick = () => showStep('pick');
+    el('fpWizardStartBtn').onclick = () => {
+      activePointIndex = 0;
+      showStep('pick');
+      renderMarkers();
+    };
     el('fpWizardCancelBtn').onclick = close;
     el('fpWizardCloseBtn').onclick = close;
     el('fpWizardBackToPickBtn').onclick = () => showStep('pick');
+
+    el('fpWizardConfirmPointBtn').onclick = () => {
+      if (points[activePointIndex].pixel_x == null) return;
+      openCoordPanel(activePointIndex);
+    };
 
     el('fpWizardNextBtn').onclick = () => {
       const idx = parseInt(el('fpWizardCoordPanel').dataset.pointIndex || '0', 10);
       points[idx].lat = parseFloat(el('fpWizardLat').value);
       points[idx].lng = parseFloat(el('fpWizardLng').value);
+      activePointIndex = 1;
       showStep('pick');
       renderMarkers();
     };
 
     el('fpWizardSaveBtn').onclick = saveGeoref;
 
-    el('fpWizardImageWrap').addEventListener('click', handleImageClick);
-    el('fpWizardImageWrap').addEventListener('mousemove', handleCrosshairMove);
-    el('fpWizardImageWrap').addEventListener('mouseleave', () => {
-      const overlay = el('fpWizardCrosshair');
-      if (overlay) overlay.style.display = 'none';
-    });
+    el('fpWizardZoomIn').onclick = () => {
+      const vp = el('fpWizardViewport');
+      const r = vp.getBoundingClientRect();
+      zoomAt(1.2, r.left + r.width / 2, r.top + r.height / 2);
+    };
+    el('fpWizardZoomOut').onclick = () => {
+      const vp = el('fpWizardViewport');
+      const r = vp.getBoundingClientRect();
+      zoomAt(1 / 1.2, r.left + r.width / 2, r.top + r.height / 2);
+    };
+    el('fpWizardZoomReset').onclick = fitViewToImage;
+
+    const vp = el('fpWizardViewport');
+    vp.addEventListener('click', handleMapClick);
+    vp.addEventListener('mousemove', handleCrosshairMove);
+    vp.addEventListener('mouseleave', () => { el('fpWizardCrosshair').style.display = 'none'; });
+    vp.addEventListener('wheel', onWheel, { passive: false });
+    vp.addEventListener('pointerdown', onPointerDown);
+    vp.addEventListener('pointermove', onPointerMove);
+    vp.addEventListener('pointerup', onPointerUp);
+    vp.addEventListener('pointercancel', onPointerUp);
+    vp.addEventListener('contextmenu', (e) => { if (step === 'pick') e.preventDefault(); });
 
     el('fpCoordWizardModal').addEventListener('click', (e) => {
       if (e.target === el('fpCoordWizardModal')) close();
+    });
+
+    window.addEventListener('resize', () => {
+      if (step === 'pick' || step === 'coords') fitViewToImage();
     });
   }
 
