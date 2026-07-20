@@ -98,7 +98,7 @@
 .layers-panel {
   position: absolute; top: 60px; right: 16px;
   background: var(--bg-card); border: 1px solid var(--border-bright);
-  border-radius: var(--radius); padding: 12px; width: 180px; z-index: 30;
+  border-radius: var(--radius); padding: 12px; width: 210px; z-index: 30;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 .layers-panel h4 {
@@ -112,6 +112,35 @@
 }
 .layer-item input[type=checkbox] { accent-color: var(--cyan); }
 .layer-item:hover { color: var(--text-primary); }
+.layer-opacity-block {
+  padding: 8px 0 10px;
+  margin: 4px 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+.layer-opacity-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.layer-opacity-pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--cyan);
+  font-weight: 600;
+}
+.layer-opacity-slider {
+  width: 100%;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+.layer-opacity-hint {
+  margin: 6px 0 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
 
 /* Map container — layout from dashboard-theme.css; keep dot/leaflet rules here */
 .map-container {

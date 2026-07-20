@@ -40,6 +40,7 @@ let _camTargetX = 12.5;
 let _camTargetZ = 25;
 let _floorLoadGen = 0;
 let _loadedFloorUrl = null;
+let _floorPlanOpacity = 0.85;
 let _isDragging = false;
 let _lastX = 0, _lastY = 0;
 let _touchDist = 0;
@@ -203,6 +204,18 @@ function _syncInstancedTrackers() {
 
   window.reloadFloorPlan3D = reloadFloorPlan3D;
   window.fit3DCameraToFloor = fit3DCameraToFloor;
+  window.setFloorPlanOpacity3D = setFloorPlanOpacity3D;
+}
+
+function setFloorPlanOpacity3D(opacity) {
+  const op = Math.max(0.1, Math.min(1, parseFloat(opacity) || 0.85));
+  _floorPlanOpacity = op;
+  if (window._floorMesh && window._floorMesh.material) {
+    window._floorMesh.material.transparent = op < 1 || !!window._floorMesh.material.map;
+    window._floorMesh.material.opacity = op;
+    window._floorMesh.material.needsUpdate = true;
+    mark3DDirty();
+  }
 }
 
 function getFloorExtents3D() {
@@ -291,7 +304,7 @@ function applyFloorPlaneMesh(texture, extents, imgUrl) {
   if (texture) {
     matOpts.map = texture;
     matOpts.transparent = true;
-    matOpts.opacity = 0.92;
+    matOpts.opacity = window.getFloorPlanOpacity ? window.getFloorPlanOpacity() : _floorPlanOpacity;
   } else {
     matOpts.color = 0x0a1429;
   }

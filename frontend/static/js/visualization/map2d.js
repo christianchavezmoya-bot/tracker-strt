@@ -932,7 +932,10 @@ function loadFloorPlanFromURL(url) {
     _imageHeight = img.naturalHeight || 1000;
     syncHoloCoords();
     const bounds = getFloorPlanBounds();
-    _floorPlanLayer = L.imageOverlay(url, bounds, { opacity: 0.92, crossOrigin: true }).addTo(window._map2d);
+    _floorPlanLayer = L.imageOverlay(url, bounds, {
+      opacity: window.getFloorPlanOpacity ? window.getFloorPlanOpacity() : 0.85,
+      crossOrigin: true,
+    }).addTo(window._map2d);
     drawGridOverlay();
     renderNodeMarkers();
     if (window.renderTrackerDots) window.renderTrackerDots();
@@ -944,6 +947,14 @@ function loadFloorPlanFromURL(url) {
   };
   img.src = url;
 }
+
+function setFloorPlanLayerOpacity(opacity) {
+  const op = Math.max(0.1, Math.min(1, parseFloat(opacity) || 0.85));
+  if (_floorPlanLayer && typeof _floorPlanLayer.setOpacity === 'function') {
+    _floorPlanLayer.setOpacity(op);
+  }
+}
+window.setFloorPlanLayerOpacity = setFloorPlanLayerOpacity;
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  ZONES & GRID

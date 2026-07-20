@@ -15,10 +15,46 @@ let filters = { people: true, machines: true, sensors: true, offline: true, aler
 
 // ── Layer panel state ───────────────────────────────────────────────────────
 let layerPanelOpen = false;
-let layerState = { streetMap: false, satelliteMap: false, zones: true, sections: true, grid: true, trackers: true, heatmap: true, proximity: true };
+let layerState = {
+  streetMap: false, satelliteMap: false,
+  zones: true, sections: true, grid: true, trackers: true, heatmap: true, proximity: true,
+  floorPlanOpacity: 0.85,
+};
+const FLOOR_OPACITY_STORAGE_KEY = 'holo_floor_plan_opacity';
 // Expose globally so map2d.js / map3d.js can read it
 window.layerState = layerState;
 window.proximityMeters = 2.0;
+
+function getFloorPlanOpacity() {
+  const op = layerState.floorPlanOpacity;
+  return typeof op === 'number' && !Number.isNaN(op) ? op : 0.85;
+}
+window.getFloorPlanOpacity = getFloorPlanOpacity;
+
+function setFloorPlanOpacity(value) {
+  const op = Math.max(0.1, Math.min(1, parseFloat(value) || 0.85));
+  layerState.floorPlanOpacity = op;
+  try { localStorage.setItem(FLOOR_OPACITY_STORAGE_KEY, String(op)); } catch (_) { /* ignore */ }
+  const slider = document.getElementById('layerFloorOpacity');
+  const label = document.getElementById('layerFloorOpacityVal');
+  if (slider) slider.value = String(Math.round(op * 100));
+  if (label) label.textContent = Math.round(op * 100) + '%';
+  if (window.setFloorPlanLayerOpacity) window.setFloorPlanLayerOpacity(op);
+  if (window.MapGeoref && window.MapGeoref.setFloorPlanOpacity) window.MapGeoref.setFloorPlanOpacity(op);
+  if (window.setFloorPlanOpacity3D) window.setFloorPlanOpacity3D(op);
+}
+window.setFloorPlanOpacity = setFloorPlanOpacity;
+
+function initFloorPlanOpacityControl() {
+  try {
+    const saved = localStorage.getItem(FLOOR_OPACITY_STORAGE_KEY);
+    if (saved != null) {
+      const op = parseFloat(saved);
+      if (!Number.isNaN(op)) layerState.floorPlanOpacity = Math.max(0.1, Math.min(1, op));
+    }
+  } catch (_) { /* ignore */ }
+  setFloorPlanOpacity(getFloorPlanOpacity());
+}
 
 // ── Gas history buffer ─────────────────────────────────────────────────────
 const GAS_HISTORY_MAX = 60;  // Keep last 60 readings
@@ -65,6 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('2D map init failed:', e);
   }
   update3DViewAvailability();
+  initFloorPlanOpacityControl();
   // Always start on 2D — 3D is optional and fails without WebGL
   setView('2d');
   // Map container may not have final layout until after paint — refit once

@@ -266,6 +266,17 @@
         <span class="layer-dot" style="background:#8e8e93"></span>
         Satellite
       </label>
+      <div class="layer-opacity-block">
+        <div class="layer-opacity-label">
+          <span>Floor plan opacity</span>
+          <span id="layerFloorOpacityVal" class="layer-opacity-pct">85%</span>
+        </div>
+        <input type="range" id="layerFloorOpacity" class="layer-opacity-slider"
+               min="10" max="100" value="85" step="5"
+               aria-label="Floor plan opacity"
+               oninput="setFloorPlanOpacity(parseInt(this.value, 10) / 100)">
+        <p class="layer-opacity-hint">Lower over street/satellite. PNG with transparent background works best.</p>
+      </div>
       <label class="layer-item">
         <input type="checkbox" id="layerZones" checked onchange="toggleZoneLayer()">
         <span class="layer-dot" style="background:var(--red)"></span>
@@ -468,10 +479,10 @@
 <script src="/static/js/api.js"></script>
 <script src="/static/js/visualization/coordinate-service.js?v=1"></script>
 <script src="/static/js/visualization/tracker-canvas-layer.js?v=1"></script>
-<script src="/static/js/visualization/map-georef.js?v=11"></script>
-<script src="/static/js/visualization/map2d.js?v=14"></script>
-<script src="/static/js/visualization/map3d.js?v=12"></script>
-<script src="/static/js/dashboard.js?v=13"></script>
+<script src="/static/js/visualization/map-georef.js?v=12"></script>
+<script src="/static/js/visualization/map2d.js?v=15"></script>
+<script src="/static/js/visualization/map3d.js?v=13"></script>
+<script src="/static/js/dashboard.js?v=14"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js?v=7').catch(() => {});

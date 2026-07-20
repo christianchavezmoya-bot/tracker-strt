@@ -187,7 +187,10 @@ window.MapGeoref = (function () {
       map.setView([siteLat, siteLng], siteZoom, { animate: false });
       return null;
     }
-    geoImageLayer = L.imageOverlay(url, bounds, { opacity: 0.88, crossOrigin: true }).addTo(map);
+    geoImageLayer = L.imageOverlay(url, bounds, {
+      opacity: window.getFloorPlanOpacity ? window.getFloorPlanOpacity() : 0.85,
+      crossOrigin: true,
+    }).addTo(map);
     map.fitBounds(bounds, { padding: [32, 32], maxZoom: 17, animate: false });
     return geoImageLayer;
   }
@@ -265,6 +268,13 @@ window.MapGeoref = (function () {
     return false;
   }
 
+  function setFloorPlanOpacity(opacity) {
+    const op = Math.max(0.1, Math.min(1, parseFloat(opacity) || 0.85));
+    if (geoImageLayer && typeof geoImageLayer.setOpacity === 'function') {
+      geoImageLayer.setOpacity(op);
+    }
+  }
+
   return {
     loadSiteContext,
     loadGeorefPoints,
@@ -272,6 +282,7 @@ window.MapGeoref = (function () {
     georefImageBounds,
     createRegionalMap,
     overlayFloorPlan,
+    setFloorPlanOpacity,
     toggleStreetLayer,
     toggleSatelliteLayer,
     showRegionalBanner,
