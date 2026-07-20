@@ -57,9 +57,8 @@ Thumbs.db
 # Gunicorn
 gunicorn.conf.py
 
-# Migrations
-migrations/versions/*.py
-!migrations/versions/.gitkeep
+# Migrations — version scripts ARE tracked (required for `flask db upgrade`)
+# (do not ignore migrations/versions/*.py)
 
 # Reference folder (after verified integration)
 # reference/

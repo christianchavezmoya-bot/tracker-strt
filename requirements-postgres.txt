@@ -1,0 +1,4 @@
+# Optional PostgreSQL driver (not required for the default SQLite deployment).
+# Install when DATABASE_URL points at Postgres. See docs/POSTGRES.md.
+#   pip install -r requirements-postgres.txt
+psycopg2-binary>=2.9.10

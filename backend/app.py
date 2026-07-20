@@ -339,7 +339,9 @@ def create_app(test_config: dict = None) -> Flask:
         }
 
     # ── Phase 3: Positioning Engine ────────────────────────────────────────────
-    if not test_config:
+    # HOLO_SKIP_INIT=1 lets `flask db ...` CLI load the app without running the
+    # positioning bootstrap (which would create_all/start threads).
+    if not test_config and os.getenv("HOLO_SKIP_INIT") != "1":
         with app.app_context():
             _init_positioning(app)
 
@@ -430,20 +432,49 @@ def _init_positioning(app):
 
 
 def _ensure_schema_columns():
-    """Add newly introduced columns on existing SQLite DBs (create_all won't alter)."""
+    """Auto-add any model columns missing from existing tables so additive model
+    changes never break an existing SQLite DB (create_all can't ALTER, and adding
+    a column to a model without a migration is the common cause of
+    'no such column' on startup).
+
+    Handles the additive case generically for every mapped table. Drops, renames
+    and type changes still need a real migration. Set AUTO_SCHEMA_RECONCILE=0 to
+    disable (e.g. when managing schema with `flask db upgrade` — see docs/MIGRATIONS.md).
+    """
+    import os as _os
     import logging
     from sqlalchemy import text, inspect
     log = logging.getLogger(__name__)
+    if _os.getenv("AUTO_SCHEMA_RECONCILE", "1") != "1":
+        return
     try:
         insp = inspect(db.engine)
-        if "zones" in insp.get_table_names():
-            cols = {c["name"] for c in insp.get_columns("zones")}
-            if "rules_json" not in cols:
-                with db.engine.begin() as conn:
-                    conn.execute(text("ALTER TABLE zones ADD COLUMN rules_json TEXT"))
-                log.info("Added zones.rules_json column")
+        existing = set(insp.get_table_names())
+        dialect = db.engine.dialect
+        for table in db.metadata.sorted_tables:
+            if table.name not in existing:
+                continue  # brand-new tables are handled by create_all()
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have:
+                    continue
+                try:
+                    coltype = col.type.compile(dialect=dialect)
+                except Exception:
+                    coltype = "TEXT"
+                ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {coltype}'
+                sd = getattr(col, "server_default", None)
+                if sd is not None and getattr(sd, "arg", None) is not None:
+                    txt = getattr(sd.arg, "text", sd.arg)
+                    ddl += f" DEFAULT {txt}"
+                try:
+                    with db.engine.begin() as conn:
+                        conn.execute(text(ddl))
+                    log.info("Schema reconcile: added %s.%s", table.name, col.name)
+                except Exception as e:
+                    log.warning("Schema reconcile: could not add %s.%s (%s)", table.name, col.name, e)
     except Exception as e:
-        log.warning("Schema ensure skipped: %s", e)
+        log.warning("Schema reconcile skipped: %s", e)
 
 
 def _seed_demo_if_needed(app):

@@ -9,18 +9,17 @@ Jinja2==3.1.4
 # Database
 Flask-SQLAlchemy==3.1.1
 Flask-Migrate==4.0.7
-SQLAlchemy==2.0.35
-# SQLite is built-in; production Postgres:
-psycopg2-binary==2.9.9
+SQLAlchemy>=2.0.35,<2.1
+# SQLite is built-in. For Postgres: pip install -r requirements-postgres.txt (see docs/POSTGRES.md)
 
 # Authentication & Security
 Flask-JWT-Extended==4.6.0
 PyJWT==2.9.0
-argon2-cffi==23.1.0
+argon2-cffi>=23.1.0
 pyotp==2.9.0
 qrcode==7.4.2
 Werkzeug==3.0.4
-cryptography==43.0.3   # Optional Fernet backup encryption (BACKUP_ENCRYPT_KEY)
+cryptography>=43.0.3   # Optional Fernet backup encryption (BACKUP_ENCRYPT_KEY)
 
 # Networking
 paho-mqtt==1.6.1
@@ -28,7 +27,7 @@ requests==2.32.3
 
 # Serial / Hardware
 pyserial==3.5
-bleak==0.22.2        # Cross-platform BLE (Linux/macOS/Windows)
+bleak>=0.22.2        # Cross-platform BLE (Linux/macOS/Windows); scanner daemon only
 # Linux-only BLE (optional — breaks pip on Py3.12+ CI without libbluetooth-dev):
 # pip install -r requirements-hardware.txt
 
@@ -50,7 +49,7 @@ Flask-Compress==1.15
 # Utilities
 python-dotenv==1.0.1
 marshmallow==3.21.3
-Pillow==10.4.0          # For logo image processing
+Pillow>=10.4            # For logo image processing
 
 # Testing
 pytest==8.3.3
@@ -64,4 +63,4 @@ gunicorn==22.0.0
 # ─── Reference / Hardware modules (from tracker-strt reference/) ─────────────
 # These are imported directly from the reference/ folder, not pip-installed.
 # They are: uwb_positioning.py, uwb_serial_reader.py, floor_plan_mapper.py
-numpy==1.26.4   # Required by reference/uwb_positioning.py
+numpy>=1.26     # Required by reference/uwb_positioning.py (2.x on Py3.12+)
