@@ -125,6 +125,15 @@ function panCamera3D(dx, dy) {
   _camTargetZ -= (dx * sinT + dy * cosT) * panScale;
 }
 
+/** Mine grid metres → 3D world X/Z (aligned with 2D floor plan bounds). */
+function mineToWorldXZ(rx, ry) {
+  if (window.HoloCoords && window.HoloCoords.realToDisplay) {
+    const d = window.HoloCoords.realToDisplay(rx, ry);
+    return { x: d.mapX, z: d.mapY };
+  }
+  return { x: rx, z: ry };
+}
+
 function initMap3D() {
   const container = document.getElementById('map3d');
   const canvas = document.getElementById('threeCanvas');
@@ -281,7 +290,8 @@ function _syncInstancedTrackers() {
 
     _trackerIdToIndex.set(t.id, i);
     _indexToTrackerId[i] = t.id;
-    _dummy.position.set(t.pos_x, t.pos_z != null ? t.pos_z : 1, t.pos_y);
+    const w = mineToWorldXZ(t.pos_x, t.pos_y);
+    _dummy.position.set(w.x, t.pos_z != null ? t.pos_z : 1, w.z);
     _dummy.updateMatrix();
     _trackerInstanced.setMatrixAt(i, _dummy.matrix);
     _trackerInstanced.setColorAt(i, _hexToThreeColor(colorForTracker(t)));
@@ -325,25 +335,21 @@ function sync3DCameraFrom2D() {
   if (!window._map2d) return;
   const map = window._map2d;
   const center = map.getCenter();
-  if (typeof window.latLngToReal === 'function') {
-    const r = window.latLngToReal(center);
-    _camTargetX = r.x;
-    _camTargetZ = r.y;
-  } else if (typeof L !== 'undefined' && L.CRS && L.CRS.Simple) {
-    const pt = L.CRS.Simple.project(center);
-    _camTargetX = pt.x;
-    _camTargetZ = pt.y;
-  }
+  _camTargetX = center.lng;
+  _camTargetZ = center.lat;
   _camDist = clampCamDist(camDistForZoom2D(map.getZoom()));
   updateCamera3D();
   mark3DDirty();
 }
 
 function sync2DViewFrom3D() {
-  if (!window._map2d || typeof window.realToLatLng !== 'function') return;
-  const latlng = window.realToLatLng(_camTargetX, _camTargetZ);
+  if (!window._map2d) return;
   const zoom = Math.round(zoom2DForCamDist(_camDist) * 10) / 10;
-  window._map2d.setView(latlng, Math.max(MAP2D_MIN_ZOOM, Math.min(MAP2D_MAX_ZOOM, zoom)), { animate: false });
+  window._map2d.setView(
+    L.latLng(_camTargetZ, _camTargetX),
+    Math.max(MAP2D_MIN_ZOOM, Math.min(MAP2D_MAX_ZOOM, zoom)),
+    { animate: false }
+  );
   if (window.renderTrackerDots) window.renderTrackerDots();
 }
 
@@ -508,8 +514,8 @@ async function render3DZones() {
         side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      // Position box so its bottom is at zoneZ, center vertically
-      mesh.position.set(zone.pos_x, zoneZ + zoneHeight / 2, zone.pos_y);
+      const w = mineToWorldXZ(zone.pos_x, zone.pos_y);
+      mesh.position.set(w.x, zoneZ + zoneHeight / 2, w.z);
       mesh._zoneZ = zoneZ;
       mesh._zoneHeight = zoneHeight;
       window._scene.add(mesh);
@@ -547,20 +553,22 @@ async function render3DNodes() {
     _nodeMeshes3D = {};
 
     data.items.forEach(node => {
-      if (node.position && node.position.x != null && node.position.y != null) {
-        const geo = new THREE.CylinderGeometry(0.4, 0.5, 2.5, 8);
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x00e5ff,
-          emissive: 0x003344,
-          emissiveIntensity: 0.6,
-          roughness: 0.4,
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(node.position.x, 1.25, node.position.y);
-        mesh._nodeId = node.id;
-        window._scene.add(mesh);
-        _nodeMeshes3D[node.id] = mesh;
-      }
+      const rx = node.pos_x ?? node.position?.x;
+      const ry = node.pos_y ?? node.position?.y;
+      if (rx == null || ry == null) return;
+      const w = mineToWorldXZ(Number(rx), Number(ry));
+      const geo = new THREE.CylinderGeometry(0.4, 0.5, 2.5, 8);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x00e5ff,
+        emissive: 0x003344,
+        emissiveIntensity: 0.6,
+        roughness: 0.4,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(w.x, 1.25, w.z);
+      mesh._nodeId = node.id;
+      window._scene.add(mesh);
+      _nodeMeshes3D[node.id] = mesh;
     });
     mark3DDirty();
   } catch (_) { /* ignore */ }
@@ -588,7 +596,8 @@ function updateTrackerDot3D(tid, pos) {
     return;
   }
 
-  _dummy.position.set(pos.x, pos.z != null ? pos.z : 1, pos.y);
+  const w = mineToWorldXZ(pos.x, pos.y);
+  _dummy.position.set(w.x, pos.z != null ? pos.z : 1, w.z);
   _dummy.updateMatrix();
   _trackerInstanced.setMatrixAt(idx, _dummy.matrix);
   _trackerInstanced.instanceMatrix.needsUpdate = true;
@@ -616,7 +625,8 @@ window.addTrackerTrail = function(trackerId, positions) {
   // Build flat position array for BufferGeometry
   const posArray = [];
   positions.forEach(p => {
-    posArray.push(p.x, p.z !== undefined ? p.z : 1, p.y);
+    const w = mineToWorldXZ(p.x, p.y);
+    posArray.push(w.x, p.z !== undefined ? p.z : 1, w.z);
   });
 
   const geometry = new THREE.BufferGeometry();
@@ -650,8 +660,9 @@ window.clearTrackerTrail = function(trackerId) {
 function focus3DTracker(tid) {
   const t = window.trackers && window.trackers[tid];
   if (!t || t.pos_x === undefined) return;
-  _camTargetX = t.pos_x;
-  _camTargetZ = t.pos_y;
+  const w = mineToWorldXZ(t.pos_x, t.pos_y);
+  _camTargetX = w.x;
+  _camTargetZ = w.z;
   _camDist = clampCamDist(camDistForZoom2D(MAP2D_FOCUS_ZOOM));
   updateCamera3D();
   mark3DDirty();

@@ -56,6 +56,34 @@ window.HoloCoords = (function () {
     return { widthM: spanX, heightM: spanY, minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY };
   }
 
+  /**
+   * Mine metres → map display coordinates (matches Leaflet imageOverlay bounds).
+   * mapX → 2D lng / 3D X; mapY → 2D lat / 3D Z
+   */
+  function realToDisplay(rx, ry) {
+    const px = realToPixel(Number(rx), Number(ry));
+    const b = _state.bounds;
+    const spanX = Math.max(1, b.maxX - b.minX);
+    const spanY = Math.max(1, b.maxY - b.minY);
+    const iw = Math.max(1, _state.imageWidth);
+    const ih = Math.max(1, _state.imageHeight);
+    const mapX = b.minX + (px.x / iw) * spanX;
+    const mapY = b.maxY - (px.y / ih) * spanY;
+    return { mapX, mapY, x: mapX, y: mapY, z: mapY };
+  }
+
+  /** Inverse of realToDisplay for drag / pick on map. */
+  function displayToReal(mapX, mapY) {
+    const b = _state.bounds;
+    const spanX = Math.max(1, b.maxX - b.minX);
+    const spanY = Math.max(1, b.maxY - b.minY);
+    const iw = Math.max(1, _state.imageWidth);
+    const ih = Math.max(1, _state.imageHeight);
+    const px = ((mapX - b.minX) / spanX) * iw;
+    const py = ((b.maxY - mapY) / spanY) * ih;
+    return pixelToReal(px, py);
+  }
+
   function floorHeightForIndex(floorIndex) {
     const heights = [0, 20, 40];
     return heights[floorIndex] ?? 0;
@@ -73,6 +101,8 @@ window.HoloCoords = (function () {
     realToPixel,
     getFloorPlanUrl,
     getFloorExtents,
+    realToDisplay,
+    displayToReal,
     floorHeightForIndex,
     trackerOnFloor,
     getState: () => ({ ..._state }),

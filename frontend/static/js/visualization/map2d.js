@@ -320,12 +320,29 @@ function realToLatLng(rx, ry) {
     const ll = MapGeoref.pixelToLatLng(px.x, px.y);
     if (ll) return L.latLng(ll.lat, ll.lng);
   }
-  return L.CRS.Simple.unproject(L.point(rx, ry));
+  if (window.HoloCoords && window.HoloCoords.realToDisplay) {
+    const d = window.HoloCoords.realToDisplay(rx, ry);
+    return L.latLng(d.mapY, d.mapX);
+  }
+  const rb = getRealWorldBounds();
+  const px = realToPixel(rx, ry);
+  const spanX = rb.maxX - rb.minX || 1;
+  const spanY = rb.maxY - rb.minY || 1;
+  const lng = rb.minX + (px.x / _imageWidth) * spanX;
+  const lat = rb.maxY - (px.y / _imageHeight) * spanY;
+  return L.latLng(lat, lng);
 }
 
 function latLngToReal(latlng) {
-  const pt = L.CRS.Simple.project(latlng);
-  return { x: pt.x, y: pt.y };
+  if (window.HoloCoords && window.HoloCoords.displayToReal) {
+    return window.HoloCoords.displayToReal(latlng.lng, latlng.lat);
+  }
+  const rb = getRealWorldBounds();
+  const spanX = rb.maxX - rb.minX || 1;
+  const spanY = rb.maxY - rb.minY || 1;
+  const px = ((latlng.lng - rb.minX) / spanX) * _imageWidth;
+  const py = ((rb.maxY - latlng.lat) / spanY) * _imageHeight;
+  return pixelToReal(px, py);
 }
 
 function mapPointFromEvent(e) {

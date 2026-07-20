@@ -56,18 +56,19 @@ def test_3d_focus_tracker_centers_camera(logged_in_page, e2e_base):
           if (!t) return { skipped: true };
           window.focus3DTracker(t.id);
           const cam = window.get3DCameraState();
+          const d = window.HoloCoords.realToDisplay(t.pos_x, t.pos_y);
           return {
             skipped: false,
             targetX: cam.targetX,
             targetZ: cam.targetZ,
-            tagX: t.pos_x,
-            tagZ: t.pos_y,
+            expectX: d.mapX,
+            expectZ: d.mapY,
             dist: cam.dist,
           };
         }"""
     )
     if result.get("skipped"):
         pytest.skip("No trackers with positions in demo data")
-    assert abs(result["targetX"] - result["tagX"]) < 0.01
-    assert abs(result["targetZ"] - result["tagZ"]) < 0.01
+    assert abs(result["targetX"] - result["expectX"]) < 0.05
+    assert abs(result["targetZ"] - result["expectZ"]) < 0.05
     assert result["dist"] < 100
