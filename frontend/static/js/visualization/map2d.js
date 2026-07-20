@@ -37,6 +37,7 @@ let _viewMode = 'mine';
 let _floorPlanUrl = null;
 let _isGeoref = false;
 let _hasUploadedFloorPlan = false;
+const SETTINGS_COORD_URL = '/settings#floorplans/configure';
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initMap2D() {
@@ -311,7 +312,8 @@ async function loadCalibration() {
     const res = await API.get('/positioning/calibration');
     const data = await API.json(res);
     if (!res || !res.ok) return;
-    const cal = (data.status && (data.status['0'] || data.status[0])) || {};
+    const status = data.status || {};
+    const cal = _pickPrimaryCalibration(status);
     if (cal.calibrated && cal.calibration_points && cal.calibration_points.length >= 2) {
       _isCalibrated = true;
       _calibrationPoints = cal.calibration_points;
@@ -339,6 +341,21 @@ async function loadCalibration() {
   }
 }
 
+function _pickPrimaryCalibration(status) {
+  if (!status || typeof status !== 'object') return {};
+  const pick = (sid) => status[sid] || status[String(sid)];
+  const ordered = [0, ...Object.keys(status).map(k => parseInt(k, 10)).filter(n => !Number.isNaN(n) && n !== 0)];
+  for (const sid of ordered) {
+    const cal = pick(sid);
+    if (cal && (cal.is_georef || (cal.georef_points && cal.georef_points.length >= 2))) return cal;
+  }
+  for (const sid of ordered) {
+    const cal = pick(sid);
+    if (cal && cal.calibrated) return cal;
+  }
+  return pick(0) || pick(Object.keys(status)[0]) || {};
+}
+
 function showCalibrationBadge(calibrated) {
   const existing = document.getElementById('mapCalibrationBadge');
   if (existing) existing.remove();
@@ -363,13 +380,13 @@ function showCalibrationBadge(calibrated) {
     Object.assign(el.style, { background: 'rgba(255,255,255,0.94)', border: '1px solid rgba(255,149,0,0.55)', color: '#c93400', boxShadow: '0 2px 10px rgba(0,0,0,0.12)' });
     el.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Set map coordinates in Settings → Floor Plans';
   }
-  el.onclick = () => { window.location.href = '/settings?tab=floorplans&configure=1'; };
+  el.onclick = () => { window.location.href = SETTINGS_COORD_URL; };
   const mapEl = document.getElementById('map2d');
   if (mapEl) { mapEl.style.position = 'relative'; mapEl.appendChild(el); }
 }
 
 function enterCalibrationMode() {
-  window.location.href = '/settings?tab=floorplans&configure=1';
+  window.location.href = SETTINGS_COORD_URL;
 }
 
 function exitCalibrationMode() {
@@ -383,7 +400,7 @@ function exitCalibrationMode() {
 let _georefPickPoints = [];
 
 async function enterGeorefMode() {
-  window.location.href = '/settings?tab=floorplans&configure=1';
+  window.location.href = SETTINGS_COORD_URL;
 }
 
 function exitGeorefMode() {

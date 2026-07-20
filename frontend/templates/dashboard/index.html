@@ -231,7 +231,7 @@
       <button class="tool-btn" onclick="window.switchToMineView && window.switchToMineView()" title="Mine map (metre grid)" id="mineViewBtn" aria-label="Mine map view">
         <i class="fa-solid fa-map" aria-hidden="true"></i>
       </button>
-      <button class="tool-btn" onclick="window.location.href='/settings?tab=floorplans&configure=1'" title="Configure map coordinates (Settings → Floor Plans)" id="georefBtn" aria-label="Configure map coordinates">
+      <button class="tool-btn" onclick="window.location.href='/settings#floorplans/configure'" title="Configure map coordinates (Settings → Floor Plans)" id="georefBtn" aria-label="Configure map coordinates">
         <i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i>
       </button>
       <button class="tool-btn" onclick="window.enterNodePlacementMode()" title="Place Nodes" id="nodePlacementBtn" aria-label="Place anchors">
@@ -469,10 +469,10 @@
 <script src="/static/vendor/leaflet/leaflet.js"></script>
 <script src="/static/vendor/three/three.min.js"></script>
 <script src="/static/js/api.js"></script>
-<script src="/static/js/visualization/map-georef.js?v=9"></script>
-<script src="/static/js/visualization/map2d.js?v=9"></script>
-<script src="/static/js/visualization/map3d.js?v=9"></script>
-<script src="/static/js/dashboard.js?v=9"></script>
+<script src="/static/js/visualization/map-georef.js?v=10"></script>
+<script src="/static/js/visualization/map2d.js?v=10"></script>
+<script src="/static/js/visualization/map3d.js?v=10"></script>
+<script src="/static/js/dashboard.js?v=10"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js?v=7').catch(() => {});

@@ -15,6 +15,10 @@ def test_trackers_page(client):
 def test_settings_page(client):
     res = client.get("/settings")
     assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert "applySettingsRoute" in html
+    assert "Configure coordinates" in html
+    assert "openCoordWizard" in html
 
 
 def test_integrations_page(client):

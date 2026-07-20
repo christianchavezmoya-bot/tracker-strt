@@ -83,6 +83,8 @@
 .fp-wizard-status { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; padding:3px 8px; border-radius:10px; }
 .fp-wizard-status.ok { color:var(--green); background:rgba(105,255,71,.12); }
 .fp-wizard-status.pending { color:var(--yellow,#ffb020); background:rgba(255,176,32,.12); }
+.fp-row-actions { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.fp-row-actions .btn { padding:6px 10px; font-size:11px; white-space:nowrap; }
 </style>
 <style>.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)}</style>
 {% endblock %}
@@ -462,7 +464,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/floor-plan-coord-wizard.js?v=9"></script>
+<script src="/static/js/floor-plan-coord-wizard.js?v=10"></script>
 <script>
 
 'use strict';
@@ -472,23 +474,66 @@ let hasChanges = false;
 let pendingChanges = {};
 
 document.addEventListener('DOMContentLoaded', async () => {
-  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  if (!API.isLoggedIn()) {
+    const next = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
+    window.location.href = '/login?next=' + next;
+    return;
+  }
   await loadUserInfo();
   await Promise.all([loadSettings(), loadLogo()]);
   renderAllSections();
   applyLogo();
+  await applySettingsRoute();
+});
 
+window.addEventListener('hashchange', () => { applySettingsRoute(); });
+
+async function applySettingsRoute() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get('tab') === 'floorplans') {
-    switchTab('floorplans');
-    await loadFloorPlans();
-    const cfg = params.get('configure');
-    if (cfg) {
-      const id = cfg === '1' ? (floorPlans[0]?.id) : parseInt(cfg, 10);
-      if (id) openCoordWizard(id);
+  const hash = (window.location.hash || '').replace(/^#/, '');
+  let tab = params.get('tab');
+  let configure = params.get('configure');
+
+  if (hash) {
+    const parts = hash.split('/').filter(Boolean);
+    const hashTab = parts[0];
+    const knownTabs = ['business', 'alerts', 'system', 'appearance', 'floorplans', 'profile', 'location', 'integrations'];
+    if (knownTabs.includes(hashTab)) tab = hashTab;
+    if (hashTab === 'floorplans' && parts[1] === 'configure') {
+      configure = parts[2] || 'first';
     }
   }
-});
+
+  if (!tab) return;
+
+  switchTab(tab);
+
+  if (tab === 'floorplans') {
+    await loadFloorPlans();
+    if (configure) await openCoordWizardFromParam(configure);
+    document.getElementById('section-floorplans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (tab === 'profile') {
+    loadProfileSecurity();
+  } else if (tab === 'location') {
+    loadLocationCore();
+  } else if (tab === 'integrations') {
+    loadIntegrationsStatus();
+  }
+}
+
+async function openCoordWizardFromParam(cfg) {
+  if (!window.FpCoordWizard) {
+    showToast('Coordinate wizard failed to load — hard refresh the page', 'error');
+    return;
+  }
+  const id = (cfg === '1' || cfg === 'first') ? floorPlans[0]?.id : parseInt(cfg, 10);
+  if (!id) {
+    showToast('Upload a floor plan first, then configure coordinates', 'warning');
+    return;
+  }
+  await new Promise(r => setTimeout(r, 80));
+  openCoordWizard(id);
+}
 
 async function loadUserInfo() {
   const res = await API.get('/auth/me');
@@ -1024,10 +1069,10 @@ function renderFloorPlanTable() {
       <td class="mono">${f.z_index}</td>
       <td>${f.is_visible ? '<i class="fa-solid fa-eye" style="color:var(--green)"></i>' : '<i class="fa-solid fa-eye-slash" style="color:var(--text-muted)"></i>'}</td>
       <td>
-        <div class="action-btns">
-          <button class="action-btn" onclick="openCoordWizard(${f.id})" title="Configure GPS coordinates"><i class="fa-solid fa-location-crosshairs"></i></button>
+        <div class="fp-row-actions">
+          <button class="btn btn-secondary" onclick="editFp(${f.id})" title="Edit map name and appearance"><i class="fa-solid fa-pen"></i> Edit map</button>
+          <button class="btn btn-primary" onclick="openCoordWizard(${f.id})" title="Set GPS coordinates for this plan"><i class="fa-solid fa-location-crosshairs"></i> Configure coordinates</button>
           <button class="action-btn" onclick="toggleFpVisibility(${f.id})" title="Toggle visibility"><i class="fa-solid fa-eye${f.is_visible ? '-slash' : ''}"></i></button>
-          <button class="action-btn" onclick="editFp(${f.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
           <button class="action-btn danger" onclick="deleteFp(${f.id}, '${esc(f.name)}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
         </div>
       </td>
@@ -1037,7 +1082,9 @@ function renderFloorPlanTable() {
 
 function openCoordWizard(sectionId) {
   const fp = floorPlans.find(f => f.id === sectionId);
-  if (!fp) { showToast('Floor plan not found', 'error'); return; }
+  if (!fp) { showToast('Floor plan not found — refresh the page', 'error'); return; }
+  if (!window.FpCoordWizard) { showToast('Coordinate wizard failed to load — hard refresh', 'error'); return; }
+  switchTab('floorplans');
   const cal = fpCalibrationStatus[sectionId] || fpCalibrationStatus[String(sectionId)] || {};
   const existing = cal.georef_points && cal.georef_points.length >= 2 ? cal.georef_points : null;
   window.FpCoordWizard.open(fp, {
@@ -1045,6 +1092,7 @@ function openCoordWizard(sectionId) {
     onComplete: async () => { await loadFloorPlans(); },
   });
 }
+window.openCoordWizard = openCoordWizard;
 
 function openUploadModal() {
   selectedFpFile = null;
@@ -1129,10 +1177,16 @@ async function uploadFloorPlan() {
   formData.append('color_hex', document.getElementById('fpColor').value);
   formData.append('z_index', document.getElementById('fpZIndex').value);
   const res = await API.postForm('/settings/floor-plans', formData);
+  const data = await API.json(res);
   btn.disabled = false;
   document.getElementById('fpUploadBtnText').textContent = 'Upload & Create';
-  if (res && res.ok) { closeUploadModal(); showToast('Floor plan uploaded', 'success'); await loadFloorPlans(); }
-  else {
+  if (res && res.ok) {
+    closeUploadModal();
+    showToast('Floor plan uploaded — configure GPS coordinates next', 'success');
+    await loadFloorPlans();
+    const newId = data?.section?.id;
+    if (newId) openCoordWizard(newId);
+  } else {
     const d = await API.json(res);
     const msg = d && d.error ? d.error : (res && res.status === 404 ? 'Upload API not found — refresh the page and try again' : (res ? res.statusText : 'Network error'));
     showToast('Upload failed: ' + msg, 'error');
@@ -1163,7 +1217,7 @@ function editFp(id) {
   clearFpSelection();
   document.getElementById('fpUploadBtn').disabled = false;
   document.getElementById('fpUploadBtnText').textContent = 'Save Changes';
-  document.getElementById('uploadModalTitle').innerHTML = '<i class="fa-solid fa-pen" style="color:var(--cyan)"></i> Edit Floor Plan';
+  document.getElementById('uploadModalTitle').innerHTML = '<i class="fa-solid fa-pen" style="color:var(--cyan)"></i> Edit Map';
   document.getElementById('uploadModal').dataset.editingId = id;
   document.getElementById('uploadModal').style.display = 'flex';
 }
