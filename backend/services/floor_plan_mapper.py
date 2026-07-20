@@ -46,6 +46,8 @@ class FloorPlanMapperService:
         self._db = db_session
         # section_id → FloorPlanMapper instance
         self._mappers: Dict[int, _FPM] = {}
+        # section_id → list of {pixel_x, pixel_y, lat, lng}
+        self._georef_points: Dict[int, List[Dict]] = {}
         self._load_all()
 
     def _load_all(self):
@@ -80,7 +82,11 @@ class FloorPlanMapperService:
                 pt["real_x"], pt["real_y"],
             )
         self._mappers[section_id] = mapper
-        logger.info(f"Loaded floor plan mapper for section {section_id}: calibrated={mapper.is_calibrated}")
+        self._georef_points[section_id] = data.get("georef_points", [])
+        logger.info(
+            f"Loaded floor plan mapper for section {section_id}: "
+            f"calibrated={mapper.is_calibrated}, georef={len(self._georef_points[section_id])} pts"
+        )
 
     def _save(self, section_id: int):
         """Persist mapper calibration to the Setting table."""
@@ -96,6 +102,8 @@ class FloorPlanMapperService:
             "calibration_points": mapper.get_calibration_points(),
             "is_calibrated": mapper.is_calibrated,
             "calibration_error": mapper.calculate_calibration_error(),
+            "georef_points": self._georef_points.get(section_id, []),
+            "is_georef": len(self._georef_points.get(section_id, [])) >= 2,
         }
 
         key = _setting_key(section_id)
@@ -169,6 +177,67 @@ class FloorPlanMapperService:
         mapper = self._mappers.get(section_id)
         return mapper.get_calibration_points() if mapper else []
 
+    def get_georef_points(self, section_id: int = 0) -> List[Dict]:
+        return list(self._georef_points.get(section_id, []))
+
+    def is_georef(self, section_id: int = 0) -> bool:
+        return len(self._georef_points.get(section_id, [])) >= 2
+
+    def set_georef_points(self, section_id: int, points: List[Dict]) -> None:
+        """Replace GPS tie-points (pixel ↔ lat/lng) for a section."""
+        cleaned = []
+        for pt in points:
+            cleaned.append({
+                "pixel_x": float(pt["pixel_x"]),
+                "pixel_y": float(pt["pixel_y"]),
+                "lat": float(pt["lat"]),
+                "lng": float(pt["lng"]),
+            })
+        self._georef_points[section_id] = cleaned
+        self.get_mapper(section_id)  # ensure section row exists
+        self._save(section_id)
+
+    @staticmethod
+    def _pixel_to_geo(points: List[Dict], px: float, py: float) -> Optional[Tuple[float, float]]:
+        """Affine pixel → (lat, lng) from georef tie-points."""
+        if len(points) < 2:
+            return None
+        # Reuse metre-style affine with lat/lng as targets
+        fake = [{"pixel_x": p["pixel_x"], "pixel_y": p["pixel_y"],
+                 "real_x": p["lat"], "real_y": p["lng"]} for p in points]
+        tmp = _FPM()
+        for pt in fake:
+            tmp.add_calibration_point(pt["pixel_x"], pt["pixel_y"], pt["real_x"], pt["real_y"])
+        if not tmp.is_calibrated:
+            return None
+        lat, lng = tmp.pixel_to_real(px, py)
+        return lat, lng
+
+    def pixel_to_latlng(self, pixel_x: float, pixel_y: float,
+                        section_id: int = 0) -> Optional[Tuple[float, float]]:
+        pts = self._georef_points.get(section_id, [])
+        return self._pixel_to_geo(pts, pixel_x, pixel_y)
+
+    def georef_bounds(self, section_id: int, image_width: float, image_height: float) -> Optional[Dict]:
+        """Lat/lng bounds [[south, west], [north, east]] for image overlay."""
+        pts = self._georef_points.get(section_id, [])
+        if len(pts) < 2:
+            return None
+        corners = [(0, 0), (image_width, 0), (image_width, image_height), (0, image_height)]
+        lats, lngs = [], []
+        for px, py in corners:
+            ll = self._pixel_to_geo(pts, px, py)
+            if not ll:
+                return None
+            lats.append(ll[0])
+            lngs.append(ll[1])
+        return {
+            "south": min(lats),
+            "north": max(lats),
+            "west": min(lngs),
+            "east": max(lngs),
+        }
+
     def get_calibration_status(self) -> Dict:
         """Return calibration status for all sections."""
         from backend.models import Setting
@@ -186,6 +255,8 @@ class FloorPlanMapperService:
                 status[sid] = {
                     "calibrated": data.get("is_calibrated", False),
                     "calibration_points": pts,
+                    "georef_points": data.get("georef_points", []),
+                    "is_georef": data.get("is_georef", len(data.get("georef_points", [])) >= 2),
                     "error": data.get("calibration_error"),
                     "points": len(pts),
                 }
@@ -193,6 +264,8 @@ class FloorPlanMapperService:
                 status[sid] = {
                     "calibrated": False,
                     "calibration_points": [],
+                    "georef_points": [],
+                    "is_georef": False,
                     "error": None,
                     "points": 0,
                 }

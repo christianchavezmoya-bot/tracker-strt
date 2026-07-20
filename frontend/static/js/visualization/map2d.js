@@ -33,26 +33,26 @@ let _placementGhost = null;
 let _unplacedNodes = [];   // nodes fetched from API, not yet on map
 let _mapMode = 'normal';
 
+let _viewMode = 'mine';
+let _floorPlanUrl = null;
+
 // ── Init ──────────────────────────────────────────────────────────────────────
-function initMap2D() {
-  window._map2d = L.map('map2d', {
-    center: [25, 12], zoom: 0, zoomControl: false,
-    crs: L.CRS.Simple, minZoom: -2, maxZoom: 22, attributionControl: false,
-  });
+async function initMap2D() {
+  if (window.MapGeoref) await MapGeoref.loadSiteContext();
+  await loadCalibration();
 
-  L.control.zoom({ position: 'bottomright' }).addTo(window._map2d);
-  L.control.scale({ imperial: false, position: 'bottomleft', maxWidth: 200 }).addTo(window._map2d);
-
-  loadCalibration().then(() => {
+  if (_isCalibrated) {
+    initMineMapCore();
     loadFloorPlanImage();
     renderZones();
     renderNodeMarkers();
-  });
+  } else {
+    await initRegionalMapView();
+  }
 
   window._map2d.on('click', onMapClick);
   window._map2d.on('mousemove', onMapMouseMove);
 
-  // Expose for dashboard.js / other callers
   window.renderTrackerDots = renderTrackerDots;
   window.updateTrackerDot = updateTrackerDot;
   window.zoomToPosition = zoomToPosition;
@@ -61,11 +61,114 @@ function initMap2D() {
   window.toggleSectionLayer = toggleSectionLayer;
   window.toggleGridLayer = toggleGridLayer;
   window.enterCalibrationMode = enterCalibrationMode;
+  window.enterGeorefMode = enterGeorefMode;
   window.enterNodePlacementMode = enterNodePlacementMode;
   window.exitPlacementMode = exitPlacementMode;
   window.renderNodeMarkers = renderNodeMarkers;
   window.refreshUnplacedNodes = loadUnplacedNodes;
   window.fitMapToFloorPlan = fitMapToFloorPlan;
+  window.switchToRegionalView = switchToRegionalView;
+  window.switchToMineView = switchToMineView;
+  window.toggleStreetMapLayer = (show) => MapGeoref && MapGeoref.toggleStreetLayer(show);
+  window.toggleSatelliteMapLayer = (show) => MapGeoref && MapGeoref.toggleSatelliteLayer(show);
+}
+
+function destroyMap2D() {
+  if (window._map2d) {
+    try {
+      window._map2d.off();
+      window._map2d.remove();
+    } catch (e) { /* ignore */ }
+    window._map2d = null;
+  }
+  _floorPlanLayer = null;
+  _zoneLayers = [];
+  _sectionLayers = [];
+  _gridLines = [];
+  _nodeMarkers = [];
+}
+
+function initMineMapCore() {
+  destroyMap2D();
+  if (window.MapGeoref) {
+    MapGeoref.setViewMode('mine');
+    MapGeoref.hideRegionalBanner();
+  }
+  _viewMode = 'mine';
+  const mapEl = document.getElementById('map2d');
+  if (mapEl) mapEl.innerHTML = '';
+
+  window._map2d = L.map('map2d', {
+    center: [25, 12], zoom: 0, zoomControl: false,
+    crs: L.CRS.Simple, minZoom: -2, maxZoom: 22, attributionControl: false,
+  });
+
+  L.control.zoom({ position: 'bottomright' }).addTo(window._map2d);
+  L.control.scale({ imperial: false, position: 'bottomleft', maxWidth: 200 }).addTo(window._map2d);
+}
+
+async function resolveFloorPlanUrl() {
+  try {
+    const res = await API.get('/zones/sections');
+    const data = await API.json(res);
+    if (res && res.ok && data.items && data.items.length > 0 && data.items[0].image_url) {
+      return data.items[0].image_url;
+    }
+  } catch (e) { /* ignore */ }
+  return '/static/assets/floor-plan-placeholder.png';
+}
+
+async function preloadFloorPlanDimensions(url) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      _imageWidth = img.naturalWidth || 1000;
+      _imageHeight = img.naturalHeight || 3000;
+      resolve();
+    };
+    img.onerror = () => resolve();
+    img.src = url;
+  });
+}
+
+async function initRegionalMapView() {
+  destroyMap2D();
+  if (!window.MapGeoref) return;
+  MapGeoref.setViewMode('regional');
+  _viewMode = 'regional';
+  _floorPlanUrl = await resolveFloorPlanUrl();
+  await preloadFloorPlanDimensions(_floorPlanUrl);
+  window._map2d = MapGeoref.createRegionalMap();
+  if (!window._map2d) return;
+
+  MapGeoref.overlayFloorPlan(window._map2d, _floorPlanUrl, _imageWidth, _imageHeight);
+  const center = MapGeoref.getSiteCenter();
+  if (MapGeoref.isGeoref()) {
+    MapGeoref.showRegionalBanner('Georeferenced plan on street map — use Layers to toggle basemap.');
+  } else {
+    MapGeoref.showRegionalBanner(
+      `Site context (${center.country}) — upload a floor plan, then Georeference with GPS corners from your survey drawing.`
+    );
+  }
+}
+
+async function switchToRegionalView() {
+  await initRegionalMapView();
+  if (window.syncLayerCheckboxes) window.syncLayerCheckboxes();
+}
+
+async function switchToMineView() {
+  if (!_isCalibrated) {
+    if (window.showToast) window.showToast('Calibrate mine grid (metres) first — or stay in Site map view.', 'warning');
+    return;
+  }
+  initMineMapCore();
+  await loadCalibration();
+  loadFloorPlanImage();
+  renderZones();
+  renderNodeMarkers();
+  if (window.renderTrackerDots) window.renderTrackerDots();
+  fitMapToFloorPlan();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -201,6 +304,9 @@ async function loadCalibration() {
     } else {
       _isCalibrated = false;
       showCalibrationBadge(false);
+    }
+    if (cal.georef_points && cal.georef_points.length >= 2 && window.MapGeoref) {
+      MapGeoref.loadGeorefPoints(cal.georef_points);
     }
   } catch (e) {
     console.warn('Could not load calibration:', e);
@@ -379,6 +485,169 @@ function exitCalibrationMode() {
   document.getElementById('calibrationForm')?.remove();
   document.getElementById('coordReadout')?.remove();
   showCalibrationBadge(_isCalibrated);
+}
+
+// ── Georeference (GPS tie-points for street map overlay) ─────────────────────
+let _georefPickPoints = [];
+
+async function enterGeorefMode() {
+  if (_isNodePlacementMode) exitPlacementMode();
+  if (_mapMode === 'calibrate') exitCalibrationMode();
+  _mapMode = 'georef';
+  _georefPickPoints = [];
+  document.getElementById('georefForm')?.remove();
+
+  if (_viewMode === 'regional') {
+    initMineMapCore();
+    _viewMode = 'mine';
+    _floorPlanUrl = await resolveFloorPlanUrl();
+    await preloadFloorPlanDimensions(_floorPlanUrl);
+    loadFloorPlanFromURL(_floorPlanUrl);
+    fitMapToFloorPlan();
+  }
+
+  const mapEl = document.getElementById('map2d');
+  if (!mapEl) return;
+  mapEl.style.position = 'relative';
+
+  const panel = document.createElement('div');
+  panel.id = 'georefForm';
+  Object.assign(panel.style, {
+    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+    zIndex: '1001', background: 'rgba(8,15,30,0.97)',
+    border: '1px solid rgba(10,132,255,0.35)', borderRadius: '14px', padding: '20px 24px',
+    width: '380px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(12px)', fontFamily: 'var(--font-body, system-ui)',
+  });
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:700;color:#0a84ff">
+        <i class="fa-solid fa-earth-americas"></i> Georeference (GPS)
+      </div>
+      <button id="georefCloseBtn" type="button" style="background:none;border:none;color:var(--text-muted,#888);cursor:pointer;font-size:14px">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted,#aaa);margin:0 0 14px;line-height:1.6">
+      Click <strong style="color:#fff">2 corners</strong> on your floor plan (e.g. survey lat/long labels on the drawing).
+      Enter the matching <strong>latitude</strong> and <strong>longitude</strong> for each.
+    </p>
+    <div id="georefStep1">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted,#888);margin-bottom:8px">POINT 1</div>
+      <div id="georef1Info" style="font-size:11px;color:#0a84ff;margin-bottom:8px">
+        <i class="fa-solid fa-hand-pointer"></i> Click a corner on the plan…
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Latitude</label>
+          <input id="georefLat1" type="number" step="0.000001" placeholder="-32.214525"
+            style="width:100%;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Longitude</label>
+          <input id="georefLng1" type="number" step="0.000001" placeholder="149.808612"
+            style="width:100%;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;box-sizing:border-box">
+        </div>
+      </div>
+      <button id="georefSave1Btn" type="button" disabled style="width:100%;padding:8px;border-radius:6px;font-size:12px;font-weight:600">Save Point 1</button>
+    </div>
+    <div id="georefStep2" style="display:none;margin-top:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted,#888);margin-bottom:8px">POINT 2</div>
+      <div id="georef2Info" style="font-size:11px;color:#0a84ff;margin-bottom:8px">Click second corner…</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Latitude</label>
+          <input id="georefLat2" type="number" step="0.000001" placeholder="-32.340944"
+            style="width:100%;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-muted,#888);display:block;margin-bottom:4px">Longitude</label>
+          <input id="georefLng2" type="number" step="0.000001" placeholder="149.759408"
+            style="width:100%;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);border-radius:6px;padding:7px 10px;color:#fff;font-size:13px;box-sizing:border-box">
+        </div>
+      </div>
+      <button id="georefSave2Btn" type="button" disabled style="width:100%;padding:8px;border-radius:6px;font-size:12px;font-weight:600">Save &amp; show on street map</button>
+    </div>
+    <div id="georefDone" style="display:none;text-align:center;padding:12px 0;color:#30d158;font-size:13px;font-weight:600">
+      Georeference saved — switching to site map…
+    </div>
+  `;
+  mapEl.appendChild(panel);
+  panel.querySelector('#georefCloseBtn').onclick = exitGeorefMode;
+
+  const enableGeorefBtn = (latId, lngId, btnId) => {
+    const btn = document.getElementById(btnId);
+    const enable = () => {
+      const ok = document.getElementById(latId).value.trim() && document.getElementById(lngId).value.trim();
+      btn.disabled = !ok;
+      btn.style.background = ok ? 'rgba(10,132,255,0.2)' : 'rgba(10,132,255,0.08)';
+      btn.style.color = ok ? '#0a84ff' : '#666';
+      btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+      btn.style.border = '1px solid rgba(10,132,255,0.35)';
+    };
+    document.getElementById(latId).addEventListener('input', enable);
+    document.getElementById(lngId).addEventListener('input', enable);
+    return btn;
+  };
+
+  const btn1 = enableGeorefBtn('georefLat1', 'georefLng1', 'georefSave1Btn');
+  btn1.onclick = () => {
+    _georefPickPoints[0] = {
+      ...(_georefPickPoints[0] || {}),
+      lat: parseFloat(document.getElementById('georefLat1').value),
+      lng: parseFloat(document.getElementById('georefLng1').value),
+    };
+    document.getElementById('georefStep1').style.opacity = '0.5';
+    document.getElementById('georefStep2').style.display = 'block';
+    const btn2 = enableGeorefBtn('georefLat2', 'georefLng2', 'georefSave2Btn');
+    btn2.onclick = async () => {
+      _georefPickPoints[1] = {
+        ...(_georefPickPoints[1] || {}),
+        lat: parseFloat(document.getElementById('georefLat2').value),
+        lng: parseFloat(document.getElementById('georefLng2').value),
+      };
+      const p1 = _georefPickPoints[0];
+      const p2 = _georefPickPoints[1];
+      if (!p1 || !p2 || p1.pixel_x == null || p2.pixel_x == null) {
+        if (window.showToast) window.showToast('Click both corners on the plan first.', 'error');
+        return;
+      }
+      const ok = await MapGeoref.saveGeorefPoints([
+        { pixel_x: p1.pixel_x, pixel_y: p1.pixel_y, lat: p1.lat, lng: p1.lng },
+        { pixel_x: p2.pixel_x, pixel_y: p2.pixel_y, lat: p2.lat, lng: p2.lng },
+      ]);
+      if (ok) {
+        document.getElementById('georefStep2').style.display = 'none';
+        document.getElementById('georefDone').style.display = 'block';
+        setTimeout(async () => {
+          exitGeorefMode();
+          await switchToRegionalView();
+          if (window.showToast) window.showToast('Floor plan placed on street map', 'success');
+        }, 800);
+      } else if (window.showToast) {
+        window.showToast('Failed to save georeference', 'error');
+      }
+    };
+  };
+}
+
+function exitGeorefMode() {
+  _mapMode = 'normal';
+  document.getElementById('georefForm')?.remove();
+}
+
+function _handleGeorefMapClick(e) {
+  const pt = mapPointFromEvent(e);
+  const px = mapUnitsToPixel(pt.x, pt.y);
+  if (!_georefPickPoints[0] || _georefPickPoints[0].pixel_x == null) {
+    _georefPickPoints[0] = { pixel_x: px.x, pixel_y: px.y };
+    const info = document.getElementById('georef1Info');
+    if (info) info.innerHTML = `<i class="fa-solid fa-check" style="color:#30d158"></i> Corner 1 at pixel (${px.x.toFixed(0)}, ${px.y.toFixed(0)}) — enter lat/lng`;
+  } else if (!_georefPickPoints[1] || _georefPickPoints[1].pixel_x == null) {
+    _georefPickPoints[1] = { pixel_x: px.x, pixel_y: px.y };
+    const info = document.getElementById('georef2Info');
+    if (info) info.innerHTML = `<i class="fa-solid fa-check" style="color:#30d158"></i> Corner 2 at pixel (${px.x.toFixed(0)}, ${px.y.toFixed(0)}) — enter lat/lng`;
+  }
 }
 
 async function saveCalibration() {
@@ -666,6 +935,11 @@ function onMapClick(e) {
     _placeZoneAt(e.latlng);
     return;
   }
+  if (_mapMode === 'georef') {
+    _handleGeorefMapClick(e);
+    return;
+  }
+  if (_viewMode === 'regional') return;
   const pt = mapPointFromEvent(e);
   const px = pt.x;
   const py = pt.y;

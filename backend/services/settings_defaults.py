@@ -27,6 +27,24 @@ SETTING_DEFAULTS: dict[str, dict] = {
         "scope": SettingScope.ALERT,
         "label": "No Movement Timeout (min)",
     },
+    "site_lat": {
+        "value": "-25.2744",
+        "value_type": "float",
+        "scope": SettingScope.BUSINESS,
+        "label": "Site latitude (regional map)",
+    },
+    "site_lng": {
+        "value": "133.7751",
+        "value_type": "float",
+        "scope": SettingScope.BUSINESS,
+        "label": "Site longitude (regional map)",
+    },
+    "site_zoom": {
+        "value": "5",
+        "value_type": "int",
+        "scope": SettingScope.BUSINESS,
+        "label": "Regional map zoom",
+    },
 }
 
 

@@ -15,7 +15,7 @@ let filters = { people: true, machines: true, sensors: true, offline: true, aler
 
 // ── Layer panel state ───────────────────────────────────────────────────────
 let layerPanelOpen = false;
-let layerState = { zones: true, sections: true, grid: true, trackers: true, heatmap: true, proximity: true };
+let layerState = { streetMap: true, satelliteMap: false, zones: true, sections: true, grid: true, trackers: true, heatmap: true, proximity: true };
 // Expose globally so map2d.js / map3d.js can read it
 window.layerState = layerState;
 window.proximityMeters = 2.0;
@@ -583,11 +583,41 @@ function toggleLayers() {
 
 // Sync layer checkboxes with current state
 function syncLayerCheckboxes() {
-  const checks = ['zones', 'sections', 'grid', 'trackers', 'heatmap', 'proximity'];
-  checks.forEach(name => {
-    const el = document.getElementById('layer' + name.charAt(0).toUpperCase() + name.slice(1));
-    if (el) el.checked = layerState[name];
+  const ids = {
+    streetMap: 'layerStreetMap',
+    satelliteMap: 'layerSatellite',
+    zones: 'layerZones',
+    sections: 'layerSections',
+    grid: 'layerGrid',
+    trackers: 'layerTrackers',
+    heatmap: 'layerHeatmap',
+    proximity: 'layerProximity',
+  };
+  Object.keys(ids).forEach(name => {
+    const el = document.getElementById(ids[name]);
+    if (el) el.checked = layerState[name] !== false;
   });
+}
+window.syncLayerCheckboxes = syncLayerCheckboxes;
+
+function toggleStreetMapLayer() {
+  layerState.streetMap = document.getElementById('layerStreetMap')?.checked !== false;
+  if (window.toggleStreetMapLayer) window.toggleStreetMapLayer(layerState.streetMap);
+  if (layerState.streetMap && document.getElementById('layerSatellite')?.checked) {
+    document.getElementById('layerSatellite').checked = false;
+    layerState.satelliteMap = false;
+    if (window.toggleSatelliteMapLayer) window.toggleSatelliteMapLayer(false);
+  }
+}
+
+function toggleSatelliteMapLayer() {
+  layerState.satelliteMap = document.getElementById('layerSatellite')?.checked === true;
+  if (window.toggleSatelliteMapLayer) window.toggleSatelliteMapLayer(layerState.satelliteMap);
+  if (layerState.satelliteMap && document.getElementById('layerStreetMap')) {
+    document.getElementById('layerStreetMap').checked = false;
+    layerState.streetMap = false;
+    if (window.toggleStreetMapLayer) window.toggleStreetMapLayer(false);
+  }
 }
 
 function toggleZoneLayer() {

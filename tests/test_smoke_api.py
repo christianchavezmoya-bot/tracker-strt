@@ -315,3 +315,31 @@ def test_floor_plan_upload(client, admin_headers):
     body = res.get_json()
     assert body.get("section", {}).get("name") == "Smoke Test Section"
     assert body.get("section", {}).get("image_url", "").startswith("/static/assets/floor-plans/")
+
+
+def test_map_context_endpoint(client, admin_headers):
+    res = client.get("/api/positioning/map-context", headers=admin_headers)
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "site_lat" in data
+    assert "site_lng" in data
+    assert abs(data["site_lat"]) <= 90
+    assert abs(data["site_lng"]) <= 180
+
+
+def test_georef_points_save(client, admin_headers):
+    res = client.post(
+        "/api/positioning/calibration",
+        headers=admin_headers,
+        json={
+            "section_id": 0,
+            "georef_points": [
+                {"pixel_x": 0, "pixel_y": 0, "lat": -32.214525, "lng": 149.808612},
+                {"pixel_x": 1000, "pixel_y": 3500, "lat": -32.340944, "lng": 149.759408},
+            ],
+        },
+    )
+    assert res.status_code == 200, res.get_data(as_text=True)
+    data = res.get_json()
+    assert data.get("is_georef") is True
+    assert len(data.get("georef_points") or []) == 2

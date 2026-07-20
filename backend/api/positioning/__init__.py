@@ -294,6 +294,46 @@ def history_stats():
     return jsonify({"error": "History service not running"}), 503
 
 
+# ── Map context (regional default view) ───────────────────────────────────────
+@positioning_bp.route("/map-context", methods=["GET"])
+@jwt_required()
+def map_context():
+    """
+    Site centre for regional map (OpenStreetMap) before mine grid is calibrated.
+    Defaults to geographic centre of Australia when site_lat/site_lng are unset.
+    """
+    from backend.models import Setting
+
+    def _float_setting(key: str, default: float) -> float:
+        row = Setting.query.filter_by(key=key).first()
+        if not row or row.value in (None, ""):
+            return default
+        try:
+            return float(row.value)
+        except (TypeError, ValueError):
+            return default
+
+    site_lat = _float_setting("site_lat", -25.2744)
+    site_lng = _float_setting("site_lng", 133.7751)
+    site_zoom = int(_float_setting("site_zoom", 5))
+    site_location = Setting.query.filter_by(key="site_location").first()
+    country = (site_location.value if site_location and site_location.value else "Australia").strip()
+
+    from backend.services.floor_plan_mapper import get_floor_plan_mapper
+    svc = get_floor_plan_mapper()
+    cal = svc.get_calibration_status().get(0) or svc.get_calibration_status().get("0") or {}
+
+    return jsonify({
+        "site_lat": site_lat,
+        "site_lng": site_lng,
+        "site_zoom": site_zoom,
+        "country": country,
+        "is_mine_calibrated": bool(cal.get("calibrated")),
+        "is_georef": bool(cal.get("is_georef")),
+        "georef_points": cal.get("georef_points") or [],
+    })
+
+
 # ── Calibration ──────────────────────────────────────────────────────────────
 @positioning_bp.route("/calibration", methods=["GET"])
 @jwt_required()
@@ -386,10 +426,27 @@ def add_calibration_point():
                 if f not in pt:
                     return jsonify({"error": f"Missing field in point: {f}"}), 400
         mapper = svc.set_calibration_points(section_id, bulk)
-        return jsonify({
+        resp = {
             "calibration_points": svc.get_calibration_points(section_id),
             "is_calibrated": mapper.is_calibrated,
             "calibration_error": svc.calibration_error(section_id),
+            "georef_points": svc.get_georef_points(section_id),
+            "is_georef": svc.is_georef(section_id),
+        }
+        return jsonify(resp)
+
+    georef_bulk = body.get("georef_points")
+    if isinstance(georef_bulk, list) and len(georef_bulk) >= 2:
+        for pt in georef_bulk:
+            for f in ("pixel_x", "pixel_y", "lat", "lng"):
+                if f not in pt:
+                    return jsonify({"error": f"Missing georef field: {f}"}), 400
+        svc.set_georef_points(section_id, georef_bulk)
+        return jsonify({
+            "georef_points": svc.get_georef_points(section_id),
+            "is_georef": svc.is_georef(section_id),
+            "calibration_points": svc.get_calibration_points(section_id),
+            "is_calibrated": svc.is_calibrated(section_id),
         })
 
     required = ["pixel_x", "pixel_y", "real_x", "real_y"]

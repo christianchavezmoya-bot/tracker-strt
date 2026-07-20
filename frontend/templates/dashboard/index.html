@@ -225,6 +225,15 @@
       <button class="tool-btn" onclick="toggleHeatmap()" title="Heatmap" id="heatmapBtn" aria-label="Toggle heatmap">
         <i class="fa-solid fa-fire" aria-hidden="true"></i>
       </button>
+      <button class="tool-btn" onclick="window.switchToRegionalView && window.switchToRegionalView()" title="Site map (street / regional)" id="siteViewBtn" aria-label="Site map view">
+        <i class="fa-solid fa-earth-americas" aria-hidden="true"></i>
+      </button>
+      <button class="tool-btn" onclick="window.switchToMineView && window.switchToMineView()" title="Mine map (metre grid)" id="mineViewBtn" aria-label="Mine map view">
+        <i class="fa-solid fa-map" aria-hidden="true"></i>
+      </button>
+      <button class="tool-btn" onclick="window.enterGeorefMode && window.enterGeorefMode()" title="Georeference floor plan (GPS)" id="georefBtn" aria-label="Georeference GPS">
+        <i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i>
+      </button>
       <button class="tool-btn" onclick="window.enterNodePlacementMode()" title="Place Nodes" id="nodePlacementBtn" aria-label="Place anchors">
         <i class="fa-solid fa-microchip" aria-hidden="true"></i>
       </button>
@@ -250,6 +259,16 @@
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
+      <label class="layer-item">
+        <input type="checkbox" id="layerStreetMap" checked onchange="toggleStreetMapLayer()">
+        <span class="layer-dot" style="background:#0a84ff"></span>
+        Street map
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" id="layerSatellite" onchange="toggleSatelliteMapLayer()">
+        <span class="layer-dot" style="background:#8e8e93"></span>
+        Satellite
+      </label>
       <label class="layer-item">
         <input type="checkbox" id="layerZones" checked onchange="toggleZoneLayer()">
         <span class="layer-dot" style="background:var(--red)"></span>
@@ -450,9 +469,10 @@
 <script src="/static/vendor/leaflet/leaflet.js"></script>
 <script src="/static/vendor/three/three.min.js"></script>
 <script src="/static/js/api.js"></script>
-<script src="/static/js/visualization/map2d.js?v=7"></script>
-<script src="/static/js/visualization/map3d.js?v=7"></script>
-<script src="/static/js/dashboard.js?v=7"></script>
+<script src="/static/js/visualization/map-georef.js?v=8"></script>
+<script src="/static/js/visualization/map2d.js?v=8"></script>
+<script src="/static/js/visualization/map3d.js?v=8"></script>
+<script src="/static/js/dashboard.js?v=8"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js?v=7').catch(() => {});

@@ -683,6 +683,9 @@ function renderSettingRow(setting, key) {
 const DEFAULT_SETTINGS = {
   site_name: { label: 'Site Name', scope: 'BUSINESS', type: 'text', description: 'Name of the mining site or facility' },
   site_location: { label: 'Site Location', scope: 'BUSINESS', type: 'text', description: 'Geographic location / region' },
+  site_lat: { label: 'Site latitude', scope: 'BUSINESS', type: 'float', description: 'Regional map centre (decimal degrees). Default: Australia.' },
+  site_lng: { label: 'Site longitude', scope: 'BUSINESS', type: 'float', description: 'Regional map centre (decimal degrees). Default: Australia.' },
+  site_zoom: { label: 'Regional map zoom', scope: 'BUSINESS', type: 'int', description: 'OpenStreetMap zoom when mine grid is not calibrated (4–6 for country)' },
   site_address: { label: 'Site Address', scope: 'BUSINESS', type: 'text', description: 'Full address of the facility' },
   operator_name: { label: 'Operator Name', scope: 'BUSINESS', type: 'text', description: 'Name of the mining operator company' },
   emergency_contact: { label: 'Emergency Contact Name', scope: 'BUSINESS', type: 'text', description: 'Primary emergency contact person' },
