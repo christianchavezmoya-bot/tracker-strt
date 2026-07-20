@@ -106,6 +106,9 @@ function syncHoloCoords() {
     floorPlanUrl: _floorPlanUrl,
     floorExtents: { widthM: b.maxX - b.minX, heightM: b.maxY - b.minY },
   });
+  if (window.reloadFloorPlan3D && window._map3dReady) {
+    window.reloadFloorPlan3D();
+  }
 }
 
 function ensureTrackerCanvasLayer() {

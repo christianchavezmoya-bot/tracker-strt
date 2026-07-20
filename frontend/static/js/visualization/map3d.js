@@ -36,6 +36,10 @@ let _dummy = new THREE.Object3D();
 let _camTheta = 0.6;
 let _camPhi = 0.45;
 let _camDist = 120;
+let _camTargetX = 12.5;
+let _camTargetZ = 25;
+let _floorLoadGen = 0;
+let _loadedFloorUrl = null;
 let _isDragging = false;
 let _lastX = 0, _lastY = 0;
 let _touchDist = 0;
@@ -87,16 +91,9 @@ function initMap3D() {
   fillLight.position.set(-80, 40, -60);
   window._scene.add(fillLight);
 
-  // ── Floor plan (3D plane with texture) ────────────────────────────────
-  loadFloorPlan3D();
-
-  // ── Grid ───────────────────────────────────────────────────────────────
-  const grid = new THREE.GridHelper(400, 80, 0x00e5ff, 0x0a1a2a);
-  grid.material.opacity = 0.25;
-  grid.material.transparent = true;
-  grid.position.y = 0.01;
-  window._scene.add(grid);
-  window._gridHelper = grid;
+  // ── Floor plan (loaded on init + each 3D view switch) ─────────────────
+  // Grid sized to floor after first load — placeholder until then
+  window._gridHelper = null;
 
   // ── Axes ───────────────────────────────────────────────────────────────
   const axes = new THREE.AxesHelper(15);
@@ -201,70 +198,159 @@ function _syncInstancedTrackers() {
   mark3DDirty();
 }
 
-async function resolveFloorPlanUrl3D() {
-  if (window.HoloCoords) return window.HoloCoords.getFloorPlanUrl();
+  window.render3DTrackerDots = render3DTrackerDots;
+  render3DTrackerDots();
+
+  window.reloadFloorPlan3D = reloadFloorPlan3D;
+  window.fit3DCameraToFloor = fit3DCameraToFloor;
+}
+
+function getFloorExtents3D() {
+  if (window.HoloCoords) {
+    return window.HoloCoords.getFloorExtents();
+  }
+  return { widthM: 50, heightM: 50, minX: 0, minY: 0, maxX: 50, maxY: 50 };
+}
+
+function fit3DCameraToFloor(extents) {
+  const e = extents || getFloorExtents3D();
+  _camTargetX = e.minX + e.widthM / 2;
+  _camTargetZ = e.minY + e.heightM / 2;
+  const span = Math.max(e.widthM, e.heightM, 10);
+  _camDist = Math.max(30, Math.min(400, span * 1.35));
+  updateCamera3D();
+  mark3DDirty();
+}
+
+function updateGridForFloor(extents) {
+  if (!window._scene) return;
+  const e = extents || getFloorExtents3D();
+  _camTargetX = e.minX + e.widthM / 2;
+  _camTargetZ = e.minY + e.heightM / 2;
+  if (window._gridHelper) {
+    window._scene.remove(window._gridHelper);
+    window._gridHelper.geometry.dispose();
+    window._gridHelper.material.dispose();
+    window._gridHelper = null;
+  }
+  const span = Math.max(e.widthM, e.heightM, 10);
+  const size = span * 1.08;
+  const divisions = Math.min(60, Math.max(6, Math.round(span / 2)));
+  const grid = new THREE.GridHelper(size, divisions, 0x00e5ff, 0x0a1a2a);
+  grid.material.opacity = 0.25;
+  grid.material.transparent = true;
+  grid.position.set(_camTargetX, 0.01, _camTargetZ);
+  window._scene.add(grid);
+  window._gridHelper = grid;
+  mark3DDirty();
+}
+
+async function fetchFloorPlanUrlFromApi() {
   try {
     const res = await API.get('/zones/sections');
     const data = await API.json(res);
     if (res && res.ok && data.items && data.items.length > 0 && data.items[0].image_url) {
-      return data.items[0].image_url;
+      const url = data.items[0].image_url;
+      if (!url.includes('placeholder')) return url;
     }
   } catch (_) { /* ignore */ }
-  return '/static/assets/floor-plan-placeholder.png';
+  return null;
 }
 
-// ── Floor plan in 3D ──────────────────────────────────────────────────────────
-async function loadFloorPlan3D() {
-  const loader = new THREE.TextureLoader();
-  const imgUrl = await resolveFloorPlanUrl3D();
-  const extents = window.HoloCoords ? window.HoloCoords.getFloorExtents() : { widthM: 200, heightM: 200 };
+async function resolveFloorPlanUrl3D() {
+  const holoUrl = window.HoloCoords ? window.HoloCoords.getFloorPlanUrl() : null;
+  if (holoUrl && !holoUrl.includes('placeholder')) return holoUrl;
+  const apiUrl = await fetchFloorPlanUrlFromApi();
+  if (apiUrl) return apiUrl;
+  return holoUrl || '/static/assets/floor-plan-placeholder.png';
+}
 
-  loader.load(imgUrl,
+function applyFloorPlaneMesh(texture, extents, imgUrl) {
+  if (!window._scene) return;
+  const planeW = Math.max(1, extents.widthM || 50);
+  const planeH = Math.max(1, extents.heightM || 50);
+  const cx = extents.minX + planeW / 2;
+  const cz = extents.minY + planeH / 2;
+
+  if (window._floorMesh) {
+    window._scene.remove(window._floorMesh);
+    window._floorMesh.geometry.dispose();
+    if (window._floorMesh.material.map && window._floorMesh.material.map !== texture) {
+      window._floorMesh.material.map.dispose();
+    }
+    window._floorMesh.material.dispose();
+    window._floorMesh = null;
+  }
+
+  const geo = new THREE.PlaneGeometry(planeW, planeH);
+  const matOpts = {
+    roughness: 0.9,
+    metalness: 0.0,
+    side: THREE.DoubleSide,
+  };
+  if (texture) {
+    matOpts.map = texture;
+    matOpts.transparent = true;
+    matOpts.opacity = 0.92;
+  } else {
+    matOpts.color = 0x0a1429;
+  }
+  const mat = new THREE.MeshStandardMaterial(matOpts);
+  window._floorMesh = new THREE.Mesh(geo, mat);
+  window._floorMesh.rotation.x = -Math.PI / 2;
+  window._floorMesh.position.set(cx, 0, cz);
+  window._floorMesh.receiveShadow = true;
+  window._scene.add(window._floorMesh);
+
+  _loadedFloorUrl = imgUrl;
+  updateGridForFloor(extents);
+  fit3DCameraToFloor(extents);
+  mark3DDirty();
+}
+
+async function loadFloorPlan3D() {
+  if (!window._scene) return;
+  const loadGen = ++_floorLoadGen;
+  const imgUrl = await resolveFloorPlanUrl3D();
+  if (loadGen !== _floorLoadGen) return;
+
+  const extents = getFloorExtents3D();
+  const loader = new THREE.TextureLoader();
+  if (loader.setCrossOrigin) loader.setCrossOrigin('anonymous');
+
+  loader.load(
+    imgUrl,
     texture => {
+      if (loadGen !== _floorLoadGen) {
+        texture.dispose();
+        return;
+      }
       window._floorTexture = texture;
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
-
-      const imgAspect = texture.image.naturalWidth / texture.image.naturalHeight;
-      const planeW = Math.max(20, extents.widthM || 200);
-      const planeH = planeW / imgAspect;
-
-      if (window._floorMesh) {
-        window._scene.remove(window._floorMesh);
-        window._floorMesh.geometry.dispose();
-        window._floorMesh.material.dispose();
-      }
-
-      const geo = new THREE.PlaneGeometry(planeW, planeH);
-      const mat = new THREE.MeshStandardMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 0.85,
-        roughness: 0.9,
-        metalness: 0.0,
-        side: THREE.DoubleSide,
-      });
-      window._floorMesh = new THREE.Mesh(geo, mat);
-      window._floorMesh.rotation.x = -Math.PI / 2;
-      window._floorMesh.position.set(planeW / 2, 0, planeH / 2);
-      window._floorMesh.receiveShadow = true;
-      window._scene.add(window._floorMesh);
-      mark3DDirty();
+      applyFloorPlaneMesh(texture, extents, imgUrl);
     },
     undefined,
     () => {
-      const planeW = Math.max(20, extents.widthM || 200);
-      const geo = new THREE.PlaneGeometry(planeW, planeW);
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0x0a1429, roughness: 1.0, metalness: 0.0,
-      });
-      window._floorMesh = new THREE.Mesh(geo, mat);
-      window._floorMesh.rotation.x = -Math.PI / 2;
-      window._floorMesh.position.set(planeW / 2, 0, planeW / 2);
-      window._scene.add(window._floorMesh);
-      mark3DDirty();
+      if (loadGen !== _floorLoadGen) return;
+      console.warn('[map3d] Floor plan texture failed to load:', imgUrl);
+      if (window.showToast) {
+        window.showToast('3D floor plan image failed to load — showing grid only', 'warning');
+      }
+      applyFloorPlaneMesh(null, extents, imgUrl);
     }
   );
+}
+
+async function reloadFloorPlan3D() {
+  if (!window._scene) return;
+  const url = await resolveFloorPlanUrl3D();
+  if (url === _loadedFloorUrl && window._floorMesh && window._floorMesh.material.map) {
+    fit3DCameraToFloor();
+    mark3DDirty();
+    return;
+  }
+  await loadFloorPlan3D();
 }
 
 // ── 3D Zones ──────────────────────────────────────────────────────────────────
@@ -523,12 +609,14 @@ function setup3DOrbitControls(canvas) {
 }
 
 function updateCamera3D() {
-  const x = _camDist * Math.sin(_camPhi) * Math.cos(_camTheta);
-  const y = _camDist * Math.cos(_camPhi);
-  const z = _camDist * Math.sin(_camPhi) * Math.sin(_camTheta);
+  const tx = _camTargetX;
+  const tz = _camTargetZ;
+  const ox = _camDist * Math.sin(_camPhi) * Math.cos(_camTheta);
+  const oy = _camDist * Math.cos(_camPhi);
+  const oz = _camDist * Math.sin(_camPhi) * Math.sin(_camTheta);
   if (window._camera) {
-    window._camera.position.set(x, y, z);
-    window._camera.lookAt(0, 0, 0);
+    window._camera.position.set(tx + ox, oy, tz + oz);
+    window._camera.lookAt(tx, 0, tz);
   }
 }
 

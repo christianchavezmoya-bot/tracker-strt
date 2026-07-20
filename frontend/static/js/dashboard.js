@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!isPlayback) renderZoneOccupancy();
   }, 10000);
   try {
-    initMap2D();
+    await initMap2D();
     if (window.renderTrackerDots) window.renderTrackerDots();
   } catch (e) {
     console.error('2D map init failed:', e);
@@ -494,7 +494,9 @@ function setView(view) {
         window._camera.updateProjectionMatrix();
       }
     }
+    if (window.reloadFloorPlan3D) window.reloadFloorPlan3D();
     if (window.render3DTrackerDots) window.render3DTrackerDots();
+    if (window.mark3DDirty) window.mark3DDirty();
   }
 }
 
@@ -510,6 +512,8 @@ function resetCamera() {
   if (currentView === '2d' && window._map2d) {
     if (window.fitMapToFloorPlan) window.fitMapToFloorPlan();
     else window._map2d.setView([0, 0], 16);
+  } else if (currentView === '3d' && window.fit3DCameraToFloor) {
+    window.fit3DCameraToFloor();
   }
 }
 function toggleHeatmap() {
