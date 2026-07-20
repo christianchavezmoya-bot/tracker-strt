@@ -10,9 +10,9 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231c1c1e'/><circle cx='16' cy='16' r='8' fill='none' stroke='%230a84ff' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%230a84ff'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/static/css/dashboard-theme.css">
-  <link rel="stylesheet" href="/static/css/dashboard.css">
-  <link rel="stylesheet" href="/static/css/tablet.css">
+  <link rel="stylesheet" href="/static/css/dashboard-theme.css?v=7">
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=7">
+  <link rel="stylesheet" href="/static/css/tablet.css?v=7">
 </head>
 <body>
 <div class="tablet-alert-sheet" id="tabletAlertSheet" style="display:none">
@@ -450,12 +450,12 @@
 <script src="/static/vendor/leaflet/leaflet.js"></script>
 <script src="/static/vendor/three/three.min.js"></script>
 <script src="/static/js/api.js"></script>
-<script src="/static/js/visualization/map2d.js?v=5"></script>
-<script src="/static/js/visualization/map3d.js"></script>
-<script src="/static/js/dashboard.js?v=5"></script>
+<script src="/static/js/visualization/map2d.js?v=7"></script>
+<script src="/static/js/visualization/map3d.js?v=7"></script>
+<script src="/static/js/dashboard.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/static/sw.js?v=7').catch(() => {});
   }
 </script>
 <script src="/static/js/nav.js" defer></script>

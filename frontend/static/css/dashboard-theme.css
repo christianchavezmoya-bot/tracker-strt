@@ -56,6 +56,10 @@
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
   --font-mono: 'SF Mono', ui-monospace, 'IBM Plex Mono', monospace;
+
+  /* Aliases for shell.css and legacy templates */
+  --accent-dim: var(--cyan-dim);
+  --accent-border: var(--cyan-border);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
