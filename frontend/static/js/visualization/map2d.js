@@ -36,8 +36,8 @@ let _mapMode = 'normal';
 // ── Init ──────────────────────────────────────────────────────────────────────
 function initMap2D() {
   window._map2d = L.map('map2d', {
-    center: [0, 0], zoom: 14, zoomControl: false,
-    crs: L.CRS.Simple, minZoom: 8, maxZoom: 22, attributionControl: false,
+    center: [25, 12], zoom: 0, zoomControl: false,
+    crs: L.CRS.Simple, minZoom: -2, maxZoom: 22, attributionControl: false,
   });
 
   L.control.zoom({ position: 'bottomright' }).addTo(window._map2d);
@@ -87,43 +87,67 @@ function realToPixel(rx, ry) {
   };
 }
 
+/** Real-world extent (metres) for map CRS and floor-plan overlay. */
+function getRealWorldBounds() {
+  if (_isCalibrated && _calibrationPoints.length >= 2) {
+    const xs = _calibrationPoints.map(p => p.real_x);
+    const ys = _calibrationPoints.map(p => p.real_y);
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    const spanY = Math.max(...ys) - Math.min(...ys);
+    const padX = Math.max(2, spanX * 0.12);
+    const padY = Math.max(2, spanY * 0.12);
+    return {
+      minX: Math.min(...xs) - padX,
+      maxX: Math.max(...xs) + padX,
+      minY: Math.min(...ys) - padY,
+      maxY: Math.max(...ys) + padY,
+    };
+  }
+  const h = DEFAULT_MAP_HEIGHT_M;
+  const w = (_imageWidth / _imageHeight) * h;
+  return { minX: 0, maxX: w, minY: 0, maxY: h };
+}
+
+/** Leaflet bounds — map CRS uses real-world metres (not image pixels). */
+function getFloorPlanBounds() {
+  const b = getRealWorldBounds();
+  return [[b.maxY, b.minX], [b.minY, b.maxX]];
+}
+
+/** Map CRS metres → image pixel (for calibration storage). */
+function mapUnitsToPixel(mx, my) {
+  const rb = getRealWorldBounds();
+  const spanX = rb.maxX - rb.minX || 1;
+  const spanY = rb.maxY - rb.minY || 1;
+  return {
+    x: ((mx - rb.minX) / spanX) * _imageWidth,
+    y: ((my - rb.minY) / spanY) * _imageHeight,
+  };
+}
+
 function realToLatLng(rx, ry) {
-  const p = realToPixel(rx, ry);
-  return L.CRS.Simple.unproject(L.point(p.x, p.y));
+  return L.CRS.Simple.unproject(L.point(rx, ry));
 }
 
 function latLngToReal(latlng) {
   const pt = L.CRS.Simple.project(latlng);
-  return pixelToReal(pt.x, pt.y);
+  return { x: pt.x, y: pt.y };
 }
 
 function mapPointFromEvent(e) {
   return L.CRS.Simple.project(e.latlng);
 }
 
-function getFloorPlanBounds() {
-  if (_isCalibrated) {
-    return [[_imageHeight, 0], [0, _imageWidth]];
-  }
-  const h = DEFAULT_MAP_HEIGHT_M;
-  const w = (_imageWidth / _imageHeight) * h;
-  return [[h, 0], [0, w]];
-}
-
 function fitMapToFloorPlan() {
   if (!window._map2d) return;
   try {
-    if (_floorPlanLayer) {
-      window._map2d.fitBounds(_floorPlanLayer.getBounds(), { padding: [24, 24], maxZoom: 18 });
-    } else {
-      const b = getFloorPlanBounds();
-      window._map2d.fitBounds(b, { padding: [24, 24], maxZoom: 18 });
-    }
+    const bounds = _floorPlanLayer ? _floorPlanLayer.getBounds() : getFloorPlanBounds();
+    window._map2d.fitBounds(bounds, { padding: [32, 32], maxZoom: 18, animate: false });
   } catch (e) {
-    const b = getFloorPlanBounds();
-    window._map2d.setView([(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2], 14);
+    const b = getRealWorldBounds();
+    window._map2d.setView([(b.minY + b.maxY) / 2, (b.minX + b.maxX) / 2], 0);
   }
-  setTimeout(() => window._map2d && window._map2d.invalidateSize(), 100);
+  setTimeout(() => window._map2d && window._map2d.invalidateSize(), 150);
 }
 
 function computeAffineTransform(points) {
@@ -482,7 +506,7 @@ function showNodeForm(realX, realY, pixelX, pixelY) {
   if (!mapEl) return;
   mapEl.style.position = 'relative';
 
-  const latlng = L.CRS.Simple.unproject(L.point(pixelX, pixelY));
+  const latlng = realToLatLng(realX, realY);
   _placementGhost = L.circleMarker(latlng, { radius: 10, color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 0.5, weight: 2 }).addTo(window._map2d);
 
   const nodeOptions = _unplacedNodes.map(n =>
@@ -649,13 +673,16 @@ function onMapClick(e) {
   else if (_mapMode === 'place_node') handleNodePlacementClick(px, py);
 }
 
-function handleCalibrationClick(px, py) {
+function handleCalibrationClick(mapX, mapY) {
+  const pix = mapUnitsToPixel(mapX, mapY);
+  const px = pix.x;
+  const py = pix.y;
   if (!_calibrationPoints[0]?._px) {
-    _calibrationPoints[0] = { _px: px, _py: py, real_x: 0, real_y: 0 };
+    _calibrationPoints[0] = { _px: px, _py: py, pixel_x: px, pixel_y: py, real_x: 0, real_y: 0 };
     document.getElementById('cal1Info').innerHTML = `<i class="fa-solid fa-check" style="color:#6bff47"></i> Clicked (${Math.round(px)}, ${Math.round(py)}) — enter coords`;
     setTimeout(() => document.getElementById('calX1')?.focus(), 50);
   } else if (!_calibrationPoints[1]?._px) {
-    _calibrationPoints[1] = { _px: px, _py: py, real_x: 0, real_y: 0 };
+    _calibrationPoints[1] = { _px: px, _py: py, pixel_x: px, pixel_y: py, real_x: 0, real_y: 0 };
     document.getElementById('cal2Info').innerHTML = `<i class="fa-solid fa-check" style="color:#6bff47"></i> Clicked (${Math.round(px)}, ${Math.round(py)}) — enter coords`;
     setTimeout(() => document.getElementById('calX2')?.focus(), 50);
   } else {
@@ -663,32 +690,31 @@ function handleCalibrationClick(px, py) {
   }
 }
 
-function handleNodePlacementClick(px, py) {
+function handleNodePlacementClick(mapX, mapY) {
   if (!_isCalibrated) { enterCalibrationMode(); return; }
-  const real = pixelToReal(px, py);
+  const real = { x: mapX, y: mapY };
+  const pix = mapUnitsToPixel(mapX, mapY);
   const preview = document.getElementById('coordPreview');
   if (preview) preview.textContent = 'X=' + real.x.toFixed(1) + '  Y=' + real.y.toFixed(1);
-  showNodeForm(real.x, real.y, px, py);
+  showNodeForm(real.x, real.y, pix.x, pix.y);
 }
 
 function onMapMouseMove(e) {
   const pt = mapPointFromEvent(e);
-  const px = pt.x, py = pt.y;
+  const mapX = pt.x, mapY = pt.y;
   const rx = document.getElementById('readoutX');
   const ry = document.getElementById('readoutY');
   if (_isCalibrated) {
-    const real = pixelToReal(px, py);
-    if (rx) rx.textContent = real.x.toFixed(1);
-    if (ry) ry.textContent = real.y.toFixed(1);
+    if (rx) rx.textContent = mapX.toFixed(1);
+    if (ry) ry.textContent = mapY.toFixed(1);
   } else {
-    if (rx) rx.textContent = Math.round(px);
-    if (ry) ry.textContent = Math.round(py);
+    if (rx) rx.textContent = Math.round(mapX);
+    if (ry) ry.textContent = Math.round(mapY);
   }
   if (_isNodePlacementMode) {
     const preview = document.getElementById('coordPreview');
     if (preview) {
-      const real = _isCalibrated ? pixelToReal(px, py) : { x: Math.round(px), y: Math.round(py) };
-      preview.textContent = 'X=' + real.x.toFixed(1) + '  Y=' + real.y.toFixed(1);
+      preview.textContent = 'X=' + mapX.toFixed(1) + '  Y=' + mapY.toFixed(1);
     }
   }
 }
@@ -816,16 +842,14 @@ function loadFloorPlanFromURL(url) {
 function drawGridOverlay() {
   _gridLines.forEach(l => window._map2d.removeLayer(l));
   _gridLines = [];
-  const b = getFloorPlanBounds();
-  const maxX = _isCalibrated ? (_imageWidth || 1000) : b[1][1];
-  const maxY = _isCalibrated ? (_imageHeight || 1000) : b[0][0];
-  const step = _isCalibrated ? 50 : 5;
-  for (let x = 0; x <= maxX; x += step) {
-    const l1 = L.polyline([L.CRS.Simple.unproject(L.point(x, 0)), L.CRS.Simple.unproject(L.point(x, maxY))], { color: 'rgba(90, 100, 115, 0.2)', weight: 1 }).addTo(window._map2d);
+  const b = getRealWorldBounds();
+  const step = 5;
+  for (let x = b.minX; x <= b.maxX; x += step) {
+    const l1 = L.polyline([realToLatLng(x, b.minY), realToLatLng(x, b.maxY)], { color: 'rgba(90, 100, 115, 0.2)', weight: 1 }).addTo(window._map2d);
     _gridLines.push(l1);
   }
-  for (let y = 0; y <= maxY; y += step) {
-    const l2 = L.polyline([L.CRS.Simple.unproject(L.point(0, y)), L.CRS.Simple.unproject(L.point(maxX, y))], { color: 'rgba(90, 100, 115, 0.2)', weight: 1 }).addTo(window._map2d);
+  for (let y = b.minY; y <= b.maxY; y += step) {
+    const l2 = L.polyline([realToLatLng(b.minX, y), realToLatLng(b.maxX, y)], { color: 'rgba(90, 100, 115, 0.2)', weight: 1 }).addTo(window._map2d);
     _gridLines.push(l2);
   }
 }

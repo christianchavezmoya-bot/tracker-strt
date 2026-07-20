@@ -67,6 +67,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   update3DViewAvailability();
   // Always start on 2D — 3D is optional and fails without WebGL
   setView('2d');
+  // Map container may not have final layout until after paint — refit once
+  setTimeout(() => {
+    if (window.fitMapToFloorPlan) window.fitMapToFloorPlan();
+    if (window._map2d) window._map2d.invalidateSize();
+    if (window.renderTrackerDots) window.renderTrackerDots();
+  }, 600);
   startSSE();
   setupKeyboardShortcuts();
   // Deep-link from Alerts "Show on map" / Map Setup nav
