@@ -139,6 +139,10 @@ function initMap3D() {
   window.updateTrackerDot3D = updateTrackerDot3D;
   window.render3DTrackerDots = render3DTrackerDots;
   render3DTrackerDots();
+
+  window.reloadFloorPlan3D = reloadFloorPlan3D;
+  window.fit3DCameraToFloor = fit3DCameraToFloor;
+  window.setFloorPlanOpacity3D = setFloorPlanOpacity3D;
 }
 
 function mark3DDirty() {
@@ -197,14 +201,6 @@ function _syncInstancedTrackers() {
   _trackerInstanced.instanceMatrix.needsUpdate = true;
   if (_trackerInstanced.instanceColor) _trackerInstanced.instanceColor.needsUpdate = true;
   mark3DDirty();
-}
-
-  window.render3DTrackerDots = render3DTrackerDots;
-  render3DTrackerDots();
-
-  window.reloadFloorPlan3D = reloadFloorPlan3D;
-  window.fit3DCameraToFloor = fit3DCameraToFloor;
-  window.setFloorPlanOpacity3D = setFloorPlanOpacity3D;
 }
 
 function setFloorPlanOpacity3D(opacity) {

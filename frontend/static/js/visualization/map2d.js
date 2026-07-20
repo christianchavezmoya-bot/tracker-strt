@@ -88,8 +88,8 @@ async function initMap2D() {
   window.fitMapToFloorPlan = fitMapToFloorPlan;
   window.switchToRegionalView = switchToRegionalView;
   window.switchToMineView = switchToMineView;
-  window.toggleStreetMapLayer = (show) => MapGeoref && MapGeoref.toggleStreetLayer(show);
-  window.toggleSatelliteMapLayer = (show) => MapGeoref && MapGeoref.toggleSatelliteLayer(show);
+  window.toggleStreetBasemap = (show) => MapGeoref && MapGeoref.toggleStreetLayer(show);
+  window.toggleSatelliteBasemap = (show) => MapGeoref && MapGeoref.toggleSatelliteLayer(show);
   window.realToLatLng = realToLatLng;
   syncHoloCoords();
 }
@@ -101,7 +101,7 @@ function syncHoloCoords() {
     calibrated: _isCalibrated,
     imageWidth: _imageWidth,
     imageHeight: _imageHeight,
-    affine: { a: _tx_a, b: _tx_b, c: _tx_c, d: _tx_d, e: _ty_e, f: _ty_f },
+    affine: { a: _tx_a, b: _tx_b, c: _tx_c, d: _ty_d, e: _ty_e, f: _ty_f },
     bounds: b,
     floorPlanUrl: _floorPlanUrl,
     floorExtents: { widthM: b.maxX - b.minX, heightM: b.maxY - b.minY },
@@ -225,6 +225,15 @@ async function switchToRegionalView() {
   } else if (window.layerState?.streetMap !== false) {
     MapGeoref.toggleStreetLayer(true);
   }
+  renderZones();
+  renderNodeMarkers();
+  if (window.renderTrackerDots) window.renderTrackerDots();
+  if (!MapGeoref.isGeoref() && window.showToast) {
+    window.showToast(
+      'Street/satellite view is active. Set GPS corner coordinates in Settings → Floor Plans to overlay your uploaded map.',
+      'warning'
+    );
+  }
   if (window.syncLayerCheckboxes) window.syncLayerCheckboxes();
 }
 
@@ -305,6 +314,11 @@ function mapUnitsToPixel(mx, my) {
 }
 
 function realToLatLng(rx, ry) {
+  if (_viewMode === 'regional' && window.MapGeoref && MapGeoref.isGeoref()) {
+    const px = realToPixel(rx, ry);
+    const ll = MapGeoref.pixelToLatLng(px.x, px.y);
+    if (ll) return L.latLng(ll.lat, ll.lng);
+  }
   return L.CRS.Simple.unproject(L.point(rx, ry));
 }
 

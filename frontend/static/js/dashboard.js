@@ -96,6 +96,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, 10000);
   try {
     await initMap2D();
+    window.toggleStreetMapLayer = toggleStreetMapLayer;
+    window.toggleSatelliteMapLayer = toggleSatelliteMapLayer;
     if (window.renderTrackerDots) window.renderTrackerDots();
   } catch (e) {
     console.error('2D map init failed:', e);
@@ -653,11 +655,11 @@ async function toggleStreetMapLayer() {
     const inRegional = window.MapGeoref && MapGeoref.getViewMode() === 'regional';
     if (!inRegional) {
       if (window.switchToRegionalView) await window.switchToRegionalView();
-    } else if (window.toggleStreetMapLayer) {
-      window.toggleStreetMapLayer(true);
+    } else if (window.toggleStreetBasemap) {
+      window.toggleStreetBasemap(true);
     }
   } else {
-    if (window.toggleStreetMapLayer) window.toggleStreetMapLayer(false);
+    if (window.toggleStreetBasemap) window.toggleStreetBasemap(false);
     if (!layerState.satelliteMap && window.MapGeoref?.getViewMode() === 'regional' && window.switchToMineView) {
       await window.switchToMineView();
     }
@@ -674,11 +676,11 @@ async function toggleSatelliteMapLayer() {
     const inRegional = window.MapGeoref && MapGeoref.getViewMode() === 'regional';
     if (!inRegional) {
       if (window.switchToRegionalView) await window.switchToRegionalView();
-    } else if (window.toggleSatelliteMapLayer) {
-      window.toggleSatelliteMapLayer(true);
+    } else if (window.toggleSatelliteBasemap) {
+      window.toggleSatelliteBasemap(true);
     }
   } else {
-    if (window.toggleSatelliteMapLayer) window.toggleSatelliteMapLayer(false);
+    if (window.toggleSatelliteBasemap) window.toggleSatelliteBasemap(false);
     if (!layerState.streetMap && window.MapGeoref?.getViewMode() === 'regional' && window.switchToMineView) {
       await window.switchToMineView();
     }
