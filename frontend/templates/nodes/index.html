@@ -27,8 +27,9 @@
 .hw-error .hw-summary-icon { color:var(--red); }
 .hw-summary-num { font-size:28px; font-weight:700; font-family:var(--font-mono); }
 .hw-summary-label { font-size:11px; color:var(--text-muted); margin-top:4px; letter-spacing:0.05em; }
-.info-banner { background:rgba(0,229,255,0.05); border:1px solid rgba(0,229,255,0.2); border-radius:var(--radius); padding:14px 16px; font-size:13px; color:var(--text-secondary); margin-bottom:20px; display:flex; gap:10px; align-items:center; }
-.info-banner i { color:var(--cyan); flex-shrink:0; }
+.info-banner { background:rgba(0,229,255,0.05); border:1px solid rgba(0,229,255,0.2); border-radius:var(--radius); padding:14px 16px; font-size:13px; color:var(--text-secondary); margin-bottom:20px; display:flex; gap:10px; align-items:flex-start; }
+.info-banner i { color:var(--cyan); flex-shrink:0; margin-top:2px; }
+.info-banner-text { flex:1; line-height:1.5; }
 .info-banner a { color:var(--cyan); }
 .hw-config-table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
 .hw-config-table { width:100%; border-collapse:collapse; }
@@ -110,7 +111,6 @@
         <div class="hw-summary-label">Active</div>
       </div>
       <div class="hw-summary-card hw-disconnected">
-        <div class="hw-summary-icon"><i class="fa-solid fa-calibration"></i></div>
         <div class="hw-summary-icon"><i class="fa-solid fa-wifi"></i></div>
         <div class="hw-summary-num" id="statCalibrating">—</div>
         <div class="hw-summary-label">Calibrating</div>
@@ -125,9 +125,11 @@
     <!-- Info Banner -->
     <div class="info-banner">
       <i class="fa-solid fa-info-circle"></i>
-      Nodes are <strong>fixed reference points</strong> used for positioning. Place at known survey coordinates
-      and add to the <a href="/hardware">hardware configuration</a> to enable UWB ranging.
-      <strong>Calibrated</strong> nodes improve trilateration accuracy to ±10cm.
+      <div class="info-banner-text">
+        Nodes are <strong>fixed reference points</strong> used for positioning. Place at known survey coordinates
+        and add to the <a href="/hardware">hardware configuration</a> to enable UWB ranging.
+        <strong>Calibrated</strong> nodes improve trilateration accuracy to ±10cm.
+      </div>
     </div>
 
     <!-- Nodes Table -->
@@ -245,7 +247,7 @@ async function loadUserInfo() {
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
   /* shell */;
-  if (u.role === 'ADMIN') document.getElementById('adminNav').style.display = 'block';
+  if (u.role === 'ADMIN') document.getElementById('adminNav')?.style && (document.getElementById('adminNav').style.display = 'block');
 }
 
 async function loadNodes() {
