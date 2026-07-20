@@ -133,27 +133,7 @@
   font-family: var(--font-ui);
 }
 .leaflet-tile-pane { opacity: 0.92; }
-.leaflet-control-zoom a {
-  background: var(--bg-card) !important;
-  color: var(--text-primary) !important;
-  border-color: var(--border-bright) !important;
-}
-.leaflet-control-zoom a:hover {
-  background: var(--bg-elevated) !important;
-  color: var(--cyan) !important;
-}
-.leaflet-bar {
-  border: 1px solid var(--border-bright) !important;
-  border-radius: var(--radius) !important;
-  overflow: hidden;
-}
-.leaflet-control-scale-line {
-  background: rgba(0,229,255,0.1) !important;
-  border-color: var(--cyan) !important;
-  color: var(--cyan) !important;
-  font-family: var(--font-mono) !important;
-  font-size: 10px !important;
-}
+/* Zoom/scale controls styled in dashboard-theme.css */
 
 /* Tracker dot styles (for Leaflet divIcon) */
 .tracker-dot {

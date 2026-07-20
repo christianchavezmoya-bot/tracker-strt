@@ -188,6 +188,14 @@
     <div id="map2d" class="map-view active"></div>
     <!-- 3D Map -->
     <div id="map3d" class="map-view" style="display:none">
+      <div id="map3dUnavailable" class="map-3d-unavailable" style="display:none" role="status" aria-live="polite">
+        <i class="fa-solid fa-cube" aria-hidden="true"></i>
+        <p><strong>3D view unavailable</strong></p>
+        <p class="map-3d-unavailable-hint">WebGL is disabled in this browser. Enable hardware acceleration or use 2D map.</p>
+        <button type="button" class="btn btn-primary btn-sm" onclick="setView('2d')">
+          <i class="fa-solid fa-map"></i> Switch to 2D
+        </button>
+      </div>
       <!-- 3D Floor Switcher -->
       <div id="floorSwitcher" style="
         position:absolute;top:12px;left:12px;z-index:10;

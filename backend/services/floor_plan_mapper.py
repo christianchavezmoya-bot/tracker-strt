@@ -20,6 +20,22 @@ logger = logging.getLogger(__name__)
 SETTING_KEY = "floor_plan_calibration"
 
 
+def _setting_key(section_id: int) -> str:
+    return f"{SETTING_KEY}_{section_id}"
+
+
+def _section_from_key(key: str) -> int:
+    if key == SETTING_KEY:
+        return 0
+    prefix = f"{SETTING_KEY}_"
+    if key.startswith(prefix):
+        try:
+            return int(key[len(prefix):])
+        except ValueError:
+            return 0
+    return 0
+
+
 class FloorPlanMapperService:
     """
     Manages one or more floor plan mappers (one per map/section).
@@ -37,14 +53,23 @@ class FloorPlanMapperService:
         if not self._db:
             return
         from backend.models import Setting
-        rows = self._db.query(Setting).filter(Setting.key == SETTING_KEY).all()
+        rows = self._db.query(Setting).filter(
+            Setting.key == SETTING_KEY,
+        ).all()
+        rows += self._db.query(Setting).filter(
+            Setting.key.like(f"{SETTING_KEY}_%"),
+        ).all()
+        seen = set()
         for row in rows:
+            if row.key in seen:
+                continue
+            seen.add(row.key)
             try:
                 data = json.loads(row.value)
-                section_id = int(row.scope_id or 0)
+                section_id = _section_from_key(row.key)
                 self._load_mapper(section_id, data)
             except Exception as e:
-                logger.error(f"Failed to load floor plan calibration for scope {row.scope_id}: {e}")
+                logger.error(f"Failed to load floor plan calibration for {row.key}: {e}")
 
     def _load_mapper(self, section_id: int, data: dict):
         """Reconstruct a FloorPlanMapper from saved calibration data."""
@@ -73,19 +98,20 @@ class FloorPlanMapperService:
             "calibration_error": mapper.calculate_calibration_error(),
         }
 
-        row = self._db.query(Setting).filter(
-            Setting.key == SETTING_KEY,
-            Setting.scope_id == str(section_id),
-        ).first()
+        key = _setting_key(section_id)
+        row = self._db.query(Setting).filter(Setting.key == key).first()
 
         if row:
             row.value = json.dumps(data)
+            row.value_type = "json"
         else:
             row = Setting(
-                key=SETTING_KEY,
+                key=key,
                 value=json.dumps(data),
-                scope=SettingScope.SECTION,
-                scope_id=str(section_id),
+                value_type="json",
+                scope=int(SettingScope.SYSTEM),
+                label="Floor plan calibration",
+                description=f"Pixel ↔ metre transform for map section {section_id}",
             )
             self._db.add(row)
 
@@ -106,6 +132,18 @@ class FloorPlanMapperService:
         mapper = self.get_mapper(section_id)
         mapper.add_calibration_point(pixel_x, pixel_y, real_x, real_y)
         self._save(section_id)
+
+    def set_calibration_points(self, section_id: int, points: List[Dict]):
+        """Replace all calibration points for a section (wizard save)."""
+        mapper = _FPM()
+        for pt in points:
+            mapper.add_calibration_point(
+                float(pt["pixel_x"]), float(pt["pixel_y"]),
+                float(pt["real_x"]), float(pt["real_y"]),
+            )
+        self._mappers[section_id] = mapper
+        self._save(section_id)
+        return mapper
 
     def pixel_to_real(self, pixel_x: float, pixel_y: float,
                       section_id: int = 0) -> Optional[Tuple[float, float]]:
@@ -134,19 +172,30 @@ class FloorPlanMapperService:
     def get_calibration_status(self) -> Dict:
         """Return calibration status for all sections."""
         from backend.models import Setting
-        rows = self._db.query(Setting).filter(Setting.key == SETTING_KEY).all() if self._db else []
+        if not self._db:
+            return {}
+        rows = self._db.query(Setting).filter(
+            Setting.key.like(f"{SETTING_KEY}%"),
+        ).all()
         status = {}
         for row in rows:
-            sid = int(row.scope_id or 0)
+            sid = _section_from_key(row.key)
             try:
                 data = json.loads(row.value)
+                pts = data.get("calibration_points", [])
                 status[sid] = {
                     "calibrated": data.get("is_calibrated", False),
+                    "calibration_points": pts,
                     "error": data.get("calibration_error"),
-                    "points": len(data.get("calibration_points", [])),
+                    "points": len(pts),
                 }
             except Exception:
-                status[sid] = {"calibrated": False, "error": None, "points": 0}
+                status[sid] = {
+                    "calibrated": False,
+                    "calibration_points": [],
+                    "error": None,
+                    "points": 0,
+                }
         return status
 
     def create_simple_transform(self, section_id: int,

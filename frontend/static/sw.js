@@ -3,14 +3,18 @@
  * Caches static assets for offline access (read-only shell).
  * Skips caching for auth endpoints and SSE streams.
  */
-const CACHE_NAME = 'holo-rtls-v2';
+const CACHE_NAME = 'holo-rtls-v4';
 const STATIC_ASSETS = [
   '/',
-  '/static/css/main.css',
+  '/static/css/dashboard-theme.css',
   '/static/css/dashboard.css',
+  '/static/css/main.css',
   '/static/css/shell.css',
   '/static/css/auth.css',
   '/static/js/api.js',
+  '/static/js/dashboard.js',
+  '/static/js/visualization/map2d.js',
+  '/static/assets/floor-plan-placeholder.png',
   '/static/manifest.json',
 ];
 
