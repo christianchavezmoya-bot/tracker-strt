@@ -30,3 +30,15 @@ def test_reports_page(client):
 def test_muster_page(client):
     res = client.get("/muster")
     assert res.status_code == 200
+
+
+def test_nodes_page(client):
+    res = client.get("/nodes")
+    assert res.status_code == 200
+    assert b"auth.js" not in res.data
+
+
+def test_hardware_page(client):
+    res = client.get("/hardware")
+    assert res.status_code == 200
+    assert b"auth.js" not in res.data
