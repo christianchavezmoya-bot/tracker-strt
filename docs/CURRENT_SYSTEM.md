@@ -16,6 +16,8 @@
 | Real-time | SSE `/api/stream/positions`, optional MQTT |
 | Edge | `scanner/` WiFi/BLE daemon, hardware bridges (mock/UWB/MQTT) |
 
+**Architecture decisions:** see `docs/ADR-001-map-rendering-at-scale.md` (300-tracker map rendering, BIM walk-through).
+
 ## Primary surfaces
 
 | URL | Purpose |
