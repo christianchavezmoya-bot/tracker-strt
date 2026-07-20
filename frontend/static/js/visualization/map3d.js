@@ -24,8 +24,16 @@ window._selectedTrackerId = null;
 window._selectedTrackerRing = null;
 window._currentFloor = 0;
 window._applyFloorFilter = false;
+window._applyFloorFilter3D = false;
 
 const MAX_INSTANCED_TRACKERS = 512;
+/** Match Leaflet mine map zoom range (map2d.js). */
+const MAP2D_MIN_ZOOM = -2;
+const MAP2D_MAX_ZOOM = 22;
+const MAP2D_FIT_MAX_ZOOM = 18;
+const MAP2D_FOCUS_ZOOM = 17;
+const CAM_FOV_DEG = 55;
+
 let _trackerInstanced = null;
 let _trackerIdToIndex = new Map();
 let _indexToTrackerId = [];
@@ -42,9 +50,80 @@ let _floorLoadGen = 0;
 let _loadedFloorUrl = null;
 let _floorPlanOpacity = 0.85;
 let _isDragging = false;
+let _isPanning = false;
 let _lastX = 0, _lastY = 0;
 let _touchDist = 0;
 let _touchMid = { x: 0, y: 0 };
+
+function _cameraHFovRad() {
+  const aspect = window._camera?.aspect || 1.33;
+  const vFov = CAM_FOV_DEG * Math.PI / 180;
+  return 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+}
+
+function _viewportSize() {
+  const el = document.getElementById('map3d') || document.getElementById('map2d');
+  return { w: el?.clientWidth || 800, h: el?.clientHeight || 600 };
+}
+
+/** Convert 2D Leaflet zoom level to equivalent orbit camera distance. */
+function camDistForZoom2D(zoom) {
+  const { w, h } = _viewportSize();
+  const z = Math.max(MAP2D_MIN_ZOOM, Math.min(MAP2D_MAX_ZOOM, zoom));
+  const scale = Math.pow(2, z);
+  const visibleSpan = Math.min(w, h) / scale;
+  const hFov = _cameraHFovRad();
+  const pitchFactor = Math.max(0.15, Math.sin(_camPhi));
+  return (visibleSpan / 2) / (Math.tan(hFov / 2) * pitchFactor);
+}
+
+/** Inverse: current camera distance → equivalent 2D zoom. */
+function zoom2DForCamDist(dist) {
+  const { w, h } = _viewportSize();
+  const hFov = _cameraHFovRad();
+  const pitchFactor = Math.max(0.15, Math.sin(_camPhi));
+  const visibleSpan = 2 * dist * Math.tan(hFov / 2) * pitchFactor;
+  const scale = Math.min(w, h) / Math.max(visibleSpan, 1e-6);
+  return Math.max(MAP2D_MIN_ZOOM, Math.min(MAP2D_MAX_ZOOM, Math.log2(scale)));
+}
+
+function clampCamDist(dist) {
+  const minD = camDistForZoom2D(MAP2D_MAX_ZOOM);
+  const maxD = camDistForZoom2D(MAP2D_MIN_ZOOM);
+  return Math.max(Math.max(minD, 0.5), Math.min(maxD, dist));
+}
+
+function fitZoom2DForFloor(extents) {
+  const { w, h } = _viewportSize();
+  const pad = 0.03;
+  const zx = Math.log2(w * (1 - pad) / Math.max(extents.widthM, 1));
+  const zy = Math.log2(h * (1 - pad) / Math.max(extents.heightM, 1));
+  return Math.max(MAP2D_MIN_ZOOM, Math.min(MAP2D_FIT_MAX_ZOOM, Math.min(zx, zy)));
+}
+
+function alignFloorTextureTo2D(texture) {
+  if (!texture) return;
+  // Leaflet imageOverlay bounds [[maxY,minX],[minY,maxX]] map image top → +Y (world Z).
+  texture.flipY = false;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.repeat.y = -1;
+  texture.offset.y = 1;
+  texture.needsUpdate = true;
+}
+
+function zoom3DByWheelDelta(deltaY) {
+  const step = deltaY > 0 ? -1 : 1;
+  _camDist = clampCamDist(camDistForZoom2D(zoom2DForCamDist(_camDist) + step));
+}
+
+function panCamera3D(dx, dy) {
+  const panScale = _camDist * 0.0015;
+  const sinT = Math.sin(_camTheta);
+  const cosT = Math.cos(_camTheta);
+  _camTargetX -= (dx * cosT - dy * sinT) * panScale;
+  _camTargetZ -= (dx * sinT + dy * cosT) * panScale;
+}
 
 function initMap3D() {
   const container = document.getElementById('map3d');
@@ -76,7 +155,7 @@ function initMap3D() {
   window._scene.fog = new THREE.FogExp2(0x070b18, 0.003);
 
   // ── Camera ─────────────────────────────────────────────────────────────
-  window._camera = new THREE.PerspectiveCamera(55, w / h, 0.1, 3000);
+  window._camera = new THREE.PerspectiveCamera(CAM_FOV_DEG, w / h, 0.01, 3000);
   updateCamera3D();
 
   // ── Lights ──────────────────────────────────────────────────────────────
@@ -108,7 +187,7 @@ function initMap3D() {
   setup3DOrbitControls(canvas);
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    _camDist = Math.max(20, Math.min(400, _camDist + e.deltaY * 0.08));
+    zoom3DByWheelDelta(e.deltaY);
     mark3DDirty();
   }, { passive: false });
 
@@ -143,6 +222,18 @@ function initMap3D() {
   window.reloadFloorPlan3D = reloadFloorPlan3D;
   window.fit3DCameraToFloor = fit3DCameraToFloor;
   window.setFloorPlanOpacity3D = setFloorPlanOpacity3D;
+  window.sync3DCameraFrom2D = sync3DCameraFrom2D;
+  window.sync2DViewFrom3D = sync2DViewFrom3D;
+  window.camDistForZoom2D = camDistForZoom2D;
+  window.zoom2DForCamDist = zoom2DForCamDist;
+  window.zoom3DByWheelDelta = zoom3DByWheelDelta;
+  window.get3DCameraState = () => ({
+    targetX: _camTargetX,
+    targetZ: _camTargetZ,
+    dist: _camDist,
+    theta: _camTheta,
+    phi: _camPhi,
+  });
 }
 
 function mark3DDirty() {
@@ -185,7 +276,7 @@ function _syncInstancedTrackers() {
 
   Object.values(window.trackers || {}).forEach(t => {
     if (t.pos_x == null || t.pos_y == null) return;
-    if (window._applyFloorFilter && window.HoloCoords && !window.HoloCoords.trackerOnFloor(t, floorIdx)) return;
+    if (window._applyFloorFilter3D && window.HoloCoords && !window.HoloCoords.trackerOnFloor(t, floorIdx)) return;
     if (i >= MAX_INSTANCED_TRACKERS) return;
 
     _trackerIdToIndex.set(t.id, i);
@@ -225,10 +316,35 @@ function fit3DCameraToFloor(extents) {
   const e = extents || getFloorExtents3D();
   _camTargetX = e.minX + e.widthM / 2;
   _camTargetZ = e.minY + e.heightM / 2;
-  const span = Math.max(e.widthM, e.heightM, 10);
-  _camDist = Math.max(30, Math.min(400, span * 1.35));
+  _camDist = clampCamDist(camDistForZoom2D(fitZoom2DForFloor(e)));
   updateCamera3D();
   mark3DDirty();
+}
+
+function sync3DCameraFrom2D() {
+  if (!window._map2d) return;
+  const map = window._map2d;
+  const center = map.getCenter();
+  if (typeof window.latLngToReal === 'function') {
+    const r = window.latLngToReal(center);
+    _camTargetX = r.x;
+    _camTargetZ = r.y;
+  } else if (typeof L !== 'undefined' && L.CRS && L.CRS.Simple) {
+    const pt = L.CRS.Simple.project(center);
+    _camTargetX = pt.x;
+    _camTargetZ = pt.y;
+  }
+  _camDist = clampCamDist(camDistForZoom2D(map.getZoom()));
+  updateCamera3D();
+  mark3DDirty();
+}
+
+function sync2DViewFrom3D() {
+  if (!window._map2d || typeof window.realToLatLng !== 'function') return;
+  const latlng = window.realToLatLng(_camTargetX, _camTargetZ);
+  const zoom = Math.round(zoom2DForCamDist(_camDist) * 10) / 10;
+  window._map2d.setView(latlng, Math.max(MAP2D_MIN_ZOOM, Math.min(MAP2D_MAX_ZOOM, zoom)), { animate: false });
+  if (window.renderTrackerDots) window.renderTrackerDots();
 }
 
 function updateGridForFloor(extents) {
@@ -335,8 +451,7 @@ async function loadFloorPlan3D() {
         return;
       }
       window._floorTexture = texture;
-      texture.wrapS = THREE.ClampToEdgeWrapping;
-      texture.wrapT = THREE.ClampToEdgeWrapping;
+      alignFloorTextureTo2D(texture);
       applyFloorPlaneMesh(texture, extents, imgUrl);
     },
     undefined,
@@ -535,55 +650,72 @@ window.clearTrackerTrail = function(trackerId) {
 function focus3DTracker(tid) {
   const t = window.trackers && window.trackers[tid];
   if (!t || t.pos_x === undefined) return;
-  _camDist = Math.min(_camDist, 50);
+  _camTargetX = t.pos_x;
+  _camTargetZ = t.pos_y;
+  _camDist = clampCamDist(camDistForZoom2D(MAP2D_FOCUS_ZOOM));
   updateCamera3D();
   mark3DDirty();
 }
 
 function colorForTracker(t) {
-  if (t.asset_state === 'OFFLINE') return 0x475569;
+  if (t.asset_state === 'OFFLINE') return 0x64748b;
   if (t.alert_status === 'RESTRICTED_ZONE' || t.alert_status === 'CRITICAL_VITALS') return 0xff4444;
   if (t.alert_status !== 'NORMAL') return 0xffb300;
-  return 0x00e5ff;
+  return 0x22c55e;
 }
 
 // ── Orbit controls ────────────────────────────────────────────────────────────
 function setup3DOrbitControls(canvas) {
-  // Mouse
   canvas.addEventListener('mousedown', e => {
-    _isDragging = true;
+    if (e.button === 1 || e.shiftKey) {
+      _isPanning = true;
+      _isDragging = false;
+    } else {
+      _isDragging = true;
+      _isPanning = false;
+    }
     _lastX = e.clientX;
     _lastY = e.clientY;
-    canvas.style.cursor = 'grabbing';
+    canvas.style.cursor = _isPanning ? 'move' : 'grabbing';
+    e.preventDefault();
   });
   canvas.addEventListener('mouseup', () => {
     _isDragging = false;
+    _isPanning = false;
     canvas.style.cursor = 'grab';
   });
   canvas.addEventListener('mouseleave', () => {
     _isDragging = false;
+    _isPanning = false;
     canvas.style.cursor = 'grab';
   });
   canvas.addEventListener('mousemove', e => {
-    if (!_isDragging) return;
+    if (!_isDragging && !_isPanning) return;
     const dx = e.clientX - _lastX;
     const dy = e.clientY - _lastY;
-    _camTheta -= dx * 0.005;
-    _camPhi = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, _camPhi - dy * 0.005));
+    if (_isPanning) {
+      panCamera3D(dx, dy);
+    } else {
+      _camTheta -= dx * 0.005;
+      _camPhi = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, _camPhi - dy * 0.005));
+    }
     _lastX = e.clientX;
     _lastY = e.clientY;
     mark3DDirty();
   });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-  // Touch — single finger rotate, two finger pinch zoom
+  // Touch — single finger rotate, two finger pinch zoom / pan
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
     if (e.touches.length === 1) {
       _isDragging = true;
+      _isPanning = false;
       _lastX = e.touches[0].clientX;
       _lastY = e.touches[0].clientY;
     } else if (e.touches.length === 2) {
       _isDragging = false;
+      _isPanning = true;
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       _touchDist = Math.sqrt(dx * dx + dy * dy);
@@ -607,12 +739,24 @@ function setup3DOrbitControls(canvas) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const newDist = Math.sqrt(dx * dx + dy * dy);
-      _camDist = Math.max(20, Math.min(400, _camDist - (newDist - _touchDist) * 0.3));
+      if (_touchDist > 0) {
+        const pinchDelta = newDist - _touchDist;
+        if (Math.abs(pinchDelta) > 2) {
+          zoom3DByWheelDelta(-pinchDelta * 2);
+        }
+      }
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      panCamera3D(midX - _touchMid.x, midY - _touchMid.y);
       _touchDist = newDist;
+      _touchMid = { x: midX, y: midY };
     }
   }, { passive: false });
 
-  canvas.addEventListener('touchend', () => { _isDragging = false; });
+  canvas.addEventListener('touchend', () => {
+    _isDragging = false;
+    _isPanning = false;
+  });
 
   canvas.style.cursor = 'grab';
 }
@@ -705,7 +849,7 @@ function updateTrackerSelectionVisuals() {
  */
 window.set3DFloor = function(floorIndex) {
   window._currentFloor = floorIndex;
-  window._applyFloorFilter = true;
+  window._applyFloorFilter3D = true;
 
   const camPhis = [0.45, 0.35, 0.25];
   _camPhi = camPhis[floorIndex] || 0.45;
@@ -724,7 +868,6 @@ window.set3DFloor = function(floorIndex) {
   });
 
   render3DTrackerDots();
-  if (window.renderTrackerDots) window.renderTrackerDots();
   mark3DDirty();
 };
 
@@ -732,38 +875,16 @@ window.set3DFloor = function(floorIndex) {
  * Focus camera on the currently selected tracker
  */
 window.focusSelectedTracker3D = function() {
-  let tid = window._selectedTrackerId || window.selectedTrackerId;
+  const tid = window._selectedTrackerId || window.selectedTrackerId;
   if (!tid) return;
-
-  const idx = _trackerIdToIndex.get(tid);
-  if (idx == null || !_trackerInstanced) return;
-
-  _trackerInstanced.getMatrixAt(idx, _dummy.matrix);
-  const pos = new THREE.Vector3();
-  pos.setFromMatrixPosition(_dummy.matrix);
-
-  const startDist = _camDist;
-  const targetDist = Math.min(30, _camDist);
-  const startTime = Date.now();
-  const duration = 500;
-
-  function animateFocus() {
-    const elapsed = Date.now() - startTime;
-    const t = Math.min(elapsed / duration, 1);
-    const ease = 1 - Math.pow(1 - t, 3);
-    _camDist = startDist + (targetDist - startDist) * ease;
-    updateCamera3D();
-    mark3DDirty();
-    if (t < 1) requestAnimationFrame(animateFocus);
-  }
-  animateFocus();
+  focus3DTracker(tid);
 };
 
 // ── Animation loop ────────────────────────────────────────────────────────────
 function animate3D() {
   window._animId = requestAnimationFrame(animate3D);
 
-  const cameraActive = _isDragging;
+  const cameraActive = _isDragging || _isPanning;
   const hasSelectionRing = !!window._selectedTrackerRing;
 
   if (_needsRender3D || cameraActive || hasSelectionRing) {

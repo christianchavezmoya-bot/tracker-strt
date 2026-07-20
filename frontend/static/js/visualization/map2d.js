@@ -91,6 +91,7 @@ async function initMap2D() {
   window.toggleStreetBasemap = (show) => MapGeoref && MapGeoref.toggleStreetLayer(show);
   window.toggleSatelliteBasemap = (show) => MapGeoref && MapGeoref.toggleSatelliteLayer(show);
   window.realToLatLng = realToLatLng;
+  window.latLngToReal = latLngToReal;
   syncHoloCoords();
 }
 

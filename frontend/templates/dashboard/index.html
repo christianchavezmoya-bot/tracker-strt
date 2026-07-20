@@ -208,7 +208,7 @@
         <button class="floor-btn" data-floor="1" onclick="window.set3DFloor(1)">Level 1</button>
         <button class="floor-btn" data-floor="2" onclick="window.set3DFloor(2)">Level 2</button>
       </div>
-      <canvas id="threeCanvas" style="width:100%;height:100%"></canvas>
+      <canvas id="threeCanvas" style="width:100%;height:100%" title="Drag to orbit · Shift+drag to pan · Scroll to zoom"></canvas>
     </div>
 
     <!-- Map Toolbar -->
@@ -480,9 +480,9 @@
 <script src="/static/js/visualization/coordinate-service.js?v=1"></script>
 <script src="/static/js/visualization/tracker-canvas-layer.js?v=1"></script>
 <script src="/static/js/visualization/map-georef.js?v=12"></script>
-<script src="/static/js/visualization/map2d.js?v=16"></script>
-<script src="/static/js/visualization/map3d.js?v=14"></script>
-<script src="/static/js/dashboard.js?v=15"></script>
+<script src="/static/js/visualization/map2d.js?v=17"></script>
+<script src="/static/js/visualization/map3d.js?v=15"></script>
+<script src="/static/js/dashboard.js?v=16"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js?v=7').catch(() => {});

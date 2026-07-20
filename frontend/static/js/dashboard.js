@@ -495,6 +495,7 @@ function update3DViewAvailability() {
 function setView(view) {
   const unavailable3d = document.getElementById('map3dUnavailable');
   if (unavailable3d) unavailable3d.style.display = 'none';
+  const prevView = currentView;
 
   if (view === '3d') {
     const ok = window.ensureMap3D && window.ensureMap3D();
@@ -519,6 +520,7 @@ function setView(view) {
   document.getElementById('map3d').style.display = view === '3d' ? 'block' : 'none';
   // Trigger map resize / re-render
   if (view === '2d' && window._map2d) {
+    if (prevView === '3d' && window.sync2DViewFrom3D) window.sync2DViewFrom3D();
     window._map2d.invalidateSize();
     if (window.renderTrackerDots) window.renderTrackerDots();
   }
@@ -533,9 +535,16 @@ function setView(view) {
         window._camera.updateProjectionMatrix();
       }
     }
-    if (window.reloadFloorPlan3D) window.reloadFloorPlan3D();
-    if (window.render3DTrackerDots) window.render3DTrackerDots();
-    if (window.mark3DDirty) window.mark3DDirty();
+    const finish3DSync = () => {
+      if (prevView === '2d' && window.sync3DCameraFrom2D) window.sync3DCameraFrom2D();
+      if (window.render3DTrackerDots) window.render3DTrackerDots();
+      if (window.mark3DDirty) window.mark3DDirty();
+    };
+    if (window.reloadFloorPlan3D) {
+      Promise.resolve(window.reloadFloorPlan3D()).then(finish3DSync);
+    } else {
+      finish3DSync();
+    }
   }
 }
 
