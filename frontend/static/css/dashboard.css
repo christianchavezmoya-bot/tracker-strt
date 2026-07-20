@@ -30,7 +30,9 @@
   animation: pulse-glow 2s infinite;
 }
 
-/* Proximity lines (Leaflet polyline uses .proximity-line-leaflet) */
+/* Tracker canvas layer (ADR-001 high-performance dots) */
+.tracker-canvas-layer { pointer-events: auto; cursor: default; }
+
 .proximity-line-leaflet { pointer-events: none; }
 .proximity-line {
   position: absolute; height: 1px;

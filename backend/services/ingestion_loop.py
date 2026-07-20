@@ -10,9 +10,11 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, List
 
 from flask import Flask
+
+from backend.services.sse_format import format_sse_event
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,12 @@ class IngestionLoop(threading.Thread):
         # Per-tracker Kalman for velocity (tied to history service)
         self._prev_positions: Dict[str, Dict] = {}
 
+        # SSE position batching (ADR-001): coalesce updates ~50ms
+        self._batch_lock = threading.Lock()
+        self._batch_pending: Dict[int, Dict] = {}
+        self._batch_timer: Optional[threading.Timer] = None
+        self._batch_interval = flush_interval
+
     # ── SSE client management ──────────────────────────────────────────────────
 
     def register_sse_client(self, queue: object):
@@ -66,7 +74,7 @@ class IngestionLoop(threading.Thread):
             logger.debug(f"SSE client registered (total: {len(self._sse_queues)})")
 
     def unregister_sse_client(self, queue: object):
-        with self.sse_lock:
+        with self._sse_lock:
             self._sse_queues.discard(queue)
             logger.debug(f"SSE client unregistered (total: {len(self._sse_queues)})")
 
@@ -212,10 +220,10 @@ class IngestionLoop(threading.Thread):
             "timestamp": timestamp.isoformat(),
         }
 
-        # Step 7: Broadcast to SSE clients
-        self._broadcast_sse(sse_data)
+        # Step 7: Queue for batched SSE broadcast
+        self._queue_position_sse(sse_data)
 
-        # Step 8: Publish to MQTT
+        # Step 8: Publish to MQTT (immediate — external consumers)
         if self._mqtt and getattr(self._mqtt, "is_connected", False):
             try:
                 publish = getattr(self._mqtt, "publish", None)
@@ -224,9 +232,35 @@ class IngestionLoop(threading.Thread):
             except Exception as e:
                 logger.error(f"MQTT publish error: {e}")
 
+    def _queue_position_sse(self, sse_data: Dict) -> None:
+        """Coalesce position updates; latest sample per tracker wins within batch window."""
+        tid = sse_data.get("tracker_id")
+        if tid is None:
+            self._broadcast_sse(sse_data)
+            return
+        with self._batch_lock:
+            self._batch_pending[int(tid)] = sse_data
+            if self._batch_timer is None:
+                self._batch_timer = threading.Timer(self._batch_interval, self._flush_position_batch)
+                self._batch_timer.daemon = True
+                self._batch_timer.start()
+
+    def _flush_position_batch(self) -> None:
+        with self._batch_lock:
+            self._batch_timer = None
+            if not self._batch_pending:
+                return
+            updates: List[Dict] = list(self._batch_pending.values())
+            self._batch_pending.clear()
+        if len(updates) == 1:
+            self._broadcast_sse(updates[0])
+        else:
+            self._broadcast_sse({"type": "batch", "updates": updates})
+
     def _broadcast_sse(self, data: Dict):
         """Push SSE event to all connected clients."""
-        message = f"data: {json.dumps(data)}\n\n"
+        message = format_sse_event(data)
+        dropped = 0
         with self._sse_lock:
             dead = set()
             for q in self._sse_queues:
@@ -234,13 +268,16 @@ class IngestionLoop(threading.Thread):
                     q.put_nowait(message)
                 except Exception:
                     dead.add(q)
+                    dropped += 1
             for q in dead:
                 self._sse_queues.discard(q)
+        if dropped:
+            logger.debug(f"SSE dropped {dropped} slow client queue(s)")
 
     def _broadcast_sse_alert(self, alert_record):
         """Push alert event to all SSE clients. Called by AlertService."""
         alert_dict = alert_record.to_dict()
-        message = f"data: {json.dumps({'type': 'alert', 'alert': alert_dict})}\n\n"
+        message = format_sse_event({"type": "alert", "alert": alert_dict})
         with self._sse_lock:
             dead = set()
             for q in self._sse_queues:

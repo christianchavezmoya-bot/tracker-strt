@@ -16,6 +16,8 @@ from flask import (
 )
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
+from backend.services.sse_format import format_sse_event
+
 logger = logging.getLogger(__name__)
 stream_bp = Blueprint("stream", __name__, url_prefix="/api/stream")
 
@@ -115,7 +117,7 @@ def positions_stream():
                     yield msg
                 except queue.Empty:
                     # Keepalive heartbeat
-                    yield f"data: {json.dumps({'type': 'heartbeat', 'ts': datetime.now(timezone.utc).isoformat()})}\n\n"
+                    yield format_sse_event({'type': 'heartbeat', 'ts': datetime.now(timezone.utc).isoformat()})
 
         except GeneratorExit:
             pass
@@ -158,10 +160,10 @@ def _snapshot_event() -> str:
                     "z": t.pos_z or 0,
                     "source": "TRACKER",
                 })
-        return f"data: {json.dumps({'type': 'snapshot', 'positions': items})}\n\n"
+        return format_sse_event({'type': 'snapshot', 'positions': items})
     except Exception as e:
         logger.error(f"Error building snapshot: {e}")
-        return f"data: {json.dumps({'type': 'snapshot', 'positions': []})}\n\n"
+        return format_sse_event({'type': 'snapshot', 'positions': []})
 
 
 # ── Status endpoint ───────────────────────────────────────────────────────────
@@ -187,6 +189,7 @@ def stream_status():
         "ingestion_running": loop is not None and loop.is_alive(),
         "sse_clients": client_count,
         "queue_depth": queue_depth,
+        "dropped_clients_hint": "Queues with maxsize 200 drop on overflow",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 

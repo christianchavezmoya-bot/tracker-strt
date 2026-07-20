@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Proposed — pending stakeholder sign-off |
+| **Status** | Accepted — Phase 0–2 implemented (2026-07-20) |
 | **Date** | 2026-07-20 |
 | **Deciders** | Product, Engineering, Operations |
 | **Supersedes** | Unity-only delivery assumptions in `roadmap.md` (R&D retained, not primary path) |

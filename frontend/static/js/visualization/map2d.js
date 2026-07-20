@@ -15,6 +15,7 @@ let _sectionLayers = [];
 let _gridLines = [];
 let _nodeMarkers = [];
 let _nodeMarkerRenderGen = 0;
+let _trackerCanvasLayer = null;
 
 function clearAllNodeMarkers() {
   if (!window._map2d) return;
@@ -89,6 +90,28 @@ async function initMap2D() {
   window.switchToMineView = switchToMineView;
   window.toggleStreetMapLayer = (show) => MapGeoref && MapGeoref.toggleStreetLayer(show);
   window.toggleSatelliteMapLayer = (show) => MapGeoref && MapGeoref.toggleSatelliteLayer(show);
+  window.realToLatLng = realToLatLng;
+  syncHoloCoords();
+}
+
+function syncHoloCoords() {
+  if (!window.HoloCoords) return;
+  const b = getRealWorldBounds();
+  window.HoloCoords.setCalibration({
+    calibrated: _isCalibrated,
+    imageWidth: _imageWidth,
+    imageHeight: _imageHeight,
+    affine: { a: _tx_a, b: _tx_b, c: _tx_c, d: _tx_d, e: _ty_e, f: _ty_f },
+    bounds: b,
+    floorPlanUrl: _floorPlanUrl,
+    floorExtents: { widthM: b.maxX - b.minX, heightM: b.maxY - b.minY },
+  });
+}
+
+function ensureTrackerCanvasLayer() {
+  if (!window._map2d || _trackerCanvasLayer || !window.TrackerCanvasLayer) return;
+  _trackerCanvasLayer = new window.TrackerCanvasLayer();
+  _trackerCanvasLayer.addTo(window._map2d);
 }
 
 function bindMap2DEvents() {
@@ -112,6 +135,7 @@ function destroyMap2D() {
   _sectionLayers = [];
   _gridLines = [];
   _nodeMarkers = [];
+  _trackerCanvasLayer = null;
 }
 
 function initMineMapCore() {
@@ -371,6 +395,7 @@ async function loadCalibration() {
     _isCalibrated = false;
     showCalibrationBadge(false);
   }
+  syncHoloCoords();
 }
 
 function _pickPrimaryCalibration(status) {
@@ -897,10 +922,12 @@ async function loadFloorPlanImage() {
 }
 
 function loadFloorPlanFromURL(url) {
+  _floorPlanUrl = url;
   const img = new Image();
   img.onload = () => {
     _imageWidth = img.naturalWidth || 1000;
     _imageHeight = img.naturalHeight || 1000;
+    syncHoloCoords();
     const bounds = getFloorPlanBounds();
     _floorPlanLayer = L.imageOverlay(url, bounds, { opacity: 0.92, crossOrigin: true }).addTo(window._map2d);
     drawGridOverlay();
@@ -1036,41 +1063,31 @@ function renderProximityLines() {
 
 function renderTrackerDots() {
   if (!window._map2d) return;
+  ensureTrackerCanvasLayer();
   window._map2d.eachLayer(l => { if (l._isTrackerDot) window._map2d.removeLayer(l); });
-  if (window.layerState && window.layerState.trackers === false) return;
-  Object.values(window.trackers || {}).forEach(t => {
-    if (t.pos_x === undefined || t.pos_y === undefined) return;
-    addTrackerDot(t);
-  });
+  if (window.layerState && window.layerState.trackers === false) {
+    if (_trackerCanvasLayer) _trackerCanvasLayer.setTrackers({});
+    return;
+  }
+  if (_trackerCanvasLayer) {
+    _trackerCanvasLayer.setTrackers(window.trackers || {});
+    _trackerCanvasLayer.setSelectedId(window.selectedTrackerId || null);
+  }
 }
 
 function addTrackerDot(t) {
-  const latlng = realToLatLng(t.pos_x, t.pos_y);
-  const dotClass = dotClassForTracker(t);
-  const isSelected = window.selectedTrackerId === t.id;
-  const isNearby = _nearbyTrackerIds.has(t.id);
-  const icon = L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="tracker-dot ' + dotClass + (isSelected ? ' selected' : '') + (isNearby ? ' nearby' : '') + '" id="dot-' + t.id + '" style="position:relative"></div>' });
-  const marker = L.marker(latlng, { icon, zIndexOffset: isSelected ? 1000 : 0 });
-  marker._isTrackerDot = true;
-  marker.addTo(window._map2d);
-  marker.on('click', () => { if (window.selectTracker) window.selectTracker(t.id); });
-  const name = t.assigned_name || t.hardware_id || '—';
-  const section = t.current_section || t.section_name || '—';
-  const speed = t.speed !== null ? ' · ' + t.speed.toFixed(1) + 'm/s' : '';
-  const batt = t.battery_level !== undefined ? ' · ' + Math.round(t.battery_level) + '%' : '';
-  marker.bindTooltip('<b>' + name + '</b><br>' + section + speed + batt, { direction: 'top', offset: [0, -8], className: 'holo-tooltip' });
+  ensureTrackerCanvasLayer();
+  if (_trackerCanvasLayer) _trackerCanvasLayer.setTrackers(window.trackers || {});
 }
 
 function updateTrackerDot(tid, pos) {
   if (!window._map2d) return;
   if (window.layerState && window.layerState.trackers === false) return;
-  const tracker = window.trackers && window.trackers[tid];
-  if (!tracker) return;
-  let existing = null;
-  window._map2d.eachLayer(l => { if (l._isTrackerDot && l._icon && l._icon.querySelector && l._icon.querySelector('#dot-' + tid)) existing = l; });
-  const latlng = realToLatLng(pos.x, pos.y);
-  if (existing) existing.setLatLng(latlng);
-  else addTrackerDot({ ...tracker, pos_x: pos.x, pos_y: pos.y, pos_z: pos.z });
+  ensureTrackerCanvasLayer();
+  if (_trackerCanvasLayer) _trackerCanvasLayer.updateTracker(tid, pos);
+  if (window.selectedTrackerId === tid && _trackerCanvasLayer) {
+    _trackerCanvasLayer.setSelectedId(tid);
+  }
   if (window.selectedTrackerId === tid && window.renderProximityLines) {
     window.renderProximityLines();
   }

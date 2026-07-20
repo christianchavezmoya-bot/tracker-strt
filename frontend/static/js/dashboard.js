@@ -74,6 +74,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.renderTrackerDots) window.renderTrackerDots();
   }, 600);
   startSSE();
+  startInterpolationLoop();
   setupKeyboardShortcuts();
   // Deep-link from Alerts "Show on map" / Map Setup nav
   try {
@@ -350,6 +351,7 @@ function selectTracker(id) {
   const t = trackers[id];
   if (!t) return;
   showTagCard(t);
+  if (window.renderTrackerDots) window.renderTrackerDots();
   if (t.pos_x !== undefined) {
     if (currentView === '2d' && window.zoomToPosition) window.zoomToPosition(t.pos_x, t.pos_y);
     if (currentView === '3d' && window.focus3DTracker) window.focus3DTracker(id);
@@ -734,6 +736,107 @@ function zoomToAlert(alertId) {
 // ── SSE Stream ──────────────────────────────────────────────────────────────
 let es = null;
 let esRetryTimer = null;
+const interpTargets = {};
+const interpCurrent = {};
+let interpLoopStarted = false;
+
+function startInterpolationLoop() {
+  if (interpLoopStarted) return;
+  interpLoopStarted = true;
+  function tick() {
+    if (!isPlayback) {
+      let moved = false;
+      Object.keys(interpTargets).forEach(tidKey => {
+        const tgt = interpTargets[tidKey];
+        if (!tgt) return;
+        if (!interpCurrent[tidKey]) interpCurrent[tidKey] = { x: tgt.x, y: tgt.y, z: tgt.z || 0 };
+        const cur = interpCurrent[tidKey];
+        const lerp = 0.22;
+        const dx = tgt.x - cur.x;
+        const dy = tgt.y - cur.y;
+        const dz = (tgt.z || 0) - (cur.z || 0);
+        if (Math.abs(dx) > 0.004 || Math.abs(dy) > 0.004 || Math.abs(dz) > 0.004) {
+          cur.x += dx * lerp;
+          cur.y += dy * lerp;
+          cur.z = (cur.z || 0) + dz * lerp;
+          const tid = Number(tidKey);
+          if (window.updateTrackerDot) window.updateTrackerDot(tid, cur);
+          if (window.updateTrackerDot3D) window.updateTrackerDot3D(tid, cur);
+          moved = true;
+        }
+      });
+      if (moved && window.mark3DDirty) window.mark3DDirty();
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function applySnapshotPositions(positions) {
+  if (!positions) return;
+  positions.forEach(pos => {
+    const tid = pos.tracker_id;
+    if (!trackers[tid]) return;
+    trackers[tid].pos_x = pos.x;
+    trackers[tid].pos_y = pos.y;
+    trackers[tid].pos_z = pos.z;
+    trackers[tid].accuracy = pos.accuracy;
+    trackers[tid].vx = pos.vx;
+    trackers[tid].vy = pos.vy;
+    trackers[tid].speed = pos.speed;
+    trackers[tid].last_seen = pos.timestamp;
+    trackers[tid].source = pos.source;
+    interpTargets[tid] = { x: pos.x, y: pos.y, z: pos.z || 0 };
+    interpCurrent[tid] = { x: pos.x, y: pos.y, z: pos.z || 0 };
+    if (pos.gas_ppm != null) {
+      if (!gasHistory[tid]) gasHistory[tid] = [];
+      gasHistory[tid].push({ ppm: pos.gas_ppm, ts: Date.now() });
+      if (gasHistory[tid].length > GAS_HISTORY_MAX) gasHistory[tid].shift();
+      if (selectedTrackerId === tid) drawGasChart(tid);
+    }
+  });
+  trackerList = Object.values(trackers);
+  if (window.renderTrackerDots) window.renderTrackerDots();
+  if (window.render3DTrackerDots) window.render3DTrackerDots();
+  updateStats();
+}
+
+function routeSSEMessage(e) {
+  let data;
+  try {
+    data = JSON.parse(e.data);
+  } catch (_) {
+    return;
+  }
+  const type = data.type || (e.type && e.type !== 'message' ? e.type : null);
+  if (type === 'batch' && Array.isArray(data.updates)) {
+    data.updates.forEach(u => applyPositionData(u));
+    return;
+  }
+  if (type === 'position_update') applyPositionData(data);
+  else if (type === 'snapshot') applySnapshotPositions(data.positions);
+  else if (type === 'alert') {
+    const alert = data.alert;
+    if (alert && !alerts.find(a => a.id === alert.id)) {
+      alerts.unshift(alert);
+      renderAlertFeed();
+    }
+    const badge = document.getElementById('alertCount');
+    const count = alerts.filter(a => a.state === 'ACTIVE').length;
+    if (badge && count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.style.display = 'inline';
+    }
+    if (alert) showAlertToast(alert);
+  } else if (type === 'alert_acknowledged') {
+    const alert = data.alert;
+    const idx = alerts.findIndex(a => a.id === alert.id);
+    if (idx >= 0) alerts[idx] = alert;
+    renderAlertFeed();
+  } else if (type === 'heartbeat') {
+    updateStatusIndicator(true);
+  }
+}
 
 function startSSE() {
   if (es) { try { es.close(); } catch {} }
@@ -746,68 +849,21 @@ function startSSE() {
     : '/api/stream/positions';
   es = new EventSource(url);
 
-  es.addEventListener('position_update', e => {
+  es.onmessage = routeSSEMessage;
+
+  es.addEventListener('position_update', e => applyPositionData(JSON.parse(e.data)));
+  es.addEventListener('batch', e => {
     const data = JSON.parse(e.data);
-    handlePositionUpdate(data);
+    if (data.updates) data.updates.forEach(u => applyPositionData(u));
   });
 
   es.addEventListener('snapshot', e => {
-    const data = JSON.parse(e.data);
-    if (data.positions) {
-      data.positions.forEach(pos => {
-        const tid = pos.tracker_id;
-        if (trackers[tid]) {
-          trackers[tid].pos_x = pos.x;
-          trackers[tid].pos_y = pos.y;
-          trackers[tid].pos_z = pos.z;
-          trackers[tid].accuracy = pos.accuracy;
-          trackers[tid].vx = pos.vx;
-          trackers[tid].vy = pos.vy;
-          trackers[tid].speed = pos.speed;
-          trackers[tid].last_seen = pos.timestamp;
-          trackers[tid].source = pos.source;
-
-          // Update gas history from snapshot (if gas field present)
-          if (pos.gas_ppm != null) {
-            if (!gasHistory[tid]) gasHistory[tid] = [];
-            gasHistory[tid].push({ ppm: pos.gas_ppm, ts: Date.now() });
-            if (gasHistory[tid].length > GAS_HISTORY_MAX) gasHistory[tid].shift();
-            // Refresh gas chart if this tracker's tag card is open
-            if (selectedTrackerId === tid) drawGasChart(tid);
-          }
-        }
-      });
-      trackerList = Object.values(trackers);
-      if (window.renderTrackerDots) window.renderTrackerDots();
-      updateStats();
-    }
+    applySnapshotPositions(JSON.parse(e.data).positions);
   });
 
-  es.addEventListener('alert', e => {
-    const data = JSON.parse(e.data);
-    const alert = data.alert;
-    // Add to alerts if not already there
-    if (!alerts.find(a => a.id === alert.id)) {
-      alerts.unshift(alert);
-      renderAlertFeed();
-    }
-    // Badge
-    const badge = document.getElementById('alertCount');
-    const count = alerts.filter(a => a.state === 'ACTIVE').length;
-    if (count > 0) {
-      badge.textContent = count > 99 ? '99+' : count;
-      badge.style.display = 'inline';
-    }
-    showAlertToast(alert);
-  });
+  es.addEventListener('alert', e => routeSSEMessage(e));
 
-  es.addEventListener('alert_acknowledged', e => {
-    const data = JSON.parse(e.data);
-    const alert = data.alert;
-    const idx = alerts.findIndex(a => a.id === alert.id);
-    if (idx >= 0) alerts[idx] = alert;
-    renderAlertFeed();
-  });
+  es.addEventListener('alert_acknowledged', e => routeSSEMessage(e));
 
   es.addEventListener('heartbeat', () => {
     updateStatusIndicator(true);
@@ -820,12 +876,10 @@ function startSSE() {
   };
 }
 
-function handlePositionUpdate(data) {
-  // Ignore SSE updates during playback — playback uses history data only
+function applyPositionData(data) {
   if (isPlayback) return;
-
   const tid = data.tracker_id;
-  if (!trackers[tid]) return;  // Unknown tracker
+  if (!trackers[tid]) return;
   trackers[tid].pos_x = data.x;
   trackers[tid].pos_y = data.y;
   trackers[tid].pos_z = data.z;
@@ -836,12 +890,8 @@ function handlePositionUpdate(data) {
   trackers[tid].last_seen = data.timestamp;
   trackers[tid].source = data.source;
 
-  // Update tag card if this tracker is selected
-  if (selectedTrackerId === tid) {
-    showTagCard(trackers[tid]);
-  }
+  if (selectedTrackerId === tid) showTagCard(trackers[tid]);
 
-  // Re-render tag list row (just update time / speed, don't re-render whole list)
   const row = document.querySelector(`.tag-item[data-id="${tid}"]`);
   if (row) {
     const timeEl = row.querySelector('.tag-item-time');
@@ -854,13 +904,21 @@ function handlePositionUpdate(data) {
     }
   }
 
-  // Update map dots (both 2D and 3D)
-  if (window.updateTrackerDot) window.updateTrackerDot(tid, data);
-  if (window.updateTrackerDot3D) window.updateTrackerDot3D(tid, data);
-  if (selectedTrackerId && (selectedTrackerId === tid || window.renderProximityLines)) {
-    if (window.renderProximityLines) window.renderProximityLines();
+  interpTargets[tid] = { x: data.x, y: data.y, z: data.z || 0 };
+  if (!interpCurrent[tid]) {
+    interpCurrent[tid] = { x: data.x, y: data.y, z: data.z || 0 };
+    if (window.updateTrackerDot) window.updateTrackerDot(tid, interpCurrent[tid]);
+    if (window.updateTrackerDot3D) window.updateTrackerDot3D(tid, interpCurrent[tid]);
+  }
+
+  if (selectedTrackerId && selectedTrackerId === tid && window.renderProximityLines) {
+    window.renderProximityLines();
   }
   updateStats();
+}
+
+function handlePositionUpdate(data) {
+  applyPositionData(data);
 }
 
 function showToast(message, type = 'success') {

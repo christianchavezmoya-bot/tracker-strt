@@ -1,0 +1,80 @@
+/**
+ * HOLO-RTLS — Unified coordinate service (ADR-001)
+ * Single source for mine metres, floor-plan pixels, and map display helpers.
+ */
+'use strict';
+
+window.HoloCoords = (function () {
+  let _state = {
+    calibrated: false,
+    imageWidth: 1000,
+    imageHeight: 3000,
+    affine: { a: 1, b: 0, c: 0, d: 0, e: 1, f: 0 },
+    bounds: { minX: 0, maxX: 25, minY: 0, maxY: 50 },
+    floorPlanUrl: null,
+    floorExtents: { widthM: 200, heightM: 200 },
+  };
+
+  function setCalibration(cfg) {
+    if (!cfg) return;
+    _state.calibrated = !!cfg.calibrated;
+    if (cfg.imageWidth) _state.imageWidth = cfg.imageWidth;
+    if (cfg.imageHeight) _state.imageHeight = cfg.imageHeight;
+    if (cfg.affine) _state.affine = { ...cfg.affine };
+    if (cfg.bounds) _state.bounds = { ...cfg.bounds };
+    if (cfg.floorPlanUrl) _state.floorPlanUrl = cfg.floorPlanUrl;
+    if (cfg.floorExtents) _state.floorExtents = { ...cfg.floorExtents };
+  }
+
+  function pixelToReal(px, py) {
+    const a = _state.affine;
+    return {
+      x: a.a * px + a.b * py + a.c,
+      y: a.d * px + a.e * py + a.f,
+    };
+  }
+
+  function realToPixel(rx, ry) {
+    if (!_state.calibrated) return { x: rx, y: ry };
+    const a = _state.affine;
+    const det = a.a * a.e - a.b * a.d;
+    if (Math.abs(det) < 1e-10) return { x: rx, y: ry };
+    return {
+      x: (a.e * (rx - a.c) - a.b * (ry - a.f)) / det,
+      y: (-a.d * (rx - a.c) + a.a * (ry - a.f)) / det,
+    };
+  }
+
+  function getFloorPlanUrl() {
+    return _state.floorPlanUrl || '/static/assets/floor-plan-placeholder.png';
+  }
+
+  function getFloorExtents() {
+    const b = _state.bounds;
+    const spanX = Math.max(1, b.maxX - b.minX);
+    const spanY = Math.max(1, b.maxY - b.minY);
+    return { widthM: spanX, heightM: spanY, minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY };
+  }
+
+  function floorHeightForIndex(floorIndex) {
+    const heights = [0, 20, 40];
+    return heights[floorIndex] ?? 0;
+  }
+
+  function trackerOnFloor(tracker, floorIndex) {
+    const z = tracker.pos_z != null ? tracker.pos_z : 1;
+    const base = floorHeightForIndex(floorIndex);
+    return z >= base - 5 && z <= base + 15;
+  }
+
+  return {
+    setCalibration,
+    pixelToReal,
+    realToPixel,
+    getFloorPlanUrl,
+    getFloorExtents,
+    floorHeightForIndex,
+    trackerOnFloor,
+    getState: () => ({ ..._state }),
+  };
+})();
