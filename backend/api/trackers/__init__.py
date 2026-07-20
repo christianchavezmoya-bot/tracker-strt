@@ -10,6 +10,7 @@ from backend.services.tracker_discovery import (
     get_scan_config, save_scan_config, run_discovery, purge_trackers,
     acknowledge_tracker, FEATURES_BY_SCAN_TYPE, SCAN_TYPES,
 )
+from backend.services.presence_timeline import get_presence_timeline
 
 trackers_bp = Blueprint("trackers", __name__, url_prefix="/api/trackers")
 
@@ -245,6 +246,15 @@ def scan_types_catalog():
             for k, v in SCAN_TYPES.items()
         ],
     })
+
+
+@trackers_bp.route("/presence/timeline", methods=["GET"])
+@jwt_required()
+def presence_timeline():
+    minutes = request.args.get("minutes", 60, type=int)
+    ids_raw = request.args.get("tracker_ids", "")
+    tracker_ids = [int(x) for x in ids_raw.split(",") if x.strip().isdigit()] if ids_raw else None
+    return jsonify(get_presence_timeline(minutes, tracker_ids))
 
 
 @trackers_bp.route("/bulk/purge", methods=["POST"])

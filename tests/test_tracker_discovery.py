@@ -55,6 +55,57 @@ def test_acknowledge_tracker(client, auth_headers, db_session):
     assert data["nickname"] == "Alpha"
 
 
+def test_tracker_last_seen_at_in_list(client, auth_headers, db_session):
+    from backend.models import Tracker, TrackerAckStatus
+
+    t = Tracker(
+        hardware_id="AA:BB:CC:DD:EE:77",
+        ack_status=int(TrackerAckStatus.ACTIVE),
+        last_report_time=1700000000,
+    )
+    db_session.add(t)
+    db_session.commit()
+
+    res = client.get("/api/trackers", headers=auth_headers)
+    assert res.status_code == 200
+    items = res.get_json().get("items", [])
+    row = next(x for x in items if x["id"] == t.id)
+    assert row["last_seen_at"] is not None
+    assert "2023" in row["last_seen_at"]
+
+
+def test_presence_timeline(client, auth_headers, db_session):
+    from datetime import datetime, timezone
+
+    from backend.models import Tracker, TrackerAckStatus
+    from backend.models.positioning import TrackerPresenceLog
+
+    t = Tracker(
+        hardware_id="AA:BB:CC:DD:EE:66",
+        nickname="Chart Tag",
+        device_model="MOKO H7",
+        ack_status=int(TrackerAckStatus.ACTIVE),
+    )
+    db_session.add(t)
+    db_session.flush()
+    db_session.add(TrackerPresenceLog(
+        tracker_id=t.id,
+        timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
+        online=True,
+        rssi=-65.0,
+    ))
+    db_session.commit()
+
+    res = client.get("/api/trackers/presence/timeline?minutes=60", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["window_minutes"] == 60
+    assert len(data["trackers"]) == 1
+    assert data["trackers"][0]["id"] == t.id
+    assert len(data["trackers"][0]["samples"]) == 1
+    assert data["trackers"][0]["samples"][0]["online"] is True
+
+
 def test_purge_tracker(client, auth_headers, db_session):
     from backend.models import Tracker, TrackerAckStatus
 

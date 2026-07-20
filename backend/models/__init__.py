@@ -14,7 +14,7 @@ from backend.models.audit import AuditLog
 from backend.models.settings import Setting, BusinessLogo, SettingScope
 from backend.models.backup import BackupJob, CheckInLog, ApiKey
 from backend.models.hardware import HardwareConfig, HardwareType, Protocol, ConnectionStatus
-from backend.models.positioning import TrackingHistory, PositionSnapshot
+from backend.models.positioning import TrackingHistory, PositionSnapshot, TrackerPresenceLog
 from backend.models.detection import (
     FloorPlan, WifiAnchor, DetectionEvent, TrackedDevice,
     SignalType, AnchorStatus, DeviceType,
@@ -31,7 +31,7 @@ __all__ = [
     "AuditLog",
     "Setting", "BusinessLogo", "SettingScope",
     "BackupJob", "CheckInLog", "ApiKey",
-    "TrackingHistory", "PositionSnapshot",
+    "TrackingHistory", "PositionSnapshot", "TrackerPresenceLog",
     "HardwareConfig",
     "FloorPlan", "WifiAnchor", "DetectionEvent", "TrackedDevice",
     "SignalType", "AnchorStatus", "DeviceType",

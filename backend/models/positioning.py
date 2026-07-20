@@ -83,3 +83,28 @@ class PositionSnapshot(db.Model):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "last_seen_hardware": self.last_seen_hardware.isoformat() if self.last_seen_hardware else None,
         }
+
+
+class TrackerPresenceLog(db.Model):
+    """Online/offline + RSSI samples for tracker timeline charts."""
+    __tablename__ = "tracker_presence_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tracker_id = db.Column(db.Integer, db.ForeignKey("trackers.id"), nullable=False, index=True)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    online = db.Column(db.Boolean, default=True, nullable=False)
+    rssi = db.Column(db.Float, nullable=True)
+
+    __table_args__ = (
+        db.Index("ix_presence_tracker_ts", "tracker_id", "timestamp"),
+    )
+
+    tracker = db.relationship("Tracker", backref=db.backref("presence_logs", lazy="dynamic"))
+
+    def to_dict(self):
+        return {
+            "tracker_id": self.tracker_id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "online": bool(self.online),
+            "rssi": self.rssi,
+        }

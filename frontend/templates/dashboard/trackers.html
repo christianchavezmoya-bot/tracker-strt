@@ -19,6 +19,19 @@
 .feat-check { display:flex; align-items:flex-start; gap:8px; font-size:12px; }
 .ack-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 @media (max-width:720px) { .ack-form-grid { grid-template-columns:1fr; } }
+.view-toggle { display:flex; gap:4px; background:rgba(255,255,255,.04); border-radius:8px; padding:3px; }
+.view-toggle button { border:none; background:transparent; color:var(--text-muted); padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; }
+.view-toggle button.active { background:rgba(10,132,255,.2); color:var(--cyan); font-weight:600; }
+.chart-panel { display:none; flex-direction:column; gap:12px; }
+.chart-panel.active { display:flex; }
+.chart-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+.timeline-wrap { background:#0a0e14; border:1px solid var(--border); border-radius:10px; padding:12px; overflow-x:auto; }
+.timeline-canvas { display:block; width:100%; min-width:720px; }
+.timeline-legend { display:flex; gap:16px; font-size:11px; color:var(--text-muted); margin-top:8px; }
+.timeline-legend span { display:flex; align-items:center; gap:6px; }
+.legend-line { width:20px; height:2px; background:#ccc; }
+.legend-offline { width:3px; height:14px; background:#ff4444; }
+.table-panel.hidden { display:none; }
 </style>
 {% endblock %}
 {% block content %}
@@ -28,6 +41,10 @@
       <p class="page-subtitle">Discover BLE/WiFi tags, acknowledge assets, and manage personnel assignments</p>
     </div>
     <div class="page-actions">
+      <div class="view-toggle" role="tablist" aria-label="View mode">
+        <button type="button" id="viewTableBtn" class="active" aria-selected="true"><i class="fa-solid fa-table"></i> Table</button>
+        <button type="button" id="viewChartBtn" aria-selected="false"><i class="fa-solid fa-chart-line"></i> Timeline</button>
+      </div>
       <button class="btn btn-ghost" id="btnScanSettings" data-role-min="operator" title="Scan settings">
         <i class="fa-solid fa-sliders"></i> Scan settings
       </button>
@@ -60,7 +77,7 @@
     </select>
   </div>
 
-  <div class="table-panel">
+  <div class="table-panel" id="tablePanel">
     <table class="data-table" id="trackersTable">
       <thead>
         <tr>
@@ -68,6 +85,7 @@
           <th>Tag ID</th>
           <th>Model</th>
           <th>Status</th>
+          <th>Last transmitted</th>
           <th>Battery</th>
           <th>Nickname</th>
           <th>Name</th>
@@ -84,9 +102,35 @@
         </tr>
       </thead>
       <tbody id="trackersBody">
-        <tr><td colspan="18" class="empty-cell">Loading…</td></tr>
+        <tr><td colspan="19" class="empty-cell">Loading…</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <div class="chart-panel" id="chartPanel">
+    <div class="chart-toolbar">
+      <div style="font-size:13px;font-weight:600"><i class="fa-solid fa-signal"></i> Tag presence timeline</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--text-muted)">Window</label>
+        <select id="chartWindow" class="select-field">
+          <option value="1">1 minute</option>
+          <option value="5">5 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="60" selected>1 hour</option>
+          <option value="360">6 hours</option>
+          <option value="1440">24 hours</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" id="btnChartRefresh"><i class="fa-solid fa-rotate"></i> Refresh chart</button>
+      </div>
+    </div>
+    <div class="timeline-wrap">
+      <canvas id="timelineCanvas" class="timeline-canvas" height="400"></canvas>
+    </div>
+    <div class="timeline-legend">
+      <span><i class="legend-line"></i> RSSI (dBm, stronger toward top)</span>
+      <span><i class="legend-offline"></i> Offline / no transmission</span>
+      <span style="color:#6bff47">■ Online zone</span>
+    </div>
   </div>
 
 <!-- Scan settings modal -->
@@ -149,5 +193,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/shell.js"></script>
-<script src="/static/js/trackers-page.js?v=1"></script>
+<script src="/static/js/trackers-page.js?v=2"></script>
 {% endblock %}

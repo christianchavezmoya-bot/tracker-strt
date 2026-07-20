@@ -200,6 +200,10 @@ class Tracker(db.Model):
             "gas_ppm": self.gas_ppm,
             "alert_status": self.alert_status_name,
             "last_report_time": self.last_report_time,
+            "last_seen_at": (
+                datetime.fromtimestamp(self.last_report_time, tz=timezone.utc).isoformat()
+                if self.last_report_time else None
+            ),
             "current_section": self.current_section_name,
             "check_status": CheckInStatus(self.check_status).name,
             "created_at": self.created_at.isoformat() if self.created_at else None,

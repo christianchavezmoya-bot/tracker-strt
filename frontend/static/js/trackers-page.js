@@ -13,6 +13,31 @@ let scanCatalog = [];
 let selectedIds = new Set();
 let ackTracker = null;
 let ackIsEdit = false;
+let currentView = 'table';
+let cachedTrackers = [];
+
+function fmtLastSeen(t) {
+  const iso = t.last_seen_at;
+  const ts = t.last_report_time;
+  if (iso) {
+    try {
+      const d = new Date(iso);
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleString(undefined, {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+        });
+      }
+    } catch (_) { /* ignore */ }
+  }
+  if (ts) {
+    try {
+      return new Date(ts * 1000).toLocaleString(undefined, {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+      });
+    } catch (_) { /* ignore */ }
+  }
+  return '—';
+}
 
 const ACK = { UNACKNOWLEDGED: 'Unacknowledged', ACTIVE: 'Active', INACTIVE: 'Inactive', UNKNOWN: 'Unknown' };
 const FEAT_LABELS = {
@@ -99,6 +124,7 @@ async function loadTrackers() {
   const res = await API.get('/trackers?' + params);
   const data = await API.json(res);
   const items = data.items || [];
+  cachedTrackers = items;
 
   document.getElementById('statTotal').textContent = data.total ?? items.length;
   document.getElementById('statUnack').textContent = items.filter(t =>
@@ -110,7 +136,7 @@ async function loadTrackers() {
 
   const body = document.getElementById('trackersBody');
   if (!items.length) {
-    body.innerHTML = '<tr><td colspan="18" class="empty-cell">No tags yet. Run a scan or adjust filters.</td></tr>';
+    body.innerHTML = '<tr><td colspan="19" class="empty-cell">No tags yet. Run a scan or adjust filters.</td></tr>';
     return;
   }
 
@@ -119,11 +145,13 @@ async function loadTrackers() {
     const bat = t.battery_level != null ? Math.round(t.battery_level) + '%' : '—';
     const rssi = t.last_rssi != null ? Math.round(t.last_rssi) + ' dBm' : '—';
     const name = [t.first_name, t.surname].filter(Boolean).join(' ') || '—';
+    const lastTx = fmtLastSeen(t);
     return `<tr data-id="${t.id}">
       <td><input type="checkbox" class="row-check" data-id="${t.id}" ${checked}></td>
       <td class="mono">${esc(t.hardware_id)}</td>
       <td>${esc(t.device_model || '—')}</td>
       <td><span class="chip">${esc(displayStatus(t))}</span></td>
+      <td class="mono" title="${esc(t.last_seen_at || '')}">${esc(lastTx)}</td>
       <td>${bat}</td>
       <td>${esc(t.nickname || '—')}</td>
       <td>${esc(name)}</td>
@@ -170,6 +198,7 @@ async function runScan() {
     if (res.ok) {
       showToast(`Scan: ${data.created} new, ${data.updated} updated`, 'success');
       await loadTrackers();
+      if (currentView === 'chart') await loadTimelineChart();
     } else {
       showToast(data.error || 'Scan failed', 'error');
     }
@@ -319,6 +348,148 @@ async function ackSelected() {
 
 window.openAck = openAck;
 window.openEdit = openEdit;
+
+function setView(mode) {
+  currentView = mode;
+  const tablePanel = document.getElementById('tablePanel');
+  const chartPanel = document.getElementById('chartPanel');
+  const tableBtn = document.getElementById('viewTableBtn');
+  const chartBtn = document.getElementById('viewChartBtn');
+  if (mode === 'chart') {
+    tablePanel.classList.add('hidden');
+    chartPanel.classList.add('active');
+    tableBtn.classList.remove('active');
+    chartBtn.classList.add('active');
+    loadTimelineChart();
+  } else {
+    tablePanel.classList.remove('hidden');
+    chartPanel.classList.remove('active');
+    tableBtn.classList.add('active');
+    chartBtn.classList.remove('active');
+  }
+}
+
+function rssiToY(rssi, rowTop, rowH) {
+  const clamped = Math.max(-100, Math.min(-40, rssi));
+  const norm = (clamped + 100) / 60;
+  return rowTop + rowH - norm * rowH * 0.85 - rowH * 0.05;
+}
+
+function drawTimelineChart(data) {
+  const canvas = document.getElementById('timelineCanvas');
+  if (!canvas) return;
+  const trackers = data.trackers || [];
+  const rowH = 72;
+  const padL = 200;
+  const padR = 48;
+  const padT = 28;
+  const padB = 36;
+  const width = Math.max(720, canvas.parentElement.clientWidth - 24);
+  const height = Math.max(200, padT + padB + trackers.length * rowH);
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0a0e14';
+  ctx.fillRect(0, 0, width, height);
+
+  const now = Date.now();
+  const windowMs = (data.window_minutes || 60) * 60 * 1000;
+  const t0 = now - windowMs;
+  const plotW = width - padL - padR;
+
+  function xAt(ts) {
+    const t = new Date(ts).getTime();
+    return padL + ((t - t0) / windowMs) * plotW;
+  }
+
+  ctx.strokeStyle = 'rgba(148,163,184,.25)';
+  ctx.fillStyle = 'rgba(148,163,184,.55)';
+  ctx.font = '11px system-ui,sans-serif';
+  const tickCount = Math.min(8, Math.max(4, Math.floor(data.window_minutes / 15) || 4));
+  for (let i = 0; i <= tickCount; i++) {
+    const frac = i / tickCount;
+    const x = padL + frac * plotW;
+    ctx.beginPath();
+    ctx.moveTo(x, padT);
+    ctx.lineTo(x, height - padB);
+    ctx.stroke();
+    const tickTime = new Date(t0 + frac * windowMs);
+    ctx.fillText(tickTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }), x - 20, height - 12);
+  }
+
+  ctx.fillStyle = 'rgba(148,163,184,.8)';
+  ctx.fillText(`${data.window_minutes} min window`, width - padR - 70, 18);
+
+  if (!trackers.length) {
+    ctx.fillStyle = '#64748b';
+    ctx.fillText('No acknowledged tags with timeline data. Acknowledge tags and run scans.', padL, padT + 40);
+    return;
+  }
+
+  trackers.forEach((tr, idx) => {
+    const rowTop = padT + idx * rowH;
+    const midY = rowTop + rowH / 2;
+
+    ctx.fillStyle = 'rgba(107,255,71,.08)';
+    ctx.fillRect(padL, rowTop + 4, plotW, rowH - 8);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '12px system-ui,sans-serif';
+    const label = tr.label.length > 28 ? tr.label.slice(0, 26) + '…' : tr.label;
+    ctx.fillText(label, 8, midY - 4);
+    ctx.fillStyle = '#64748b';
+    ctx.font = '10px monospace';
+    ctx.fillText(tr.hardware_id, 8, midY + 12);
+
+    const samples = tr.samples || [];
+    samples.forEach(s => {
+      const x = xAt(s.timestamp);
+      if (s.online === false) {
+        ctx.strokeStyle = '#ff4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, rowTop + 6);
+        ctx.lineTo(x, rowTop + rowH - 6);
+        ctx.stroke();
+      }
+    });
+
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let started = false;
+    samples.forEach(s => {
+      if (!s.online || s.rssi == null) return;
+      const x = xAt(s.timestamp);
+      const y = rssiToY(s.rssi, rowTop, rowH);
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    });
+    if (started) ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(148,163,184,.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, rowTop + rowH);
+    ctx.lineTo(width - padR, rowTop + rowH);
+    ctx.stroke();
+  });
+}
+
+async function loadTimelineChart() {
+  const minutes = parseInt(document.getElementById('chartWindow').value, 10) || 60;
+  const ids = getSelectedIds();
+  let url = `/trackers/presence/timeline?minutes=${minutes}`;
+  if (ids.length) url += '&tracker_ids=' + ids.join(',');
+  const res = await API.get(url);
+  const data = await API.json(res);
+  if (res.ok) drawTimelineChart(data);
+}
+
+document.getElementById('viewTableBtn').onclick = () => setView('table');
+document.getElementById('viewChartBtn').onclick = () => setView('chart');
+document.getElementById('chartWindow').onchange = loadTimelineChart;
+document.getElementById('btnChartRefresh').onclick = loadTimelineChart;
 
 document.getElementById('btnScanSettings').onclick = openScanModal;
 document.getElementById('btnRefresh').onclick = runScan;

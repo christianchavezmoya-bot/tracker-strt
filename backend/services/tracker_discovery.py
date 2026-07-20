@@ -14,6 +14,7 @@ from backend.extensions import db
 from backend.models import Tracker, WifiNode, TrackerAckStatus, AssetState, TagType, DeviceCategory
 from backend.models.detection import DetectionEvent, SignalType
 from backend.models.settings import Setting
+from backend.models.positioning import TrackerPresenceLog
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,20 @@ FEATURES_BY_SCAN_TYPE: dict[str, list[dict]] = {
 
 DEFAULT_SCAN_TYPES = ["MOKO_H7", "IBEACON", "EDDYSTONE"]
 DEFAULT_SCAN_INTERVAL_SEC = 60
+PRESENCE_RETENTION_HOURS = 25
+
+
+def _log_presence(tracker_id: int, online: bool, rssi: float | None = None) -> None:
+    db.session.add(TrackerPresenceLog(
+        tracker_id=tracker_id,
+        online=online,
+        rssi=rssi,
+    ))
+
+
+def _prune_presence_logs() -> None:
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=PRESENCE_RETENTION_HOURS)
+    TrackerPresenceLog.query.filter(TrackerPresenceLog.timestamp < cutoff).delete(synchronize_session=False)
 
 
 @dataclass
@@ -373,10 +388,7 @@ def run_discovery() -> dict:
                 tracker.asset_state = int(AssetState.ACTIVE)
             elif tracker.ack_status == int(TrackerAckStatus.UNACKNOWLEDGED):
                 pass
-            # Mark offline if acknowledged but stale
-            if tracker.ack_status == int(TrackerAckStatus.ACTIVE):
-                if tracker.last_report_time and tracker.last_report_time < cutoff:
-                    tracker.asset_state = int(AssetState.OFFLINE)
+            _log_presence(tracker.id, True, dev.rssi)
             updated += 1
         else:
             tracker = Tracker(
@@ -395,15 +407,32 @@ def run_discovery() -> dict:
                 temperature=dev.temperature,
             )
             db.session.add(tracker)
+            db.session.flush()
+            _log_presence(tracker.id, True, dev.rssi)
             created += 1
 
-    # Mark acknowledged tags offline if not seen recently
+    seen_ids = set()
+    for mac, dev in merged.items():
+        if dev.scan_type not in allowed:
+            continue
+        t = Tracker.query.filter_by(hardware_id=mac).first()
+        if t:
+            seen_ids.add(t.id)
+
+    # Mark acknowledged active tags offline if not seen this scan
     for t in Tracker.query.filter(
         Tracker.ack_status == int(TrackerAckStatus.ACTIVE)
     ).all():
-        if t.last_report_time and t.last_report_time < cutoff:
+        if t.id in seen_ids:
+            t.asset_state = int(AssetState.ACTIVE)
+        elif t.last_report_time and t.last_report_time < cutoff:
             t.asset_state = int(AssetState.OFFLINE)
+            _log_presence(t.id, False, t.last_rssi)
+        elif t.id not in seen_ids:
+            t.asset_state = int(AssetState.OFFLINE)
+            _log_presence(t.id, False, t.last_rssi)
 
+    _prune_presence_logs()
     db.session.commit()
     return {
         "created": created,
