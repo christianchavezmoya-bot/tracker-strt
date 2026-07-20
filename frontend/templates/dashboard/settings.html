@@ -991,11 +991,15 @@ async function uploadFloorPlan() {
   formData.append('name', name);
   formData.append('color_hex', document.getElementById('fpColor').value);
   formData.append('z_index', document.getElementById('fpZIndex').value);
-  const res = await API.postForm('/api/settings/floor-plans', formData);
+  const res = await API.postForm('/settings/floor-plans', formData);
   btn.disabled = false;
   document.getElementById('fpUploadBtnText').textContent = 'Upload & Create';
   if (res && res.ok) { closeUploadModal(); showToast('Floor plan uploaded', 'success'); await loadFloorPlans(); }
-  else { const d = await API.json(res); showToast('Upload failed: ' + (d.error || res.statusText), 'error'); }
+  else {
+    const d = await API.json(res);
+    const msg = d && d.error ? d.error : (res && res.status === 404 ? 'Upload API not found — refresh the page and try again' : (res ? res.statusText : 'Network error'));
+    showToast('Upload failed: ' + msg, 'error');
+  }
 }
 
 async function toggleFpVisibility(id) {

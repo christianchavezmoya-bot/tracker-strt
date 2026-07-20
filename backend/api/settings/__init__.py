@@ -297,6 +297,7 @@ def upload_floor_plan():
     name = body.get("name", "").strip() or f"Floor Plan {unique_name}"
     section = MapSection(
         name=name,
+        polygon_json=json.dumps([]),
         image_url=f"/static/assets/floor-plans/{unique_name}",
         color_hex=body.get("color_hex", "#00e5ff"),
         z_index=int(body.get("z_index", 0)),

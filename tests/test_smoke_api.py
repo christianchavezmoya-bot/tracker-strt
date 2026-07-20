@@ -290,3 +290,28 @@ def test_alert_counts_endpoint(client, admin_headers):
     assert "by_state" in data
     assert "total" in data
     assert isinstance(data["total"], int)
+
+
+def test_floor_plan_upload(client, admin_headers):
+    import io
+    # Minimal valid 1×1 PNG
+    png = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+        b"\x01\x01\x01\x00\x18\xdd\x8d\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    res = client.post(
+        "/api/settings/floor-plans",
+        headers=admin_headers,
+        data={
+            "image": (io.BytesIO(png), "mine-plan.png"),
+            "name": "Smoke Test Section",
+            "color_hex": "#00e5ff",
+            "z_index": "0",
+        },
+        content_type="multipart/form-data",
+    )
+    assert res.status_code == 201, res.get_data(as_text=True)
+    body = res.get_json()
+    assert body.get("section", {}).get("name") == "Smoke Test Section"
+    assert body.get("section", {}).get("image_url", "").startswith("/static/assets/floor-plans/")
