@@ -211,7 +211,7 @@ def alert_counts():
     return jsonify({
         "by_type": by_type,
         "by_state": by_state,
-        "total": sum(counts, key=lambda x: x[2]) if counts else 0,
+        "total": sum(c[2] for c in counts) if counts else 0,
     })
 
 
