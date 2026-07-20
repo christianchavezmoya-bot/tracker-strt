@@ -60,10 +60,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, 10000);
   try {
     initMap2D();
-    initMap3D();
+    if (window.renderTrackerDots) window.renderTrackerDots();
   } catch (e) {
-    console.error('Map init failed:', e);
+    console.error('2D map init failed:', e);
   }
+  update3DViewAvailability();
+  // Always start on 2D — 3D is optional and fails without WebGL
+  setView('2d');
+  // Map container may not have final layout until after paint — refit once
+  setTimeout(() => {
+    if (window.fitMapToFloorPlan) window.fitMapToFloorPlan();
+    if (window._map2d) window._map2d.invalidateSize();
+    if (window.renderTrackerDots) window.renderTrackerDots();
+  }, 600);
   startSSE();
   setupKeyboardShortcuts();
   // Deep-link from Alerts "Show on map" / Map Setup nav
@@ -425,15 +434,66 @@ function updateStats() {
 }
 
 // ── View Toggle ──────────────────────────────────────────────────────────────
+function update3DViewAvailability() {
+  const btn = document.querySelector('.view-btn[data-view="3d"]');
+  const webglOk = window.isWebGLAvailable && window.isWebGLAvailable();
+  if (!btn) return;
+  if (!webglOk) {
+    btn.disabled = true;
+    btn.title = '3D requires WebGL — enable hardware acceleration in Chrome settings';
+    btn.style.opacity = '0.45';
+    btn.style.cursor = 'not-allowed';
+  } else {
+    btn.disabled = false;
+    btn.title = '3D view';
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+  }
+}
+
 function setView(view) {
+  const unavailable3d = document.getElementById('map3dUnavailable');
+  if (unavailable3d) unavailable3d.style.display = 'none';
+
+  if (view === '3d') {
+    const ok = window.ensureMap3D && window.ensureMap3D();
+    if (!ok) {
+      if (window.showToast) {
+        window.showToast('3D view unavailable — WebGL is disabled in this browser', 'warning');
+      }
+      if (unavailable3d) {
+        document.getElementById('map3d').style.display = 'block';
+        document.getElementById('map2d').style.display = 'none';
+        unavailable3d.style.display = 'flex';
+        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.view-btn[data-view="3d"]')?.classList.add('active');
+      }
+      return;
+    }
+  }
   currentView = view;
   document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
   document.querySelector(`.view-btn[data-view="${view}"]`).classList.add('active');
   document.getElementById('map2d').style.display = view === '2d' ? 'block' : 'none';
   document.getElementById('map3d').style.display = view === '3d' ? 'block' : 'none';
   // Trigger map resize / re-render
-  if (view === '2d' && window._map2d) window._map2d.invalidateSize();
-  if (view === '3d' && window.render3DTrackerDots) window.render3DTrackerDots();
+  if (view === '2d' && window._map2d) {
+    window._map2d.invalidateSize();
+    if (window.renderTrackerDots) window.renderTrackerDots();
+  }
+  if (view === '3d') {
+    const container = document.getElementById('map3d');
+    if (window._renderer && container) {
+      const w = container.clientWidth || 800;
+      const h = container.clientHeight || 600;
+      window._renderer.setSize(w, h);
+      if (window._camera) {
+        window._camera.aspect = w / h;
+        window._camera.updateProjectionMatrix();
+      }
+    }
+    if (window.render3DTrackerDots) window.render3DTrackerDots();
+  }
 }
 
 // ── Map tools ─────────────────────────────────────────────────────────────────
@@ -446,7 +506,8 @@ function toggleFullscreen() {
 }
 function resetCamera() {
   if (currentView === '2d' && window._map2d) {
-    window._map2d.setView([0, 0], 16);
+    if (window.fitMapToFloorPlan) window.fitMapToFloorPlan();
+    else window._map2d.setView([0, 0], 16);
   }
 }
 function toggleHeatmap() {

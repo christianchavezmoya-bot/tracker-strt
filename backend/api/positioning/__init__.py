@@ -373,14 +373,30 @@ def add_calibration_point():
     ===
     """
     body = request.get_json() or {}
+
+    from backend.services.floor_plan_mapper import get_floor_plan_mapper
+    svc = get_floor_plan_mapper()
+    section_id = int(body.get("section_id", 0))
+
+    # Bulk save from map calibration wizard
+    bulk = body.get("calibration_points")
+    if isinstance(bulk, list) and len(bulk) >= 2:
+        for pt in bulk:
+            for f in ("pixel_x", "pixel_y", "real_x", "real_y"):
+                if f not in pt:
+                    return jsonify({"error": f"Missing field in point: {f}"}), 400
+        mapper = svc.set_calibration_points(section_id, bulk)
+        return jsonify({
+            "calibration_points": svc.get_calibration_points(section_id),
+            "is_calibrated": mapper.is_calibrated,
+            "calibration_error": svc.calibration_error(section_id),
+        })
+
     required = ["pixel_x", "pixel_y", "real_x", "real_y"]
     for f in required:
         if f not in body:
             return jsonify({"error": f"Missing field: {f}"}), 400
 
-    from backend.services.floor_plan_mapper import get_floor_plan_mapper
-    svc = get_floor_plan_mapper()
-    section_id = int(body.get("section_id", 0))
     svc.add_calibration_point(
         section_id=section_id,
         pixel_x=float(body["pixel_x"]),

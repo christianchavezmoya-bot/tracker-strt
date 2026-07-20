@@ -208,10 +208,20 @@ def alert_counts():
         by_type[at_name] = by_type.get(at_name, 0) + cnt
         by_state[st_name] = by_state.get(st_name, 0) + cnt
 
+    avg_response_minutes = None
+    ack_row = db.session.execute(db.text("""
+        SELECT AVG((julianday(acknowledged_at) - julianday(triggered_at)) * 1440)
+        FROM alerts
+        WHERE acknowledged_at IS NOT NULL
+    """)).fetchone()
+    if ack_row and ack_row[0] is not None:
+        avg_response_minutes = round(float(ack_row[0]), 1)
+
     return jsonify({
         "by_type": by_type,
         "by_state": by_state,
-        "total": sum(c[2] for c in counts) if counts else 0,
+        "total": sum(cnt for _, _, cnt in counts) if counts else 0,
+        "avg_response_minutes": avg_response_minutes,
     })
 
 

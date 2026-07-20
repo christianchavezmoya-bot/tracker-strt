@@ -4,14 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HOLO-RTLS — Command Center</title>
-  <meta name="theme-color" content="#00e5ff">
+  <meta name="theme-color" content="#1c1c1e">
   <meta name="description" content="Underground Mine Real-Time Location System">
   <link rel="manifest" href="/static/manifest.json">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23081f3e'/><circle cx='16' cy='16' r='8' fill='none' stroke='%2300e5ff' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%2300e5ff'/></svg>">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231c1c1e'/><circle cx='16' cy='16' r='8' fill='none' stroke='%230a84ff' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%230a84ff'/></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="/static/css/dashboard.css">
-  <link rel="stylesheet" href="/static/css/tablet.css">
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/css/dashboard-theme.css?v=7">
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=7">
+  <link rel="stylesheet" href="/static/css/tablet.css?v=7">
 </head>
 <body>
 <div class="tablet-alert-sheet" id="tabletAlertSheet" style="display:none">
@@ -187,6 +188,14 @@
     <div id="map2d" class="map-view active"></div>
     <!-- 3D Map -->
     <div id="map3d" class="map-view" style="display:none">
+      <div id="map3dUnavailable" class="map-3d-unavailable" style="display:none" role="status" aria-live="polite">
+        <i class="fa-solid fa-cube" aria-hidden="true"></i>
+        <p><strong>3D view unavailable</strong></p>
+        <p class="map-3d-unavailable-hint">WebGL is disabled in this browser. Enable hardware acceleration or use 2D map.</p>
+        <button type="button" class="btn btn-primary btn-sm" onclick="setView('2d')">
+          <i class="fa-solid fa-map"></i> Switch to 2D
+        </button>
+      </div>
       <!-- 3D Floor Switcher -->
       <div id="floorSwitcher" style="
         position:absolute;top:12px;left:12px;z-index:10;
@@ -438,15 +447,15 @@
 </div>
 
 <!-- ── Scripts ───────────────────────────────────────────────────────── -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script src="/static/vendor/three/three.min.js"></script>
 <script src="/static/js/api.js"></script>
-<script src="/static/js/visualization/map2d.js"></script>
-<script src="/static/js/visualization/map3d.js"></script>
-<script src="/static/js/dashboard.js"></script>
+<script src="/static/js/visualization/map2d.js?v=7"></script>
+<script src="/static/js/visualization/map3d.js?v=7"></script>
+<script src="/static/js/dashboard.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/static/sw.js?v=7').catch(() => {});
   }
 </script>
 <script src="/static/js/nav.js" defer></script>

@@ -404,7 +404,6 @@ textarea.form-input { resize:vertical; }
 <!-- ── Scripts ───────────────────────────────────────────────────── -->
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/auth.js"></script>
 <script>
 
 'use strict';
@@ -439,7 +438,7 @@ async function loadUserInfo() {
   if (!res || !res.ok) { window.location.href = '/login'; return; }
   const u = data.user;
   /* shell */;
-  if (u.role === 'ADMIN') document.getElementById('adminNav').style.display = 'block';
+  if (u.role === 'ADMIN') document.getElementById('adminNav')?.style && (document.getElementById('adminNav').style.display = 'block');
 }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
@@ -466,11 +465,17 @@ async function loadBridgeStatus() {
   const data = await API.json(res);
   if (res && res.ok && data) {
     bridgeStatus = data;
-    document.getElementById('queueDepth').textContent = data.queue_depth ?? 0;
-    document.getElementById('sseClients').textContent = data.sse_clients ?? 0;
-    document.getElementById('ingestionStatus').textContent =
-      data.ingestion_running ? '<span style="color:var(--green)">Running</span>' : '<span style="color:var(--yellow)">Stopped</span>';
-    document.getElementById('statusDot').style.background = data.ingestion_running ? 'var(--green)' : 'var(--yellow)';
+    const q = document.getElementById('queueDepth');
+    const s = document.getElementById('sseClients');
+    const ing = document.getElementById('ingestionStatus');
+    const dot = document.getElementById('statusDot');
+    if (q) q.textContent = data.queue_depth ?? 0;
+    if (s) s.textContent = data.sse_clients ?? 0;
+    if (ing) {
+      ing.textContent =
+        data.ingestion_running ? 'Running' : 'Stopped';
+    }
+    if (dot) dot.style.background = data.ingestion_running ? 'var(--green)' : 'var(--yellow)';
   }
 }
 
@@ -687,7 +692,7 @@ function renderSettingsFields() {
         </label>` :
       f.type === 'json' ? `
         <textarea class="form-input mono" id="sf_${f.key}" rows="3" ${f.required ? 'required' : ''}
-                  placeholder='${escapeHtml(f.default || '{}")}'>${escapeHtml(f.default || '')}</textarea>` :
+                  placeholder='${escapeHtml(f.default || '{}')}'>${escapeHtml(f.default || '')}</textarea>` :
       f.type === 'int' || f.type === 'float' ? `
         <input class="form-input" type="number" id="sf_${f.key}" step="${f.type === 'float' ? '0.01' : '1'}"
                value="${f.default || 0}" ${f.required ? 'required' : ''}>` :

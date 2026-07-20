@@ -50,6 +50,22 @@ def test_alerts_page_loads(logged_in_page, e2e_base):
     assert page.locator(".page-title, h1").first.is_visible()
 
 
+def test_nodes_page_stays_on_route(logged_in_page, e2e_base):
+    page = logged_in_page
+    page.goto(f"{e2e_base}/nodes")
+    page.wait_for_load_state("domcontentloaded")
+    assert "/nodes" in page.url
+    assert page.locator(".page-title, h1").first.is_visible()
+
+
+def test_hardware_page_stays_on_route(logged_in_page, e2e_base):
+    page = logged_in_page
+    page.goto(f"{e2e_base}/hardware")
+    page.wait_for_load_state("domcontentloaded")
+    assert "/hardware" in page.url
+    assert page.locator(".page-title, h1").first.is_visible()
+
+
 def test_create_tracker(logged_in_page, e2e_base):
     page = logged_in_page
     hw = f"E2E-TAG-{unique_suffix()}"

@@ -20,6 +20,8 @@ let _isCalibrated = false;
 let _calibrationPoints = [];
 let _imageWidth = 1000;
 let _imageHeight = 3000;
+/** Default real-world height (m) when map is not calibrated — demo site ~25×50 m. */
+const DEFAULT_MAP_HEIGHT_M = 50;
 
 // ── Affine transform: real_x = a*x + b*y + c / real_y = d*x + e*y + f ──────
 let _tx_a = 1, _tx_b = 0, _tx_c = 0;
@@ -34,8 +36,8 @@ let _mapMode = 'normal';
 // ── Init ──────────────────────────────────────────────────────────────────────
 function initMap2D() {
   window._map2d = L.map('map2d', {
-    center: [0, 0], zoom: 14, zoomControl: false,
-    crs: L.CRS.Simple, minZoom: 8, maxZoom: 22, attributionControl: false,
+    center: [25, 12], zoom: 0, zoomControl: false,
+    crs: L.CRS.Simple, minZoom: -2, maxZoom: 22, attributionControl: false,
   });
 
   L.control.zoom({ position: 'bottomright' }).addTo(window._map2d);
@@ -63,6 +65,7 @@ function initMap2D() {
   window.exitPlacementMode = exitPlacementMode;
   window.renderNodeMarkers = renderNodeMarkers;
   window.refreshUnplacedNodes = loadUnplacedNodes;
+  window.fitMapToFloorPlan = fitMapToFloorPlan;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -71,6 +74,80 @@ function initMap2D() {
 
 function pixelToReal(px, py) {
   return { x: _tx_a * px + _tx_b * py + _tx_c, y: _ty_d * px + _ty_e * py + _ty_f };
+}
+
+/** Inverse affine: real-world metres → floor-plan map units (pixels when calibrated). */
+function realToPixel(rx, ry) {
+  if (!_isCalibrated) return { x: rx, y: ry };
+  const det = _tx_a * _ty_e - _tx_b * _ty_d;
+  if (Math.abs(det) < 1e-10) return { x: rx, y: ry };
+  return {
+    x: (_ty_e * (rx - _tx_c) - _tx_b * (ry - _ty_f)) / det,
+    y: (-_ty_d * (rx - _tx_c) + _tx_a * (ry - _ty_f)) / det,
+  };
+}
+
+/** Real-world extent (metres) for map CRS and floor-plan overlay. */
+function getRealWorldBounds() {
+  if (_isCalibrated && _calibrationPoints.length >= 2) {
+    const xs = _calibrationPoints.map(p => p.real_x);
+    const ys = _calibrationPoints.map(p => p.real_y);
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    const spanY = Math.max(...ys) - Math.min(...ys);
+    const padX = Math.max(2, spanX * 0.12);
+    const padY = Math.max(2, spanY * 0.12);
+    return {
+      minX: Math.min(...xs) - padX,
+      maxX: Math.max(...xs) + padX,
+      minY: Math.min(...ys) - padY,
+      maxY: Math.max(...ys) + padY,
+    };
+  }
+  const h = DEFAULT_MAP_HEIGHT_M;
+  const w = (_imageWidth / _imageHeight) * h;
+  return { minX: 0, maxX: w, minY: 0, maxY: h };
+}
+
+/** Leaflet bounds — map CRS uses real-world metres (not image pixels). */
+function getFloorPlanBounds() {
+  const b = getRealWorldBounds();
+  return [[b.maxY, b.minX], [b.minY, b.maxX]];
+}
+
+/** Map CRS metres → image pixel (for calibration storage). */
+function mapUnitsToPixel(mx, my) {
+  const rb = getRealWorldBounds();
+  const spanX = rb.maxX - rb.minX || 1;
+  const spanY = rb.maxY - rb.minY || 1;
+  return {
+    x: ((mx - rb.minX) / spanX) * _imageWidth,
+    y: ((my - rb.minY) / spanY) * _imageHeight,
+  };
+}
+
+function realToLatLng(rx, ry) {
+  return L.CRS.Simple.unproject(L.point(rx, ry));
+}
+
+function latLngToReal(latlng) {
+  const pt = L.CRS.Simple.project(latlng);
+  return { x: pt.x, y: pt.y };
+}
+
+function mapPointFromEvent(e) {
+  return L.CRS.Simple.project(e.latlng);
+}
+
+function fitMapToFloorPlan() {
+  if (!window._map2d) return;
+  try {
+    const bounds = _floorPlanLayer ? _floorPlanLayer.getBounds() : getFloorPlanBounds();
+    window._map2d.fitBounds(bounds, { padding: [32, 32], maxZoom: 18, animate: false });
+  } catch (e) {
+    const b = getRealWorldBounds();
+    window._map2d.setView([(b.minY + b.maxY) / 2, (b.minX + b.maxX) / 2], 0);
+  }
+  setTimeout(() => window._map2d && window._map2d.invalidateSize(), 150);
 }
 
 function computeAffineTransform(points) {
@@ -116,6 +193,11 @@ async function loadCalibration() {
       _calibrationPoints = cal.calibration_points;
       computeAffineTransform(_calibrationPoints);
       showCalibrationBadge(true);
+    } else if (cal.calibration_points && cal.calibration_points.length >= 2) {
+      _isCalibrated = true;
+      _calibrationPoints = cal.calibration_points;
+      computeAffineTransform(_calibrationPoints);
+      showCalibrationBadge(true);
     } else {
       _isCalibrated = false;
       showCalibrationBadge(false);
@@ -140,10 +222,10 @@ function showCalibrationBadge(calibrated) {
     backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: '6px',
   });
   if (calibrated) {
-    Object.assign(el.style, { background: 'rgba(0,229,255,0.12)', border: '1px solid rgba(0,229,255,0.4)', color: 'var(--cyan, #00e5ff)' });
+    Object.assign(el.style, { background: 'rgba(255,255,255,0.94)', border: '1px solid rgba(10,132,255,0.45)', color: '#0a84ff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)' });
     el.innerHTML = '<i class="fa-solid fa-check-circle"></i> Map calibrated — click to recalibrate';
   } else {
-    Object.assign(el.style, { background: 'rgba(255,165,0,0.12)', border: '1px solid rgba(255,165,0,0.4)', color: '#ffa500' });
+    Object.assign(el.style, { background: 'rgba(255,255,255,0.94)', border: '1px solid rgba(255,149,0,0.55)', color: '#c93400', boxShadow: '0 2px 10px rgba(0,0,0,0.12)' });
     el.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Calibrate map — click to start';
   }
   el.onclick = enterCalibrationMode;
@@ -310,6 +392,10 @@ async function saveCalibration() {
     _isCalibrated = true;
     showCalibrationBadge(true);
     showCoordReadout();
+    loadFloorPlanImage();
+    if (window.renderTrackerDots) window.renderTrackerDots();
+    renderNodeMarkers();
+    renderZones();
   } catch (e) {
     console.error('Failed to save calibration:', e);
   }
@@ -420,7 +506,7 @@ function showNodeForm(realX, realY, pixelX, pixelY) {
   if (!mapEl) return;
   mapEl.style.position = 'relative';
 
-  const latlng = L.CRS.Simple.unproject(L.point(pixelX, pixelY));
+  const latlng = realToLatLng(realX, realY);
   _placementGhost = L.circleMarker(latlng, { radius: 10, color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 0.5, weight: 2 }).addTo(window._map2d);
 
   const nodeOptions = _unplacedNodes.map(n =>
@@ -580,19 +666,23 @@ function onMapClick(e) {
     _placeZoneAt(e.latlng);
     return;
   }
-  const px = e.containerPoint.x;
-  const py = e.containerPoint.y;
+  const pt = mapPointFromEvent(e);
+  const px = pt.x;
+  const py = pt.y;
   if (_mapMode === 'calibrate') handleCalibrationClick(px, py);
   else if (_mapMode === 'place_node') handleNodePlacementClick(px, py);
 }
 
-function handleCalibrationClick(px, py) {
+function handleCalibrationClick(mapX, mapY) {
+  const pix = mapUnitsToPixel(mapX, mapY);
+  const px = pix.x;
+  const py = pix.y;
   if (!_calibrationPoints[0]?._px) {
-    _calibrationPoints[0] = { _px: px, _py: py, real_x: 0, real_y: 0 };
+    _calibrationPoints[0] = { _px: px, _py: py, pixel_x: px, pixel_y: py, real_x: 0, real_y: 0 };
     document.getElementById('cal1Info').innerHTML = `<i class="fa-solid fa-check" style="color:#6bff47"></i> Clicked (${Math.round(px)}, ${Math.round(py)}) — enter coords`;
     setTimeout(() => document.getElementById('calX1')?.focus(), 50);
   } else if (!_calibrationPoints[1]?._px) {
-    _calibrationPoints[1] = { _px: px, _py: py, real_x: 0, real_y: 0 };
+    _calibrationPoints[1] = { _px: px, _py: py, pixel_x: px, pixel_y: py, real_x: 0, real_y: 0 };
     document.getElementById('cal2Info').innerHTML = `<i class="fa-solid fa-check" style="color:#6bff47"></i> Clicked (${Math.round(px)}, ${Math.round(py)}) — enter coords`;
     setTimeout(() => document.getElementById('calX2')?.focus(), 50);
   } else {
@@ -600,31 +690,31 @@ function handleCalibrationClick(px, py) {
   }
 }
 
-function handleNodePlacementClick(px, py) {
+function handleNodePlacementClick(mapX, mapY) {
   if (!_isCalibrated) { enterCalibrationMode(); return; }
-  const real = pixelToReal(px, py);
+  const real = { x: mapX, y: mapY };
+  const pix = mapUnitsToPixel(mapX, mapY);
   const preview = document.getElementById('coordPreview');
   if (preview) preview.textContent = 'X=' + real.x.toFixed(1) + '  Y=' + real.y.toFixed(1);
-  showNodeForm(real.x, real.y, px, py);
+  showNodeForm(real.x, real.y, pix.x, pix.y);
 }
 
 function onMapMouseMove(e) {
-  const px = e.containerPoint.x, py = e.containerPoint.y;
+  const pt = mapPointFromEvent(e);
+  const mapX = pt.x, mapY = pt.y;
   const rx = document.getElementById('readoutX');
   const ry = document.getElementById('readoutY');
   if (_isCalibrated) {
-    const real = pixelToReal(px, py);
-    if (rx) rx.textContent = real.x.toFixed(1);
-    if (ry) ry.textContent = real.y.toFixed(1);
+    if (rx) rx.textContent = mapX.toFixed(1);
+    if (ry) ry.textContent = mapY.toFixed(1);
   } else {
-    if (rx) rx.textContent = Math.round(px);
-    if (ry) ry.textContent = Math.round(py);
+    if (rx) rx.textContent = Math.round(mapX);
+    if (ry) ry.textContent = Math.round(mapY);
   }
   if (_isNodePlacementMode) {
     const preview = document.getElementById('coordPreview');
     if (preview) {
-      const real = _isCalibrated ? pixelToReal(px, py) : { x: Math.round(px), y: Math.round(py) };
-      preview.textContent = 'X=' + real.x.toFixed(1) + '  Y=' + real.y.toFixed(1);
+      preview.textContent = 'X=' + mapX.toFixed(1) + '  Y=' + mapY.toFixed(1);
     }
   }
 }
@@ -641,10 +731,10 @@ async function renderNodeMarkers() {
     const data = await API.json(res);
     if (!res || !res.ok || !data.items) return;
     data.items.forEach(node => {
-      const px = node.pos_x ?? node.position?.x;
-      const py = node.pos_y ?? node.position?.y;
-      if (px == null || py == null) return;
-      const latlng = L.CRS.Simple.unproject(L.point(px, py));
+      const rx = node.pos_x ?? node.position?.x;
+      const ry = node.pos_y ?? node.position?.y;
+      if (rx == null || ry == null) return;
+      const latlng = realToLatLng(Number(rx), Number(ry));
       const typeIconMap = { UWB_ANCHOR: 'fa-wifi', WIFI_AP: 'fa-wifi', GATEWAY: 'fa-tower-cell', REPEATER: 'fa-repeat' };
       const icon = typeIconMap[node.node_type] || 'fa-microchip';
       const label = node.assigned_name || node.mac_address || 'Node';
@@ -665,10 +755,9 @@ async function renderNodeMarkers() {
         showNodeDetail(node);
       });
       marker.on('dragend', async (e) => {
-        const ll = e.target.getLatLng();
-        const pt = L.CRS.Simple.project(ll);
+        const real = latLngToReal(e.target.getLatLng());
         try {
-          const res = await API.patch('/nodes/' + node.id, { pos_x: pt.x, pos_y: pt.y });
+          const res = await API.patch('/nodes/' + node.id, { pos_x: real.x, pos_y: real.y });
           if (res && res.ok) {
             if (window.showToast) window.showToast('Anchor moved', 'success');
             // Refresh coverage rings
@@ -685,10 +774,10 @@ async function renderNodeMarkers() {
 }
 
 function showNodeDetail(node) {
-  const px = node.pos_x ?? node.position?.x;
-  const py = node.pos_y ?? node.position?.y;
-  if (px == null || py == null) return;
-  const latlng = L.CRS.Simple.unproject(L.point(px, py));
+  const rx = node.pos_x ?? node.position?.x;
+  const ry = node.pos_y ?? node.position?.y;
+  if (rx == null || ry == null) return;
+  const latlng = realToLatLng(Number(rx), Number(ry));
   const label = node.assigned_name || node.mac_address || 'Node';
   L.popup({ className: 'holo-popup' }).setLatLng(latlng).setContent(`
     <div style="font-family:var(--font-body,system-ui);min-width:180px">
@@ -697,8 +786,8 @@ function showNodeDetail(node) {
       </div>
       <div style="font-size:11px;color:#aaa;line-height:1.8">
         <div><strong>Type:</strong> ${node.node_type || '—'}</div>
-        <div><strong>X:</strong> ${px?.toFixed(2) || '—'} m</div>
-        <div><strong>Y:</strong> ${py?.toFixed(2) || '—'} m</div>
+        <div><strong>X:</strong> ${Number(rx)?.toFixed(2) || '—'} m</div>
+        <div><strong>Y:</strong> ${Number(ry)?.toFixed(2) || '—'} m</div>
         <div><strong>Z:</strong> ${node.pos_z ?? node.position?.z ?? 0} (floor)</div>
         ${node.section_name ? '<div><strong>Section:</strong> ' + node.section_name + '</div>' : ''}
         <div><strong>MAC:</strong> <span style="font-family:monospace">${node.mac_address || '—'}</span></div>
@@ -732,20 +821,17 @@ function loadFloorPlanFromURL(url) {
   img.onload = () => {
     _imageWidth = img.naturalWidth || 1000;
     _imageHeight = img.naturalHeight || 1000;
-    let southWest, northEast;
-    if (_isCalibrated && _calibrationPoints.length >= 2) {
-      const allX = _calibrationPoints.map(p => p.real_x);
-      const allY = _calibrationPoints.map(p => p.real_y);
-      southWest = [_imageHeight - Math.max(...allY), Math.min(...allX)];
-      northEast = [_imageHeight - Math.min(...allY), Math.max(...allX)];
-    } else {
-      southWest = [_imageHeight, 0]; northEast = [0, _imageWidth];
-    }
-    _floorPlanLayer = L.imageOverlay(url, [southWest, northEast], { opacity: 0.92, crossOrigin: true }).addTo(window._map2d);
+    const bounds = getFloorPlanBounds();
+    _floorPlanLayer = L.imageOverlay(url, bounds, { opacity: 0.92, crossOrigin: true }).addTo(window._map2d);
     drawGridOverlay();
     renderNodeMarkers();
+    if (window.renderTrackerDots) window.renderTrackerDots();
+    fitMapToFloorPlan();
   };
-  img.onerror = () => drawGridOverlay();
+  img.onerror = () => {
+    drawGridOverlay();
+    if (window.renderTrackerDots) window.renderTrackerDots();
+  };
   img.src = url;
 }
 
@@ -756,13 +842,14 @@ function loadFloorPlanFromURL(url) {
 function drawGridOverlay() {
   _gridLines.forEach(l => window._map2d.removeLayer(l));
   _gridLines = [];
-  const step = 50;
-  for (let x = 0; x <= (_imageWidth || 1000); x += step) {
-    const l1 = L.polyline([L.CRS.Simple.unproject(L.point(x, 0)), L.CRS.Simple.unproject(L.point(x, _imageHeight || 1000))], { color: 'rgba(0,229,255,0.08)', weight: 1 }).addTo(window._map2d);
+  const b = getRealWorldBounds();
+  const step = 5;
+  for (let x = b.minX; x <= b.maxX; x += step) {
+    const l1 = L.polyline([realToLatLng(x, b.minY), realToLatLng(x, b.maxY)], { color: 'rgba(90, 100, 115, 0.2)', weight: 1 }).addTo(window._map2d);
     _gridLines.push(l1);
   }
-  for (let y = 0; y <= (_imageHeight || 1000); y += step) {
-    const l2 = L.polyline([L.CRS.Simple.unproject(L.point(0, y)), L.CRS.Simple.unproject(L.point(_imageWidth || 1000, y))], { color: 'rgba(0,229,255,0.08)', weight: 1 }).addTo(window._map2d);
+  for (let y = b.minY; y <= b.maxY; y += step) {
+    const l2 = L.polyline([realToLatLng(b.minX, y), realToLatLng(b.maxX, y)], { color: 'rgba(90, 100, 115, 0.2)', weight: 1 }).addTo(window._map2d);
     _gridLines.push(l2);
   }
 }
@@ -777,7 +864,7 @@ async function renderZones() {
     if (zRes && zRes.ok && zData.items) {
       zData.items.forEach(zone => {
         const pos = zone.position || { x: zone.pos_x || 0, y: zone.pos_y || 0 };
-        const latlng = L.CRS.Simple.unproject(L.point(pos.x, pos.y));
+        const latlng = realToLatLng(Number(pos.x) || 0, Number(pos.y) || 0);
         const c = { RESTRICTED: { color: '#ff4444', fill: '#ff4444' }, DANGER: { color: '#ff6b35', fill: '#ff6b35' } }[zone.zone_type] || { color: '#00e5ff', fill: '#00e5ff' };
         const layer = L.circle(latlng, { radius: zone.radius || 5, color: c.color, fillColor: c.fill, fillOpacity: 0.06, weight: zone.zone_type === 'RESTRICTED' ? 2 : 1, opacity: zone.zone_type === 'RESTRICTED' ? 0.7 : 0.3, dashArray: zone.zone_type === 'DANGER' ? '6,4' : null }).addTo(window._map2d);
         layer.bindTooltip(zone.name + ' · click to edit', { permanent: false, direction: 'top', className: 'holo-tooltip' });
@@ -797,7 +884,10 @@ async function renderZones() {
         const coords = section.polygon;
         if (!coords || !Array.isArray(coords) || coords.length < 3) return;
         const ring = Array.isArray(coords[0]) ? (Array.isArray(coords[0][0]) ? coords[0] : coords) : coords;
-        const latlngs = ring.map(([x, y]) => L.CRS.Simple.unproject(L.point(typeof x === 'number' ? x : parseFloat(x), typeof y === 'number' ? y : parseFloat(y))));
+        const latlngs = ring.map(([x, y]) => realToLatLng(
+          typeof x === 'number' ? x : parseFloat(x),
+          typeof y === 'number' ? y : parseFloat(y)
+        ));
         const layer = L.polygon(latlngs, { color: section.color_hex || '#00e5ff', fillColor: section.color_hex || '#00e5ff', fillOpacity: section.is_restricted ? 0.08 : 0.03, weight: 1.5, opacity: 0.35 }).addTo(window._map2d);
         layer.bindTooltip(section.name + ' · click to edit', { sticky: true, className: 'holo-tooltip' });
         layer._sectionData = section;
@@ -842,13 +932,13 @@ function renderProximityLines() {
   const sel = (window.trackers || {})[window.selectedTrackerId];
   if (!sel || sel.pos_x === undefined || sel.pos_y === undefined) return;
   const threshold = _proximityThresholdM();
-  const selPt = L.CRS.Simple.unproject(L.point(sel.pos_x, sel.pos_y));
+  const selPt = realToLatLng(sel.pos_x, sel.pos_y);
   Object.values(window.trackers || {}).forEach(t => {
     if (t.id === sel.id || t.pos_x === undefined || t.pos_y === undefined) return;
     const dist = Math.hypot(sel.pos_x - t.pos_x, sel.pos_y - t.pos_y);
     if (dist > threshold) return;
     _nearbyTrackerIds.add(t.id);
-    const otherPt = L.CRS.Simple.unproject(L.point(t.pos_x, t.pos_y));
+    const otherPt = realToLatLng(t.pos_x, t.pos_y);
     const line = L.polyline([selPt, otherPt], {
       color: '#ffffff',
       weight: 2,
@@ -875,7 +965,7 @@ function renderTrackerDots() {
 }
 
 function addTrackerDot(t) {
-  const latlng = L.CRS.Simple.unproject(L.point(t.pos_x, t.pos_y));
+  const latlng = realToLatLng(t.pos_x, t.pos_y);
   const dotClass = dotClassForTracker(t);
   const isSelected = window.selectedTrackerId === t.id;
   const isNearby = _nearbyTrackerIds.has(t.id);
@@ -898,7 +988,7 @@ function updateTrackerDot(tid, pos) {
   if (!tracker) return;
   let existing = null;
   window._map2d.eachLayer(l => { if (l._isTrackerDot && l._icon && l._icon.querySelector && l._icon.querySelector('#dot-' + tid)) existing = l; });
-  const latlng = L.CRS.Simple.unproject(L.point(pos.x, pos.y));
+  const latlng = realToLatLng(pos.x, pos.y);
   if (existing) existing.setLatLng(latlng);
   else addTrackerDot({ ...tracker, pos_x: pos.x, pos_y: pos.y, pos_z: pos.z });
   if (window.selectedTrackerId === tid && window.renderProximityLines) {
@@ -915,7 +1005,7 @@ function dotClassForTracker(t) {
 
 function zoomToPosition(x, y) {
   if (!window._map2d) return;
-  window._map2d.setView(L.CRS.Simple.unproject(L.point(x, y)), Math.max(window._map2d.getZoom(), 17), { animate: true });
+  window._map2d.setView(realToLatLng(x, y), Math.max(window._map2d.getZoom(), 17), { animate: true });
 }
 
 // ── Layer visibility ─────────────────────────────────────────────────────────
@@ -1013,8 +1103,8 @@ function _showSectionDrawHint() {
 }
 
 function _addSectionVertex(latlng) {
-  const pt = L.CRS.Simple.project(latlng);
-  _sectionVertices.push([pt.x, pt.y]);
+  const real = latLngToReal(latlng);
+  _sectionVertices.push([real.x, real.y]);
   _redrawSectionDraft();
 }
 
@@ -1023,7 +1113,7 @@ function _redrawSectionDraft() {
   const countEl = document.getElementById('secVertCount');
   if (countEl) countEl.textContent = String(_sectionVertices.length);
   if (!_sectionVertices.length || !window._map2d) return;
-  const latlngs = _sectionVertices.map(([x, y]) => L.CRS.Simple.unproject(L.point(x, y)));
+  const latlngs = _sectionVertices.map(([x, y]) => realToLatLng(x, y));
   if (latlngs.length >= 3) {
     _sectionDraftLayer = L.polygon(latlngs, {
       color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 0.08, weight: 2, dashArray: '4,4',
@@ -1119,8 +1209,8 @@ function _showSectionForm(polygon) {
 }
 
 async function _placeZoneAt(latlng) {
-  const pt = L.CRS.Simple.project(latlng);
-  _showZoneForm(pt.x, pt.y, null);
+  const real = latLngToReal(latlng);
+  _showZoneForm(real.x, real.y, null);
 }
 
 function _editZoneOnMap(zone) {
@@ -1399,7 +1489,7 @@ function showTrajectory(points) {
     _trajectoryLayer = null;
   }
   if (!points || points.length < 2 || !window._map2d) return;
-  const latlngs = points.map(p => L.CRS.Simple.unproject(L.point(p.x, p.y)));
+  const latlngs = points.map(p => realToLatLng(p.x, p.y));
   _trajectoryLayer = L.polyline(latlngs, {
     color: '#f59e0b',
     weight: 3,

@@ -552,3 +552,14 @@ def _seed_demo_if_needed(app):
 
     db.session.commit()
 
+    # Demo floor plan calibration: map placeholder image (1200×3500 px) → 25 m × 50 m
+    # so seeded anchors (0–20 m × 0–15 m) and live tracker positions align on first boot.
+    try:
+        from backend.services.floor_plan_mapper import get_floor_plan_mapper
+        mapper_svc = get_floor_plan_mapper()
+        if not mapper_svc.is_calibrated(0):
+            mapper_svc.create_simple_transform(0, 1200, 3500, 25.0, 50.0)
+            log.info("Seeded demo floor plan calibration (25 m × 50 m)")
+    except Exception as e:
+        log.warning("Demo calibration seed skipped: %s", e)
+

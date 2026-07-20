@@ -12,7 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const remembered = localStorage.getItem('holo_remember') !== '0';
   if (rememberEl) rememberEl.checked = remembered;
   API.setRemember(remembered);
-  if (API.isLoggedIn()) {
+  // Only redirect away from the login page — other templates must not load this script.
+  const onLoginPage = location.pathname.replace(/\/+$/, '') === '/login';
+  if (onLoginPage && API.isLoggedIn()) {
     window.location.href = '/';
   }
 });

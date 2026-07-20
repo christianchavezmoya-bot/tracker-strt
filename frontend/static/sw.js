@@ -3,14 +3,16 @@
  * Caches static assets for offline access (read-only shell).
  * Skips caching for auth endpoints and SSE streams.
  */
-const CACHE_NAME = 'holo-rtls-v2';
+const CACHE_NAME = 'holo-rtls-v7';
 const STATIC_ASSETS = [
-  '/',
-  '/static/css/main.css',
+  '/static/css/dashboard-theme.css',
   '/static/css/dashboard.css',
   '/static/css/shell.css',
   '/static/css/auth.css',
   '/static/js/api.js',
+  '/static/js/dashboard.js',
+  '/static/js/visualization/map2d.js',
+  '/static/assets/floor-plan-placeholder.png',
   '/static/manifest.json',
 ];
 
@@ -89,7 +91,13 @@ self.addEventListener('fetch', event => {
           }
           return response;
         })
-        .catch(() => caches.match(request).then(cached => cached || caches.match('/')))
+        .catch(() => caches.match(request).then(cached => {
+          if (cached) return cached;
+          return new Response(
+            '<!DOCTYPE html><html><body style="font-family:system-ui;background:#1c1c1e;color:#f5f5f7;padding:2rem"><h1>Offline</h1><p>Reconnect to load this page.</p></body></html>',
+            { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
+        }))
     );
     return;
   }

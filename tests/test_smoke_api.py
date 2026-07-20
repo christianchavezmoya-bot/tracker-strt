@@ -280,3 +280,13 @@ def test_push_subscribe_and_vapid(client, auth_headers, app, monkeypatch):
         json={"endpoint": "https://push.example.com/sub/abc123"},
     )
     assert unsub.status_code == 200
+
+
+def test_alert_counts_endpoint(client, admin_headers):
+    res = client.get("/api/alerts/counts", headers=admin_headers)
+    assert res.status_code == 200, res.get_data(as_text=True)
+    data = res.get_json()
+    assert "by_type" in data
+    assert "by_state" in data
+    assert "total" in data
+    assert isinstance(data["total"], int)

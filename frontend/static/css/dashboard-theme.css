@@ -1,0 +1,487 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   HOLO-RTLS Command Center — Apple Maps–inspired theme
+   High contrast chrome + light map canvas + frosted panels
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Layout */
+  --topbar-h: 52px;
+  --analytics-h: 52px;
+  --panel-w: 300px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+
+  /* Apple Maps dark chrome */
+  --bg-primary: #1c1c1e;
+  --bg-secondary: #2c2c2e;
+  --bg-elevated: #3a3a3c;
+  --bg-panel: #2c2c2e;
+  --bg-card: #3a3a3c;
+  --bg-input: #48484a;
+  --bg-hover: #48484a;
+  --bg-base: #1c1c1e;
+  --bg-dark: #000000;
+
+  /* Map canvas — light inset like Apple Maps floor/indoor view */
+  --bg-map: #e8ecf1;
+  --bg-map-grid: #d1d5db;
+
+  /* Text — WCAG-friendly on dark panels */
+  --text-primary: #f5f5f7;
+  --text-secondary: #e5e5ea;
+  --text-muted: #98989d;
+  --text-inverse: #1c1c1e;
+
+  /* Accents */
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --cyan: #0a84ff;
+  --cyan-dim: rgba(10, 132, 255, 0.18);
+  --cyan-border: rgba(10, 132, 255, 0.45);
+  --green: #30d158;
+  --yellow: #ffd60a;
+  --red: #ff453a;
+  --orange: #ff9f0a;
+  --magenta: #bf5af2;
+
+  /* Borders & depth */
+  --border: rgba(255, 255, 255, 0.1);
+  --border-bright: rgba(255, 255, 255, 0.22);
+  --map-frame-border: rgba(255, 255, 255, 0.16);
+  --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --shadow-map: inset 0 0 0 1px rgba(0, 0, 0, 0.08), 0 12px 40px rgba(0, 0, 0, 0.35);
+
+  /* Typography */
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'IBM Plex Mono', monospace;
+
+  /* Aliases for shell.css and legacy templates */
+  --accent-dim: var(--cyan-dim);
+  --accent-border: var(--cyan-border);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Top bar (Maps-style chrome) ─────────────────────────────────────────── */
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--topbar-h);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  background: rgba(28, 28, 30, 0.92);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+.topbar-left { display: flex; align-items: center; flex-shrink: 0; }
+.topbar-center { flex: 1; display: flex; justify-content: center; }
+.topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+.brand-sub {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+/* Segmented 2D / 3D control (Apple Maps style) */
+.view-toggle {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  gap: 2px;
+}
+.view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+.view-btn:hover:not(:disabled):not(.active) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+.view-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(10, 132, 255, 0.35);
+}
+.view-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 15px;
+  transition: background 0.15s, border-color 0.15s;
+  position: relative;
+}
+.icon-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-bright);
+}
+
+.user-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── KPI strip ───────────────────────────────────────────────────────────── */
+.analytics-row {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  right: 0;
+  height: var(--analytics-h);
+  z-index: 190;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  overflow-x: auto;
+  background: rgba(28, 28, 30, 0.88);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+}
+.kpi-mini-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 130px;
+  padding: 8px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.kpi-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* ── Main layout ─────────────────────────────────────────────────────────── */
+.main-layout {
+  position: fixed;
+  top: calc(var(--topbar-h) + var(--analytics-h));
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.left-panel {
+  width: var(--panel-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-header h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+.filter-check {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tag-item-name, .tag-name { color: var(--text-primary); font-weight: 600; }
+.tag-item-meta, .tag-meta { color: var(--text-muted); }
+
+/* ── Map card (Apple Maps inset) ─────────────────────────────────────────── */
+.map-container {
+  flex: 1;
+  position: relative;
+  margin: 12px 12px 12px 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--map-frame-border);
+  box-shadow: var(--shadow-map);
+  overflow: hidden;
+  background: var(--bg-map);
+}
+
+#map2d,
+.leaflet-container {
+  background: var(--bg-map) !important;
+}
+
+.leaflet-control-zoom a {
+  background: #ffffff !important;
+  color: #1c1c1e !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  font-weight: 700 !important;
+}
+.leaflet-control-zoom a:hover {
+  background: #f2f2f7 !important;
+  color: var(--accent) !important;
+}
+.leaflet-bar {
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+}
+.leaflet-control-scale-line {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  color: #1c1c1e !important;
+}
+
+/* ── Floating map controls ───────────────────────────────────────────────── */
+.map-toolbar .tool-btn,
+.tool-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  color: #1c1c1e;
+  font-size: 15px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+}
+.tool-btn:hover {
+  background: #ffffff;
+  color: var(--accent);
+  border-color: rgba(10, 132, 255, 0.35);
+}
+.tool-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+#map3d {
+  background: var(--bg-map);
+}
+
+.map-3d-unavailable {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg-map);
+  color: #1c1c1e;
+}
+.map-3d-unavailable i {
+  font-size: 36px;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.map-3d-unavailable p { margin: 0; font-size: 14px; }
+.map-3d-unavailable-hint {
+  font-size: 13px !important;
+  color: #636366;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.layers-panel,
+.tag-card,
+.alert-feed,
+.notif-panel,
+.search-modal,
+.zone-occupancy-widget,
+.history-bar,
+.playback-bar {
+  background: rgba(44, 44, 46, 0.96) !important;
+  border: 1px solid var(--border-bright) !important;
+  box-shadow: var(--shadow-panel) !important;
+  backdrop-filter: blur(20px) saturate(160%);
+  color: var(--text-primary);
+}
+
+.layers-panel h4,
+.layers-header,
+.layer-item,
+.widget-header,
+.alert-feed-header,
+.notif-header {
+  color: var(--text-secondary) !important;
+}
+.layer-item { font-size: 13px; font-weight: 500; }
+
+.holo-tooltip {
+  background: rgba(28, 28, 30, 0.96) !important;
+  border: 1px solid var(--border-bright) !important;
+  color: var(--text-primary) !important;
+  font-size: 12px !important;
+}
+
+/* ── Buttons (tag card, forms) ───────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: filter 0.15s, background 0.15s;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #ffffff;
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-bright);
+}
+.btn-secondary:hover {
+  background: var(--bg-hover);
+}
+.btn-danger {
+  background: var(--red);
+  color: #ffffff;
+}
+.btn-danger:hover { filter: brightness(1.08); }
+
+.playback-btn {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-bright);
+}
+.playback-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.zone-occ-toggle {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.zone-occ-toggle:hover { color: var(--text-primary); }
+
+#setupModeBanner {
+  background: rgba(255, 214, 10, 0.15) !important;
+  border: 1px solid rgba(255, 214, 10, 0.45) !important;
+  color: #ffd60a !important;
+}
+
+.filter-count {
+  background: var(--cyan-dim);
+  color: #ffffff;
+  border: 1px solid var(--cyan-border);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  border: 2px solid var(--bg-primary);
+}
