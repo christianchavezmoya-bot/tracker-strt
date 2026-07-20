@@ -84,6 +84,7 @@
 .fp-wizard-map-toolbar button { width:32px; height:32px; border-radius:8px; border:1px solid var(--border); background:rgba(255,255,255,.05); color:var(--text-primary); cursor:pointer; font-size:14px; font-weight:700; }
 .fp-wizard-map-toolbar button:hover { border-color:var(--cyan); color:var(--cyan); }
 .fp-wizard-zoom-label { font-size:11px; color:var(--text-muted); min-width:42px; text-align:center; font-family:var(--font-mono); }
+.fp-wizard-image-error { display:none; margin-top:10px; padding:12px 14px; border-radius:8px; background:rgba(255,68,68,.1); border:1px solid rgba(255,68,68,.35); color:#ff8888; font-size:12px; line-height:1.5; }
 .fp-wizard-coord-panel { display:none; margin-top:14px; padding:16px; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:10px; }
 .fp-wizard-coord-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:12px 0; }
 .fp-wizard-status { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; padding:3px 8px; border-radius:10px; }
@@ -454,6 +455,7 @@
           <button type="button" id="fpWizardZoomReset" title="Fit map to view">Fit</button>
           <span style="font-size:11px;color:var(--text-muted);margin-left:4px">Scroll to zoom · Shift+drag to pan</span>
         </div>
+        <div class="fp-wizard-image-error" id="fpWizardImageError"></div>
         <button type="button" class="btn btn-primary" id="fpWizardConfirmPointBtn" style="display:none;margin-top:10px" disabled>
           <i class="fa-solid fa-crosshairs"></i> Click the map to place point 1
         </button>
@@ -482,7 +484,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/floor-plan-coord-wizard.js?v=11"></script>
+<script src="/static/js/floor-plan-coord-wizard.js?v=12"></script>
 <script>
 
 'use strict';

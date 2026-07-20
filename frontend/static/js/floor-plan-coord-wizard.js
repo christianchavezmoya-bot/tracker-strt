@@ -22,6 +22,7 @@ const FpCoordWizard = (() => {
   let isPanning = false;
   let panStart = null;
   let suppressClick = false;
+  let blobUrl = null;
 
   function el(id) {
     return document.getElementById(id);
@@ -42,13 +43,79 @@ const FpCoordWizard = (() => {
   function fitViewToImage() {
     const vp = el('fpWizardViewport');
     if (!vp || !imageWidth || !imageHeight) return;
-    const vw = vp.clientWidth || 400;
-    const vh = vp.clientHeight || 300;
+    const vw = vp.clientWidth;
+    const vh = vp.clientHeight;
+    if (vw < 10 || vh < 10) return;
     baseFitZoom = Math.min(vw / imageWidth, vh / imageHeight) * 0.95;
     viewZoom = baseFitZoom;
     viewPanX = (vw - imageWidth * viewZoom) / 2;
     viewPanY = (vh - imageHeight * viewZoom) / 2;
     applyViewTransform();
+  }
+
+  function revokeBlobUrl() {
+    if (blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+      blobUrl = null;
+    }
+  }
+
+  function showImageError(msg) {
+    const errEl = el('fpWizardImageError');
+    if (errEl) {
+      errEl.style.display = 'block';
+      errEl.innerHTML = msg;
+    }
+    el('fpWizardStartBtn').disabled = true;
+  }
+
+  function hideImageError() {
+    const errEl = el('fpWizardImageError');
+    if (errEl) errEl.style.display = 'none';
+    el('fpWizardStartBtn').disabled = false;
+  }
+
+  function loadImageElement(src) {
+    const img = el('fpWizardImage');
+    return new Promise((resolve, reject) => {
+      const onLoad = () => {
+        img.removeEventListener('error', onError);
+        resolve(img);
+      };
+      const onError = () => {
+        img.removeEventListener('load', onLoad);
+        reject(new Error('Image load failed'));
+      };
+      img.addEventListener('load', onLoad, { once: true });
+      img.addEventListener('error', onError, { once: true });
+      img.src = src;
+    });
+  }
+
+  async function loadWizardImage() {
+    hideImageError();
+    revokeBlobUrl();
+    const staticSrc = imageUrl + (imageUrl.includes('?') ? '&' : '?') + 'v=' + sectionId + '&t=' + Date.now();
+    try {
+      await loadImageElement(staticSrc);
+    } catch {
+      const headers = {};
+      if (window.API && API._token) headers.Authorization = 'Bearer ' + API._token;
+      const res = await fetch(`${API.base}/settings/floor-plans/${sectionId}/image?t=${Date.now()}`, { headers });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const blob = await res.blob();
+      blobUrl = URL.createObjectURL(blob);
+      await loadImageElement(blobUrl);
+    }
+    const img = el('fpWizardImage');
+    if (!img.naturalWidth || !img.naturalHeight) {
+      throw new Error('Image has no dimensions');
+    }
+    imageWidth = img.naturalWidth;
+    imageHeight = img.naturalHeight;
+    setupImageDimensions();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    fitViewToImage();
   }
 
   function setupImageDimensions() {
@@ -59,7 +126,6 @@ const FpCoordWizard = (() => {
     img.style.height = imageHeight + 'px';
     canvas.style.width = imageWidth + 'px';
     canvas.style.height = imageHeight + 'px';
-    fitViewToImage();
   }
 
   /** Viewport client coords → image pixel (accounts for pan/zoom). */
@@ -85,7 +151,7 @@ const FpCoordWizard = (() => {
     updatePickerBanner();
     updateConfirmButton();
     if (name === 'pick') {
-      requestAnimationFrame(fitViewToImage);
+      requestAnimationFrame(() => requestAnimationFrame(fitViewToImage));
     }
   }
 
@@ -291,6 +357,7 @@ const FpCoordWizard = (() => {
   }
 
   function close() {
+    revokeBlobUrl();
     el('fpCoordWizardModal').style.display = 'none';
     document.body.style.overflow = '';
     resetState();
@@ -313,17 +380,16 @@ const FpCoordWizard = (() => {
 
     showStep('intro');
 
-    await new Promise((resolve) => {
-      const img = el('fpWizardImage');
-      img.onload = () => {
-        imageWidth = img.naturalWidth || 1000;
-        imageHeight = img.naturalHeight || 1000;
-        setupImageDimensions();
-        resolve();
-      };
-      img.onerror = () => resolve();
-      img.src = imageUrl;
-    });
+    try {
+      await loadWizardImage();
+    } catch (err) {
+      showImageError(
+        '<strong>Could not load floor plan image.</strong> Delete this plan and re-upload as <strong>PNG or JPG</strong> '
+        + '(TIFF/BMP are converted automatically on upload). '
+        + (err.message ? `<br><span style="opacity:.85">${err.message}</span>` : '')
+      );
+      if (window.showToast) showToast('Floor plan image failed to load — re-upload as PNG/JPG', 'error');
+    }
 
     if (options.existingPoints && options.existingPoints.length >= 2) {
       points = options.existingPoints.slice(0, 2).map(p => ({ ...p }));
@@ -337,6 +403,7 @@ const FpCoordWizard = (() => {
       activePointIndex = 0;
       showStep('pick');
       renderMarkers();
+      requestAnimationFrame(() => requestAnimationFrame(fitViewToImage));
     };
     el('fpWizardCancelBtn').onclick = close;
     el('fpWizardCloseBtn').onclick = close;

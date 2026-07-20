@@ -294,12 +294,10 @@ def test_alert_counts_endpoint(client, admin_headers):
 
 def test_floor_plan_upload(client, admin_headers):
     import io
-    # Minimal valid 1×1 PNG
-    png = (
-        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
-        b"\x01\x01\x01\x00\x18\xdd\x8d\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (2, 2), color=(255, 255, 255)).save(buf, format="PNG")
+    png = buf.getvalue()
     res = client.post(
         "/api/settings/floor-plans",
         headers=admin_headers,
@@ -315,6 +313,11 @@ def test_floor_plan_upload(client, admin_headers):
     body = res.get_json()
     assert body.get("section", {}).get("name") == "Smoke Test Section"
     assert body.get("section", {}).get("image_url", "").startswith("/static/assets/floor-plans/")
+    section_id = body["section"]["id"]
+    img_res = client.get(f"/api/settings/floor-plans/{section_id}/image", headers=admin_headers)
+    assert img_res.status_code == 200, img_res.get_data(as_text=True)
+    assert img_res.mimetype == "image/png"
+    assert len(img_res.data) > 20
 
 
 def test_logo_upload_serves_from_static(client, admin_headers):

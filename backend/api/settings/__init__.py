@@ -42,6 +42,39 @@ def _resolve_logo_file(filename: str):
     return None
 
 
+def _floor_plan_public_url(filename: str) -> str:
+    return f"/static/assets/floor-plans/{filename}"
+
+
+def _floor_plan_file_path(image_url: str):
+    """Resolve stored image_url to an on-disk path."""
+    if not image_url:
+        return None
+    rel = image_url.lstrip("/")
+    if rel.startswith("static/"):
+        path = config.BASE_DIR / "frontend" / rel
+        if path.exists():
+            return path
+    name = os.path.basename(rel)
+    direct = FLOOR_PLAN_DIR / name
+    if direct.exists():
+        return direct
+    return config.BASE_DIR / "frontend" / rel if rel else None
+
+
+def _normalize_floor_plan_image(filepath):
+    """Convert uploaded plan to browser-friendly PNG; return final path."""
+    from PIL import Image
+    img = Image.open(filepath)
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA")
+    png_path = filepath.with_suffix(".png")
+    img.save(png_path, format="PNG", optimize=True)
+    if png_path.resolve() != filepath.resolve() and filepath.exists():
+        filepath.unlink()
+    return png_path
+
+
 @settings_bp.route("", methods=["GET"])
 @jwt_required()
 def list_settings():
@@ -318,12 +351,20 @@ def upload_floor_plan():
         os.remove(filepath)
         return jsonify({"error": f"File too large (max {MAX_IMAGE_MB}MB)"}), 400
 
+    try:
+        filepath = _normalize_floor_plan_image(filepath)
+        unique_name = filepath.name
+    except Exception as exc:
+        if filepath.exists():
+            os.remove(filepath)
+        return jsonify({"error": f"Invalid or unsupported image: {exc}"}), 400
+
     body = request.form or {}
     name = body.get("name", "").strip() or f"Floor Plan {unique_name}"
     section = MapSection(
         name=name,
         polygon_json=json.dumps([]),
-        image_url=f"/static/assets/floor-plans/{unique_name}",
+        image_url=_floor_plan_public_url(unique_name),
         color_hex=body.get("color_hex", "#00e5ff"),
         z_index=int(body.get("z_index", 0)),
         is_visible=body.get("is_visible", "true").lower() != "false",
@@ -334,6 +375,17 @@ def upload_floor_plan():
     AuditLog.log(action="floor_plan.upload", user_id=int(get_jwt_identity()),
                  entity_type="MapSection", entity_id=section.id)
     return jsonify({"section": section.to_dict()}), 201
+
+
+@settings_bp.route("/floor-plans/<int:section_id>/image", methods=["GET"])
+@jwt_required()
+def get_floor_plan_image(section_id):
+    """Serve floor plan image bytes (auth fallback when static URL fails in browser)."""
+    section = MapSection.query.get_or_404(section_id)
+    path = _floor_plan_file_path(section.image_url or "")
+    if not path or not path.exists():
+        return jsonify({"error": "Floor plan image file not found on server"}), 404
+    return send_from_directory(path.parent, path.name, mimetype="image/png")
 
 
 @settings_bp.route("/floor-plans/<int:section_id>", methods=["PATCH"])
@@ -364,8 +416,8 @@ def delete_floor_plan(section_id):
     section = MapSection.query.get_or_404(section_id)
     # Remove image file
     if section.image_url:
-        img_path = config.BASE_DIR / "frontend" / "static" / section.image_url.lstrip("/")
-        if img_path.exists():
+        img_path = _floor_plan_file_path(section.image_url)
+        if img_path and img_path.exists():
             os.remove(str(img_path))
     AuditLog.log(action="floor_plan.delete", user_id=int(get_jwt_identity()),
                  entity_type="MapSection", entity_id=section.id)
