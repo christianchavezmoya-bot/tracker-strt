@@ -31,7 +31,7 @@ CSP_POLICY = {
     "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://unpkg.com",
     "font-src": "'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
     "img-src": "'self' data: blob: https://unpkg.com",
-    "connect-src": "'self' ws: wss:",
+    "connect-src": "'self' ws: wss: https://unpkg.com",
     "frame-ancestors": "'none'",
     "form-action": "'self'",
     "base-uri": "'self'",
