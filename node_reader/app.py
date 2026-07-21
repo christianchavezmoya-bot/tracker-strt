@@ -67,6 +67,7 @@ class NodeReaderApp(tk.Tk):
         self._ifaces: list = []
         self._poll_err_count = 0
         self._poll_warn_shown = False
+        self._router_udp_warn_shown = False
 
         self._build_ui()
         self._load_form()
@@ -200,7 +201,7 @@ class NodeReaderApp(tk.Tk):
         self.lbl_conn = ttk.Label(act, text="● Disconnected", foreground="#c44")
         self.lbl_conn.pack(side=tk.RIGHT, padx=8)
 
-        push = ttk.LabelFrame(f, text="Configure BlueApro web UI (Transport section)")
+        push = ttk.LabelFrame(f, text="Configure BlueApro web UI (Transport — NOT OpenWrt router logging)")
         push.pack(fill=tk.X, **pad)
         self.lbl_pc_ip = ttk.Label(push, text="", font=("Consolas", 9, "bold"))
         self.lbl_pc_ip.pack(padx=8, pady=(6, 2), anchor=tk.W)
@@ -224,7 +225,8 @@ class NodeReaderApp(tk.Tk):
                 "2) Transport = udp (or tcp) · PC ports 8765 / 8766.\n"
                 "3) Connect (starts PC listener) → configure BlueApro Transport (see box above).\n"
                 "4) Tags tab → Start receiving · hold MOKO tag near BlueApro.\n"
-                "5) Open BlueApro web UI at Node IP (not 192.168.1.1 router)."
+                "5) Open BlueApro web UI at Node IP (not 192.168.1.1 router).\n"
+                "6) Do NOT use OpenWrt LuCI → System → Logging — that sends router syslog, not BLE tags."
             ),
             justify=tk.LEFT,
             font=("TkDefaultFont", 8),
@@ -590,6 +592,14 @@ class NodeReaderApp(tk.Tk):
             if not ok:
                 messagebox.showerror("Connect failed", msg)
                 return
+            host = self.var_host.get().strip()
+            if host.endswith(".1") or host in ("192.168.1.1", "10.0.0.1"):
+                messagebox.showwarning(
+                    "Check node IP",
+                    f"{host} is usually your router, not BlueApro.\n\n"
+                    "UDP tags must come from the BlueApro device web UI → Transport → Raw UDP Client.\n"
+                    "Do NOT use OpenWrt LuCI → System → Logging (that sends syslog, not tags).",
+                )
             self._connected = True
             self.btn_connect.configure(text="Disconnect")
             label = {"udp": "UDP", "tcp": "TCP", "http_push": "HTTP push"}.get(self._transport(), "push")
@@ -819,6 +829,22 @@ class NodeReaderApp(tk.Tk):
         if len(self._data_log) > 3000:
             self._data_log = self._data_log[-2000:]
         self.after(0, self._append_log, entry)
+        if (
+            not self._router_udp_warn_shown
+            and channel == "UDP"
+            and direction == "IN"
+            and "No tags" in msg
+            and ("syslog" in msg.lower() or "openwrt" in msg.lower() or "router" in msg.lower())
+        ):
+            self._router_udp_warn_shown = True
+            self.after(0, lambda: messagebox.showwarning(
+                "Wrong UDP source",
+                msg.replace("No tags — ", "") + "\n\n"
+                "Fix:\n"
+                "1) OpenWrt LuCI → System → Logging → clear External log server (8765)\n"
+                "2) Find BlueApro IP (scan, device label, or 192.168.4.1 in AP mode)\n"
+                "3) BlueApro web UI → Transport → Raw UDP Client → Host = PC IP, Port = 8765",
+            ))
 
     def _append_log(self, entry) -> None:
         ts, direction, channel, msg = entry

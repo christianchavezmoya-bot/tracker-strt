@@ -7,6 +7,7 @@ import time
 from typing import Callable
 
 from node_reader.blueapro_client import parse_push_payload
+from node_reader.payload_diagnose import diagnose_payload
 
 LogFn = Callable[[str, str, str], None]
 OnDevices = Callable[[list], None]
@@ -32,6 +33,7 @@ class UdpIngestServer:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.packet_count = 0
+        self._warned_sources: set[str] = set()
 
     @property
     def running(self) -> bool:
@@ -65,6 +67,14 @@ class UdpIngestServer:
             self._thread.join(timeout=3)
             self._thread = None
 
+    def _log_unparsed(self, data: bytes, src_ip: str) -> None:
+        hint = diagnose_payload(data, src_ip)
+        if src_ip not in self._warned_sources:
+            self._warned_sources.add(src_ip)
+            self.log("IN", "UDP", f"No tags — {hint}")
+        elif self.packet_count <= 3 or self.packet_count % 20 == 0:
+            self.log("IN", "UDP", f"No tags parsed ({len(data)} bytes from {src_ip})")
+
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
@@ -82,6 +92,8 @@ class UdpIngestServer:
                 for d in devices:
                     d.source = "udp"
                 self.on_devices(devices)
+            else:
+                self._log_unparsed(data, addr[0])
 
 
 class TcpIngestServer:
@@ -104,6 +116,7 @@ class TcpIngestServer:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.message_count = 0
+        self._warned_sources: set[str] = set()
 
     @property
     def running(self) -> bool:
@@ -188,6 +201,11 @@ class TcpIngestServer:
             for d in devices:
                 d.source = "tcp"
             self.on_devices(devices)
+        else:
+            hint = diagnose_payload(data, addr[0])
+            if addr[0] not in self._warned_sources:
+                self._warned_sources.add(addr[0])
+                self.log("IN", "TCP", f"No tags — {hint}")
 
 
 # Recommended ports (no global standard — must match on BlueApro and PC)
