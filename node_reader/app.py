@@ -549,10 +549,29 @@ class NodeReaderApp(tk.Tk):
 
     def _probe_done(self, rows: list[tuple[str, int, str]]) -> None:
         lines = ["Path probe results:", ""]
+        all_err = True
         for path, code, hint in rows:
             lines.append(f"  {path:30} → {code if code >= 0 else 'ERR'}  ({hint})")
+            if code >= 0:
+                all_err = False
         lines.append("")
-        lines.append("BlueApro tags need a 200 on a BLE devices path, OR use Push mode.")
+        host = self.var_host.get().strip()
+        if bool(self.var_https.get()) and int(self.var_port.get()) == 80:
+            lines.append("⚠ HTTPS is ON but port is 80 — uncheck HTTPS (LuCI uses plain HTTP on 80).")
+            lines.append("")
+        if all_err and host.endswith(".1"):
+            lines.append(
+                f"{host} is OpenWrt LuCI — it has no /api/tags endpoints.\n"
+                "Use Transport=udp on PC, then configure BlueUp UI (http://192.168.4.1 AP mode).\n"
+                "Probe API paths is only for http_pull mode."
+            )
+        elif self._is_push_transport():
+            lines.append(
+                "UDP/TCP push mode: tags come from BlueApro Transport, not these HTTP paths.\n"
+                "Listening on PC is what matters — ignore probe if BlueApro sends JSON to your PC IP."
+            )
+        else:
+            lines.append("BlueApro tags need HTTP 200 on a BLE devices path, OR use udp/tcp push mode.")
         text = "\n".join(lines)
         self._log("OUT", "NODE", "Probe API paths")
         for line in lines[2:-2]:
