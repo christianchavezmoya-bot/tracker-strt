@@ -50,6 +50,12 @@ def list_nodes():
     if request.args.get("node_type"):
         q = q.filter_by(node_type=int(request.args["node_type"]))
     items = q.order_by(WifiNode.id.desc()).all()
+
+    filter_tab = (request.args.get("filter") or "all").lower()
+    if filter_tab != "all":
+        from backend.services.node_utils import node_category
+        items = [n for n in items if node_category(n) == filter_tab]
+
     return jsonify({"items": [n.to_dict() for n in items], "total": len(items)})
 
 
@@ -144,9 +150,15 @@ def create_node():
         pos_z=body.get("pos_z", 0),
         node_type=node_type,
     )
+    import json
+    meta = {}
     if isinstance(body.get("metadata"), dict):
-        import json
-        node.metadata_json = json.dumps(body["metadata"])
+        meta.update(body["metadata"])
+    px, py = float(node.pos_x or 0), float(node.pos_y or 0)
+    if px or py:
+        meta["placed_on_map"] = True
+    if meta:
+        node.metadata_json = json.dumps(meta)
     elif body.get("metadata_json"):
         node.metadata_json = body["metadata_json"]
     db.session.add(node)
@@ -249,6 +261,20 @@ def update_node(node_id):
             cur = {}
         cur.update(body["metadata"])
         node.metadata_json = json.dumps(cur)
+
+    if any(k in body for k in ("pos_x", "pos_y", "pos_z")):
+        from backend.services.node_utils import mark_node_placed
+        px = float(node.pos_x or 0)
+        py = float(node.pos_y or 0)
+        if px or py or (body.get("metadata") or {}).get("placed_on_map"):
+            mark_node_placed(node)
+            try:
+                from backend.services.anchor_sync import ensure_node_pair, sync_anchor_position_from_node
+                _node, anchor = ensure_node_pair(node.mac_address)
+                sync_anchor_position_from_node(node, anchor)
+            except Exception:
+                pass
+
     db.session.commit()
     AuditLog.log(action="node.update", user_id=int(get_jwt_identity()),
                  entity_type="WifiNode", entity_id=node.id)

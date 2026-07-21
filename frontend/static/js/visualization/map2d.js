@@ -753,6 +753,7 @@ function showNodeForm(realX, realY, pixelX, pixelY) {
       const res = await API.patch(`/nodes/${nodeId}`, {
         pos_x: realX, pos_y: realY, pos_z: z,
         assigned_name: name || undefined,
+        metadata: { placed_on_map: true },
       });
       if (res && res.ok) {
         closeNodeForm();

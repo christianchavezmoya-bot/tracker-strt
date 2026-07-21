@@ -132,6 +132,9 @@
       <button class="hw-tab" data-tab="location" onclick="switchTab('location'); loadLocationCore()">
         <i class="fa-solid fa-location-crosshairs"></i> Location Core
       </button>
+      <button class="hw-tab" data-tab="network" onclick="switchTab('network'); loadMqttNetworkPanel()">
+        <i class="fa-solid fa-wifi"></i> Network & MQTT
+      </button>
       <button class="hw-tab" data-tab="integrations" onclick="switchTab('integrations'); loadIntegrationsStatus()">
         <i class="fa-solid fa-plug"></i> Integrations
       </button>
@@ -154,6 +157,36 @@
           </div>
           <p id="notifPermStatus" style="font-size:12px;color:var(--text-muted);margin-top:10px"></p>
           <p id="webPushStatus" style="font-size:12px;color:var(--text-muted);margin-top:4px"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Network & MQTT ─────────────────────────────────────────── -->
+    <div class="settings-section" id="section-network" style="display:none">
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <i class="fa-solid fa-wifi"></i>
+          WiFi node receiver (MQTT)
+          <span class="settings-badge">Admin only</span>
+        </div>
+        <div style="padding:18px">
+          <p class="page-subtitle" style="margin-bottom:16px">
+            When <strong>ON</strong>, this server accepts tag data from WiFi scanner units on port 1883.
+            Configure your units using the setup card below.
+          </p>
+          <div class="settings-field" style="padding:0 0 16px;border:none">
+            <div class="settings-field-info">
+              <label class="setting-label" for="mqttBrokerToggle">Receive data from WiFi nodes</label>
+              <span class="setting-help">Turn off to stop accepting MQTT messages (units will not connect).</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="mqttBrokerToggle" onchange="onMqttBrokerToggleChange(this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div id="mqttNetworkStatus"></div>
         </div>
       </div>
     </div>
@@ -526,6 +559,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
+<script src="/static/js/rtls-setup.js?v=1"></script>
 <script src="/static/js/floor-plan-coord-wizard.js?v=13"></script>
 <script>
 

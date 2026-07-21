@@ -122,13 +122,30 @@
       </div>
     </div>
 
+    <div id="rtlsReadinessPanelCompact" style="margin-bottom:16px"></div>
+
+    <!-- WiFi unit setup card -->
+    <div class="info-banner" style="flex-direction:column;align-items:stretch">
+      <div id="wifiSetupCard" style="width:100%">
+        <div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading WiFi unit settings…</div>
+      </div>
+    </div>
+
+    <!-- Filter tabs -->
+    <div class="node-tabs" role="tablist">
+      <button type="button" class="node-tab active" data-filter="all" onclick="setNodeFilter('all')">All</button>
+      <button type="button" class="node-tab" data-filter="discovered" onclick="setNodeFilter('discovered')">Discovered</button>
+      <button type="button" class="node-tab" data-filter="placed" onclick="setNodeFilter('placed')">Placed on map</button>
+      <button type="button" class="node-tab" data-filter="offline" onclick="setNodeFilter('offline')">Offline</button>
+    </div>
+
     <!-- Info Banner -->
     <div class="info-banner">
       <i class="fa-solid fa-info-circle"></i>
       <div class="info-banner-text">
-        Nodes are <strong>fixed reference points</strong> used for positioning. Place at known survey coordinates
-        and add to the <a href="/hardware">hardware configuration</a> to enable UWB ranging.
-        <strong>Calibrated</strong> nodes improve trilateration accuracy to ±10cm.
+        Nodes are <strong>fixed reference points</strong> for tag positioning. Power on WiFi units — they appear under
+        <strong>Discovered</strong>. Place at least <strong>3 anchors</strong> on the map, then tags show on Live Map.
+        <a href="/?mode=setup">Open Map Setup →</a>
       </div>
     </div>
 
@@ -228,18 +245,34 @@
 </div>
 {% endblock %}
 {% block scripts %}
+<script src="/static/js/rtls-setup.js?v=1"></script>
 <script>
 
 'use strict';
 let nodes = [];
+let allNodes = [];
 let editingNodeId = null;
+let nodeFilter = 'all';
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
-  await Promise.all([loadUserInfo(), loadNodes()]);
+  await loadUserInfo();
+  await Promise.all([loadAllNodes(), loadNodes(), loadWifiSetupCard('wifiSetupCard')]);
+  try {
+    await loadRtlsReadiness();
+    renderReadinessPanel('rtlsReadinessPanelCompact', { compact: true });
+  } catch (e) {}
   renderNodes();
   renderSummary();
 });
+
+function setNodeFilter(filter) {
+  nodeFilter = filter;
+  document.querySelectorAll('.node-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.filter === filter);
+  });
+  loadNodes().then(() => { renderNodes(); renderSummary(); });
+}
 
 async function loadUserInfo() {
   const res = await API.get('/auth/me');
@@ -250,17 +283,25 @@ async function loadUserInfo() {
   if (u.role === 'ADMIN') document.getElementById('adminNav')?.style && (document.getElementById('adminNav').style.display = 'block');
 }
 
-async function loadNodes() {
+async function loadAllNodes() {
   const res = await API.get('/nodes');
+  const data = await API.json(res);
+  if (res && res.ok) allNodes = data.items || [];
+}
+
+async function loadNodes() {
+  const q = nodeFilter && nodeFilter !== 'all' ? `?filter=${encodeURIComponent(nodeFilter)}` : '';
+  const res = await API.get('/nodes' + q);
   const data = await API.json(res);
   if (res && res.ok) nodes = data.items || [];
 }
 
 function renderSummary() {
-  document.getElementById('statTotal').textContent = nodes.length;
-  document.getElementById('statActive').textContent = nodes.filter(n => n.status === 'ACTIVE').length;
-  document.getElementById('statCalibrating').textContent = nodes.filter(n => n.status === 'CALIBRATING').length;
-  document.getElementById('statOffline').textContent = nodes.filter(n => n.status === 'OFFLINE').length;
+  const src = allNodes.length ? allNodes : nodes;
+  document.getElementById('statTotal').textContent = src.length;
+  document.getElementById('statActive').textContent = src.filter(n => n.status === 'ACTIVE').length;
+  document.getElementById('statCalibrating').textContent = src.filter(n => n.status === 'CALIBRATING').length;
+  document.getElementById('statOffline').textContent = src.filter(n => n.status === 'OFFLINE').length;
 }
 
 function renderNodes() {
@@ -388,6 +429,7 @@ async function saveNode() {
     res = await API.post('/nodes', body);
   }
   if (res && res.ok) {
+    await loadAllNodes();
     await loadNodes();
     renderNodes();
     renderSummary();
@@ -403,6 +445,7 @@ async function deleteNode(id) {
   if (!(await holoConfirm('Delete this node?', { danger: true, title: 'Confirm' }))) return;
   const res = await API.del(`/nodes/${id}`);
   if (res && res.ok) {
+    await loadAllNodes();
     await loadNodes();
     renderNodes();
     renderSummary();

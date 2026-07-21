@@ -154,6 +154,7 @@ def create_app(test_config: dict = None) -> Flask:
     from backend.api.inject import inject_bp
     from backend.api.push import push_bp
     from backend.api.org import org_bp
+    from backend.api.system import system_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trackers_bp)
@@ -180,6 +181,7 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(inject_bp)
     app.register_blueprint(push_bp)
     app.register_blueprint(org_bp)
+    app.register_blueprint(system_bp)
 
     if os.getenv("PLAYWRIGHT_E2E") == "1":
         from backend.api.e2e import e2e_bp
@@ -416,25 +418,16 @@ def _init_positioning(app):
         mqtt_pub = None
 
     mqtt_broker = None
-    if getattr(cfg, "MQTT_BROKER_ENABLED", False):
-        try:
-            from backend.services.mqtt_broker_service import init_mqtt_broker
-            from backend.services.mqtt_tag_ingest import init_mqtt_tag_ingest
+    try:
+        from backend.services.mqtt_broker_manager import configure, start_if_configured
 
-            ingest = init_mqtt_tag_ingest(app=app)
-            mqtt_broker = init_mqtt_broker(
-                bind=getattr(cfg, "MQTT_BROKER_BIND", "0.0.0.0"),
-                port=int(getattr(cfg, "MQTT_BROKER_PORT", 1883)),
-                allow_anonymous=getattr(cfg, "MQTT_BROKER_ALLOW_ANONYMOUS", True),
-                on_message=ingest.handle_message,
-            )
-            ok, msg = mqtt_broker.start()
-            if ok:
-                logger.info("Embedded MQTT broker: %s", msg)
-            else:
-                logger.warning("Embedded MQTT broker failed: %s", msg)
-        except Exception as e:
-            logger.warning("Embedded MQTT broker not started: %s", e)
+        configure(app)
+        start_if_configured()
+        from backend.services.mqtt_broker_service import get_mqtt_broker
+
+        mqtt_broker = get_mqtt_broker()
+    except Exception as e:
+        logger.warning("Embedded MQTT broker not started: %s", e)
 
     bridge_mgr = HardwareBridgeManager(db.session, app)
     bridge_mgr.start_all(anchors=anchors)

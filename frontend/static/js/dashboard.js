@@ -115,6 +115,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   startSSE();
   startInterpolationLoop();
   setupKeyboardShortcuts();
+  try {
+    await refreshRtlsSetupUi();
+    setInterval(refreshRtlsSetupUi, 30000);
+  } catch (e) { /* readiness optional */ }
   // Deep-link from Alerts "Show on map" / Map Setup nav
   try {
     const params = new URLSearchParams(location.search);

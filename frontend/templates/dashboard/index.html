@@ -46,6 +46,8 @@
   </div>
 
   <div class="topbar-right">
+    <div id="mqttStatusChip" class="mqtt-status-chip chip-off" style="display:none" title="MQTT node receiver"></div>
+
     <!-- Notification Bell -->
     <button class="icon-btn" id="notifBtn" onclick="toggleNotifications()" title="Notifications">
       <i class="fa-regular fa-bell"></i>
@@ -120,6 +122,7 @@
       <h3>ASSETS</h3>
       <div class="filter-count" id="filterCount">0</div>
     </div>
+    <div id="rtlsReadinessPanel" style="padding:0 12px"></div>
 
     <div class="filter-section">
       <div class="filter-group">
@@ -181,6 +184,7 @@
       <span>Setup mode — use toolbar to place anchors and draw zones/sections</span>
       <button type="button" onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:#5eead4;cursor:pointer;padding:2px 6px" aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button>
     </div>
+    <div id="rtlsMapBanner" style="display:none;position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:24;align-items:center;gap:10px;padding:10px 16px;max-width:min(520px,92vw);background:rgba(255,179,0,0.12);border:1px solid rgba(255,179,0,0.35);border-radius:10px;font-size:12px;color:#fcd34d;backdrop-filter:blur(8px)"></div>
     <!-- Heatmap Canvas Overlay -->
     <canvas id="heatmapCanvas" class="heatmap-canvas" style="display:none"></canvas>
 
@@ -482,7 +486,8 @@
 <script src="/static/js/visualization/map-georef.js?v=12"></script>
 <script src="/static/js/visualization/map2d.js?v=18"></script>
 <script src="/static/js/visualization/map3d.js?v=16"></script>
-<script src="/static/js/dashboard.js?v=16"></script>
+<script src="/static/js/rtls-setup.js?v=1"></script>
+<script src="/static/js/dashboard.js?v=17"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js?v=7').catch(() => {});

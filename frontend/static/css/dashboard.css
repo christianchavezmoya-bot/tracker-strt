@@ -8,6 +8,23 @@
   font-weight: 700; padding: 1px 7px; border-radius: 10px;
 }
 
+/* MQTT status chip (top bar) */
+.mqtt-status-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 20px;
+  border: 1px solid var(--border); margin-right: 8px; white-space: nowrap;
+}
+.mqtt-status-chip.chip-ok { background: rgba(105,255,71,0.1); color: var(--green); border-color: rgba(105,255,71,0.25); }
+.mqtt-status-chip.chip-warn { background: rgba(255,179,0,0.1); color: var(--yellow); border-color: rgba(255,179,0,0.25); }
+.mqtt-status-chip.chip-off { background: rgba(255,255,255,0.04); color: var(--text-muted); }
+.mqtt-chip-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+/* Node page tabs */
+.node-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+.node-tab { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 8px; cursor: pointer; transition: all 0.15s; }
+.node-tab:hover { color: var(--text-primary); border-color: var(--cyan); }
+.node-tab.active { background: rgba(0,229,255,0.12); color: var(--cyan); border-color: var(--cyan); }
+
 /* Map dot states */
 .tracker-dot {
   position: absolute; border-radius: 50%;
