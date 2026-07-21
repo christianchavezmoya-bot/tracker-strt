@@ -31,6 +31,8 @@ class MqttTagIngestService:
         self.last_topic: str = ""
         self.per_node_counts: dict[str, int] = defaultdict(int)
         self.per_node_last_at: dict[str, datetime] = {}
+        self.per_node_last_payload: dict[str, str] = {}
+        self.per_node_last_topic: dict[str, str] = {}
 
     def handle_message(self, client_id: str, topic: str, payload: str) -> None:
         with self._lock:
@@ -49,6 +51,12 @@ class MqttTagIngestService:
             logger.debug("MQTT readings missing anchor MAC (%s)", topic)
             return
 
+        with self._lock:
+            for anchor_mac in grouped:
+                mac = anchor_mac.upper()
+                self.per_node_last_payload[mac] = (payload or "")[:500]
+                self.per_node_last_topic[mac] = topic or "rssi/data"
+
         if self.app:
             with self.app.app_context():
                 self._ingest_grouped(grouped)
@@ -64,7 +72,8 @@ class MqttTagIngestService:
                 pos_svc.process_scan_batch(anchor_mac, detections)
                 touch_node_heartbeat(anchor_mac)
                 self.per_node_counts[anchor_mac] += 1
-                self.per_node_last_at[anchor_mac] = datetime.utcnow()
+                now = datetime.utcnow()
+                self.per_node_last_at[anchor_mac] = now
             except Exception:
                 logger.exception("Failed to ingest MQTT batch from %s", anchor_mac)
                 db.session.rollback()
@@ -91,6 +100,8 @@ class MqttTagIngestService:
             "per_node_last_at": {
                 mac: ts.isoformat() for mac, ts in self.per_node_last_at.items()
             },
+            "per_node_last_payload": dict(self.per_node_last_payload),
+            "per_node_last_topic": dict(self.per_node_last_topic),
         }
 
 

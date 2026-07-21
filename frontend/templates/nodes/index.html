@@ -53,6 +53,7 @@
 .pill-green { background:rgba(105,255,71,0.12); color:var(--green); }
 .pill-yellow { background:rgba(255,179,0,0.12); color:var(--yellow); }
 .pill-red { background:rgba(255,68,68,0.12); color:var(--red); }
+.pill-red { background:rgba(255,68,68,0.12); color:var(--red); }
 .pill-gray { background:rgba(255,255,255,0.06); color:var(--text-muted); }
 .action-btns { display:flex; gap:4px; }
 .action-btn { width:28px; height:28px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:6px; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.1s; }
@@ -131,6 +132,13 @@
       </div>
     </div>
 
+    <!-- Main view tabs -->
+    <div class="node-tabs" role="tablist" style="margin-bottom:12px">
+      <button type="button" class="node-tab active" data-view="list" onclick="setNodesView('list')"><i class="fa-solid fa-list"></i> Node list</button>
+      <button type="button" class="node-tab" data-view="diagnostics" onclick="setNodesView('diagnostics')"><i class="fa-solid fa-stethoscope"></i> Diagnostics</button>
+    </div>
+
+    <div id="nodesListView">
     <!-- Filter tabs -->
     <div class="node-tabs" role="tablist">
       <button type="button" class="node-tab active" data-filter="all" onclick="setNodeFilter('all')">All</button>
@@ -168,7 +176,49 @@
         </tbody>
       </table>
     </div>
+    </div><!-- /nodesListView -->
+
+    <div id="nodesDiagnosticsView" style="display:none">
+      <div class="info-banner" style="margin-bottom:16px">
+        <i class="fa-solid fa-server"></i>
+        <div class="info-banner-text" id="diagBrokerSummary">Loading broker status…</div>
+      </div>
+      <div class="hw-config-table-wrap">
+        <table class="hw-config-table">
+          <thead>
+            <tr>
+              <th>Node</th>
+              <th>Status</th>
+              <th>Last heard</th>
+              <th>Msgs / hr</th>
+              <th>Avg RSSI</th>
+              <th>Tags (1h)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="diagnosticsTable">
+            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
+</div>
+
+<!-- Node diagnostics detail panel -->
+<div class="modal-overlay" id="diagDetailModal" style="display:none" onclick="if(event.target===this)closeDiagDetail()">
+  <div class="hw-modal" style="width:560px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="diagDetailTitle">Node diagnostics</h3>
+      <button class="modal-close" onclick="closeDiagDetail()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="diagDetailBody" style="padding:16px 20px;font-size:13px;line-height:1.6;color:var(--text-secondary)"></div>
+    <div class="modal-actions">
+      <a href="/?mode=setup" class="btn btn-secondary btn-sm" style="text-decoration:none"><i class="fa-solid fa-map-pin"></i> Place on map</a>
+      <button class="btn btn-primary btn-sm" onclick="closeDiagDetail()">Close</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── Add / Edit Node Modal ──────────────────────────────────────── -->
@@ -253,6 +303,8 @@ let nodes = [];
 let allNodes = [];
 let editingNodeId = null;
 let nodeFilter = 'all';
+let nodesView = 'list';
+let diagnosticsCache = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
@@ -266,12 +318,115 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderSummary();
 });
 
+function setNodesView(view) {
+  nodesView = view;
+  document.querySelectorAll('.node-tab[data-view]').forEach(t => {
+    t.classList.toggle('active', t.dataset.view === view);
+  });
+  const listEl = document.getElementById('nodesListView');
+  const diagEl = document.getElementById('nodesDiagnosticsView');
+  if (listEl) listEl.style.display = view === 'list' ? 'block' : 'none';
+  if (diagEl) diagEl.style.display = view === 'diagnostics' ? 'block' : 'none';
+  if (view === 'diagnostics') loadDiagnosticsView();
+}
+
 function setNodeFilter(filter) {
   nodeFilter = filter;
-  document.querySelectorAll('.node-tab').forEach(t => {
+  document.querySelectorAll('#nodesListView .node-tab[data-filter]').forEach(t => {
     t.classList.toggle('active', t.dataset.filter === filter);
   });
   loadNodes().then(() => { renderNodes(); renderSummary(); });
+}
+
+async function loadDiagnosticsView() {
+  const tbody = document.getElementById('diagnosticsTable');
+  const brokerEl = document.getElementById('diagBrokerSummary');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics…</td></tr>';
+  try {
+    const res = await API.get('/nodes/diagnostics');
+    const data = await API.json(res);
+    if (!res || !res.ok) throw new Error('load failed');
+    diagnosticsCache = data.nodes || [];
+    const b = data.broker || {};
+    const s = data.summary || {};
+    if (brokerEl) {
+      const runLabel = b.running ? '🟢 Broker running' : (b.enabled ? '⚠️ Broker enabled but not running' : '⚪ Broker off');
+      brokerEl.innerHTML = `<strong>${runLabel}</strong> · Port ${b.port || 1883} · `
+        + `${s.online || 0} online, ${s.weak || 0} weak, ${s.offline || 0} offline · `
+        + `<span class="mono">${b.broker_url || ''}</span>`;
+    }
+    if (!diagnosticsCache.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No nodes yet — power on WiFi units or add a node manually.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = diagnosticsCache.map(d => {
+      const pill = connectivityPill(d.connectivity);
+      const heard = d.last_heard_at ? timeAgo(d.last_heard_at) : 'Never';
+      return `<tr style="cursor:pointer" onclick="openDiagDetail(${d.node_id})">
+        <td><strong>${d.name || d.mac_address}</strong><div class="mono" style="font-size:11px;color:var(--text-muted)">${d.mac_address}</div></td>
+        <td><span class="status-pill ${pill.cls}"><span class="status-dot-sm"></span>${pill.label}</span></td>
+        <td>${heard}</td>
+        <td class="mono">${d.msg_rate_per_hour ?? '—'}</td>
+        <td class="mono">${d.avg_rssi != null ? d.avg_rssi + ' dBm' : '—'}</td>
+        <td class="mono">${d.tags_seen_last_hour ?? 0}</td>
+        <td><button class="action-btn" title="Details" onclick="event.stopPropagation();openDiagDetail(${d.node_id})"><i class="fa-solid fa-chart-simple"></i></button></td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="7" class="table-empty" style="color:var(--red)">Failed to load diagnostics</td></tr>';
+  }
+}
+
+function connectivityPill(c) {
+  if (c === 'online') return { cls: 'pill-green', label: 'Online' };
+  if (c === 'weak') return { cls: 'pill-yellow', label: 'Weak' };
+  if (c === 'offline') return { cls: 'pill-red', label: 'Offline' };
+  return { cls: 'pill-gray', label: 'Unknown' };
+}
+
+async function openDiagDetail(nodeId) {
+  const modal = document.getElementById('diagDetailModal');
+  const body = document.getElementById('diagDetailBody');
+  const title = document.getElementById('diagDetailTitle');
+  if (!modal || !body) return;
+  body.innerHTML = '<div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading…</div>';
+  modal.style.display = 'flex';
+  try {
+    const [dRes, sRes] = await Promise.all([
+      API.get(`/nodes/${nodeId}/diagnostics`),
+      API.get(`/nodes/${nodeId}/stats?since=24h`),
+    ]);
+    const dData = await API.json(dRes);
+    const sData = await API.json(sRes);
+    const d = dData.diagnostics || {};
+    const st = sData.stats || {};
+    if (title) title.textContent = d.name || d.mac_address || 'Node diagnostics';
+    const pill = connectivityPill(d.connectivity);
+    body.innerHTML = `
+      <div style="margin-bottom:14px"><span class="status-pill ${pill.cls}"><span class="status-dot-sm"></span>${pill.label}</span>
+        ${d.placed_on_map ? '<span style="margin-left:8px;color:var(--green);font-size:12px"><i class="fa-solid fa-map-pin"></i> Placed on map</span>' : '<span style="margin-left:8px;color:var(--yellow);font-size:12px">Not placed on map</span>'}</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <tr><td style="padding:6px 0;color:var(--text-muted)">MAC</td><td class="mono">${d.mac_address || '—'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Last heard</td><td>${d.last_heard_at ? timeAgo(d.last_heard_at) : 'Never'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Messages (total)</td><td>${d.messages_total ?? 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Messages (last hour)</td><td>${d.messages_last_hour ?? 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Avg RSSI (1h)</td><td>${d.avg_rssi != null ? d.avg_rssi + ' dBm' : '—'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Tags heard (1h)</td><td>${d.tags_seen_last_hour ?? 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Detections (24h)</td><td>${st.detection_count ?? 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Unique tags (24h)</td><td>${st.unique_tags ?? 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">RSSI range (24h)</td><td>${st.min_rssi != null ? st.min_rssi + ' … ' + st.max_rssi + ' dBm' : '—'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted);vertical-align:top">Last payload</td><td class="mono" style="word-break:break-all;color:var(--cyan)">${d.last_payload || '—'}</td></tr>
+      </table>
+      <div style="margin-top:12px;font-size:11px;color:var(--text-muted)">Broker: ${d.broker?.running ? 'Running' : 'Off'} · Topic ${d.last_topic || 'rssi/data'}</div>`;
+  } catch (e) {
+    body.innerHTML = '<div style="color:var(--red)">Could not load node details</div>';
+  }
+}
+
+function closeDiagDetail() {
+  const modal = document.getElementById('diagDetailModal');
+  if (modal) modal.style.display = 'none';
 }
 
 async function loadUserInfo() {

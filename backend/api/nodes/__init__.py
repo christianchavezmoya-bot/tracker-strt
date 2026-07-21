@@ -169,6 +169,33 @@ def create_node():
     return jsonify({"node": node.to_dict()}), 201
 
 
+@nodes_bp.route("/diagnostics", methods=["GET"])
+@jwt_required()
+def all_nodes_diagnostics():
+    """Network diagnostics summary for all WiFi nodes + broker status."""
+    from backend.services.node_diagnostics import compute_all_diagnostics
+    return jsonify(compute_all_diagnostics(db.session))
+
+
+@nodes_bp.route("/<int:node_id>/diagnostics", methods=["GET"])
+@jwt_required()
+def node_diagnostics(node_id):
+    """Diagnostics for one WiFi node."""
+    from backend.services.node_diagnostics import compute_node_diagnostics
+    node = WifiNode.query.get_or_404(node_id)
+    return jsonify({"diagnostics": compute_node_diagnostics(node, db.session)})
+
+
+@nodes_bp.route("/<int:node_id>/stats", methods=["GET"])
+@jwt_required()
+def node_stats(node_id):
+    """RSSI / detection statistics for one node. ?since=24h|7d|1h"""
+    from backend.services.node_diagnostics import compute_node_stats
+    node = WifiNode.query.get_or_404(node_id)
+    since = request.args.get("since", "24h")
+    return jsonify({"stats": compute_node_stats(node, since=since, session=db.session)})
+
+
 @nodes_bp.route("/<int:node_id>", methods=["GET"])
 @jwt_required()
 def get_node(node_id):
