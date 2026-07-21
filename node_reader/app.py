@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
-HOLO-RTLS Node Reader — standalone PC app for WiFi node testing and BLE tag discovery.
+HOLO-RTLS Node Reader — Windows app for BlueApro 6/6E WiFi nodes (vendor firmware).
 
-Usage:
-  python -m node_reader.app
-  python node_reader/app.py
+Connects to node via HTTP (user-selected port), polls or receives tag data,
+displays raw traffic, optional uplink to central HOLO-RTLS.
 
-Build Windows .exe:
-  pip install -r node_reader/requirements.txt
+  python -m node_reader
   pyinstaller node_reader/build.spec
 """
 from __future__ import annotations
@@ -16,603 +14,574 @@ import sys
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from tkinter import messagebox, ttk
 
-# Allow running as script or module
-_ROOT = __file__.replace("\\", "/").rsplit("/", 2)[0]
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT.rsplit("/", 1)[0] if _ROOT.endswith("node_reader") else _ROOT)
+_ROOT = __file__.replace("\\", "/").rsplit("/", 1)[0]
+if _ROOT.endswith("node_reader"):
+    sys.path.insert(0, _ROOT.rsplit("/", 1)[0])
 
-from node_reader.ble_engine import BLEScanEngine, TagDetection
-from node_reader.config_store import (
-    AppConfig,
-    TagProfile,
-    load_config,
-    load_tag_profiles,
-    save_config,
-    save_tag_profiles,
-)
+from node_reader.blueapro_client import BlueAproClient, NodeDevice
+from node_reader.config_store import AppConfig, TagProfile, load_config, load_tag_profiles, save_config, save_tag_profiles
+from node_reader.discovery import scan_network
+from node_reader.ingest_server import IngestServer
 from node_reader.tag_classifier import SCAN_TYPE_LABELS
-from node_reader.transport import ServerTransport, scan_network_for_servers
-
-
-def _local_mac() -> str:
-    try:
-        import uuid
-        n = uuid.getnode()
-        return ":".join(f"{(n >> ele) & 0xFF:02X}" for ele in range(40, -1, -8))
-    except Exception:
-        return "PC:READER:01"
+from node_reader.transport import ServerTransport
 
 
 class NodeReaderApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("HOLO-RTLS Node Reader")
-        self.geometry("980x640")
-        self.minsize(860, 520)
+        self.title("HOLO-RTLS Node Reader — BlueApro 6/6E")
+        self.geometry("1020x680")
+        self.minsize(900, 560)
 
         self.cfg = load_config()
         self.tag_profiles = load_tag_profiles()
-        self.transport = ServerTransport(log=self._log_message)
-        self.ble = BLEScanEngine(rssi_min=self.cfg.rssi_min, tags_only=self.cfg.tags_only)
-        self.ble.on_update = self._on_ble_update
+        self.transport = ServerTransport(log=self._log)
+        self.ingest = IngestServer(
+            host=self.cfg.listen_host,
+            port=self.cfg.listen_port,
+            ingest_path=self.cfg.listen_path,
+            on_devices=self._on_push_devices,
+            log=self._log,
+        )
 
-        self._scanning = False
-        self._forward_job = None
+        self._client: BlueAproClient | None = None
+        self._connected = False
+        self._polling = False
+        self._poll_job = None
+        self._devices: dict[str, dict] = {}
         self._data_log: list[tuple[str, str, str, str]] = []
 
         self._build_ui()
-        self._load_form_from_config()
-        if not self.cfg.anchor_mac:
-            self.var_anchor_mac.set(_local_mac())
-
+        self._load_form()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        style = ttk.Style()
-        if "clam" in style.theme_names():
-            style.theme_use("clam")
-
         nb = ttk.Notebook(self)
         nb.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
-
-        self.tab_conn = ttk.Frame(nb)
+        self.tab_node = ttk.Frame(nb)
         self.tab_tags = ttk.Frame(nb)
-        self.tab_data = ttk.Frame(nb)
-        nb.add(self.tab_conn, text="  Connection  ")
+        self.tab_log = ttk.Frame(nb)
+        self.tab_adv = ttk.Frame(nb)
+        nb.add(self.tab_node, text="  BlueApro Node  ")
         nb.add(self.tab_tags, text="  Tags  ")
-        nb.add(self.tab_data, text="  Data log  ")
+        nb.add(self.tab_log, text="  Data log  ")
+        nb.add(self.tab_adv, text="  Advanced  ")
 
-        self._build_connection_tab()
+        self._build_node_tab()
         self._build_tags_tab()
-        self._build_data_tab()
+        self._build_log_tab()
+        self._build_adv_tab()
 
-        self.status = ttk.Label(self, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
+        self.status = ttk.Label(self, text="Ready — configure BlueApro node and Connect", relief=tk.SUNKEN, anchor=tk.W)
         self.status.pack(fill=tk.X, side=tk.BOTTOM, padx=8, pady=(0, 6))
 
-    def _build_connection_tab(self) -> None:
-        f = self.tab_conn
+    def _build_node_tab(self) -> None:
+        f = self.tab_node
         pad = {"padx": 8, "pady": 4}
 
-        # Server
-        srv = ttk.LabelFrame(f, text="HOLO-RTLS Server")
-        srv.pack(fill=tk.X, **pad)
+        info = ttk.LabelFrame(f, text="Device profile")
+        info.pack(fill=tk.X, **pad)
+        r0 = ttk.Frame(info)
+        r0.pack(fill=tk.X, padx=8, pady=6)
+        ttk.Label(r0, text="Model:").pack(side=tk.LEFT)
+        self.var_model = tk.StringVar(value=BlueAproClient.MODEL)
+        ttk.Label(r0, textvariable=self.var_model, font=("TkDefaultFont", 9, "bold")).pack(side=tk.LEFT, padx=6)
+        ttk.Label(r0, text="S/N:").pack(side=tk.LEFT, padx=(16, 0))
+        self.var_serial = tk.StringVar()
+        ttk.Entry(r0, textvariable=self.var_serial, width=22).pack(side=tk.LEFT, padx=6)
 
-        row0 = ttk.Frame(srv)
-        row0.pack(fill=tk.X, padx=8, pady=6)
-        ttk.Label(row0, text="Server host:").pack(side=tk.LEFT)
+        conn = ttk.LabelFrame(f, text="Connect to BlueApro node (HTTP)")
+        conn.pack(fill=tk.X, **pad)
+
+        r1 = ttk.Frame(conn)
+        r1.pack(fill=tk.X, padx=8, pady=6)
+        ttk.Button(r1, text="Scan WiFi nodes", command=self._scan_nodes).pack(side=tk.LEFT)
+        ttk.Label(r1, text="Node IP:").pack(side=tk.LEFT, padx=(12, 0))
         self.var_host = tk.StringVar()
-        ttk.Entry(row0, textvariable=self.var_host, width=22).pack(side=tk.LEFT, padx=6)
-        ttk.Label(row0, text="HTTP port:").pack(side=tk.LEFT, padx=(12, 0))
-        self.var_server_port = tk.IntVar(value=5000)
-        ttk.Entry(row0, textvariable=self.var_server_port, width=8).pack(side=tk.LEFT, padx=6)
-        ttk.Button(row0, text="Scan network", command=self._scan_network).pack(side=tk.LEFT, padx=8)
+        ttk.Entry(r1, textvariable=self.var_host, width=18).pack(side=tk.LEFT, padx=4)
+        ttk.Label(r1, text="Port:").pack(side=tk.LEFT, padx=(8, 0))
+        self.var_port = tk.IntVar(value=80)
+        ttk.Spinbox(r1, from_=1, to=65535, textvariable=self.var_port, width=7).pack(side=tk.LEFT, padx=4)
+        self.var_https = tk.BooleanVar(value=False)
+        ttk.Checkbutton(r1, text="HTTPS", variable=self.var_https).pack(side=tk.LEFT, padx=6)
 
-        row1 = ttk.Frame(srv)
-        row1.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Label(row1, text="Transport:").pack(side=tk.LEFT)
-        self.var_transport = tk.StringVar(value="http")
-        ttk.Radiobutton(row1, text="HTTP (direct)", variable=self.var_transport, value="http").pack(
-            side=tk.LEFT, padx=6
-        )
-        ttk.Radiobutton(row1, text="MQTT", variable=self.var_transport, value="mqtt").pack(
-            side=tk.LEFT, padx=6
-        )
-        ttk.Label(row1, text="MQTT port:").pack(side=tk.LEFT, padx=(16, 0))
-        self.var_mqtt_port = tk.IntVar(value=1883)
-        ttk.Entry(row1, textvariable=self.var_mqtt_port, width=8).pack(side=tk.LEFT, padx=6)
-        self.var_mqtt_tls = tk.BooleanVar(value=False)
-        ttk.Checkbutton(row1, text="TLS", variable=self.var_mqtt_tls).pack(side=tk.LEFT, padx=4)
+        r2 = ttk.Frame(conn)
+        r2.pack(fill=tk.X, padx=8, pady=4)
+        ttk.Label(r2, text="HTTP mode:").pack(side=tk.LEFT)
+        self.var_http_mode = tk.StringVar(value="pull")
+        ttk.Radiobutton(r2, text="Pull (PC → node GET)", variable=self.var_http_mode, value="pull").pack(side=tk.LEFT, padx=6)
+        ttk.Radiobutton(r2, text="Push (node POST → PC)", variable=self.var_http_mode, value="push").pack(side=tk.LEFT, padx=6)
 
-        row2 = ttk.Frame(srv)
-        row2.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Label(row2, text="Scanner API key:").pack(side=tk.LEFT)
-        self.var_api_key = tk.StringVar()
-        ttk.Entry(row2, textvariable=self.var_api_key, width=36, show="*").pack(side=tk.LEFT, padx=6)
-        ttk.Label(row2, text="MQTT topic:").pack(side=tk.LEFT, padx=(8, 0))
-        self.var_mqtt_topic = tk.StringVar(value="rssi/data")
-        ttk.Entry(row2, textvariable=self.var_mqtt_topic, width=18).pack(side=tk.LEFT, padx=6)
+        r3 = ttk.Frame(conn)
+        r3.pack(fill=tk.X, padx=8, pady=4)
+        ttk.Label(r3, text="Node user:").pack(side=tk.LEFT)
+        self.var_user = tk.StringVar(value="admin")
+        ttk.Entry(r3, textvariable=self.var_user, width=12).pack(side=tk.LEFT, padx=4)
+        ttk.Label(r3, text="Node password:").pack(side=tk.LEFT, padx=(8, 0))
+        self.var_node_pass = tk.StringVar()
+        ttk.Entry(r3, textvariable=self.var_node_pass, width=16, show="*").pack(side=tk.LEFT, padx=4)
+        ttk.Label(r3, text="(BlueApro web UI password)", font=("TkDefaultFont", 8), foreground="#666").pack(side=tk.LEFT, padx=6)
 
-        # Node identity
-        node = ttk.LabelFrame(f, text="WiFi Node (this PC acts as a scanner node)")
-        node.pack(fill=tk.X, **pad)
-
-        row3 = ttk.Frame(node)
-        row3.pack(fill=tk.X, padx=8, pady=6)
-        ttk.Label(row3, text="Anchor MAC:").pack(side=tk.LEFT)
-        self.var_anchor_mac = tk.StringVar()
-        ttk.Entry(row3, textvariable=self.var_anchor_mac, width=20).pack(side=tk.LEFT, padx=6)
-        ttk.Label(row3, text="Node name:").pack(side=tk.LEFT, padx=(12, 0))
-        self.var_anchor_name = tk.StringVar()
-        ttk.Entry(row3, textvariable=self.var_anchor_name, width=24).pack(side=tk.LEFT, padx=6)
-
-        row4 = ttk.Frame(node)
-        row4.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Button(row4, text="Load nodes from server", command=self._load_nodes_from_server).pack(
-            side=tk.LEFT
-        )
-        ttk.Label(row4, text="Admin email:").pack(side=tk.LEFT, padx=(12, 0))
-        self.var_admin_email = tk.StringVar()
-        ttk.Entry(row4, textvariable=self.var_admin_email, width=22).pack(side=tk.LEFT, padx=4)
-        ttk.Label(row4, text="Password:").pack(side=tk.LEFT)
-        self.var_admin_password = tk.StringVar()
-        ttk.Entry(row4, textvariable=self.var_admin_password, width=16, show="*").pack(side=tk.LEFT, padx=4)
-
-        # Node picker
-        pick = ttk.LabelFrame(f, text="Registered nodes (select to test)")
+        pick = ttk.LabelFrame(f, text="Discovered nodes — select to fill IP + port")
         pick.pack(fill=tk.BOTH, expand=True, **pad)
-        cols = ("name", "mac", "status", "pos")
-        self.node_tree = ttk.Treeview(pick, columns=cols, show="headings", height=6)
-        for c, w in zip(cols, (140, 160, 80, 180)):
-            self.node_tree.heading(c, text=c.title())
+        cols = ("ip", "port", "ports", "label")
+        self.node_tree = ttk.Treeview(pick, columns=cols, show="headings", height=5)
+        for c, w in zip(cols, (130, 60, 120, 160)):
+            self.node_tree.heading(c, text=c.upper())
             self.node_tree.column(c, width=w)
         self.node_tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
-        self.node_tree.bind("<<TreeviewSelect>>", self._on_node_select)
+        self.node_tree.bind("<<TreeviewSelect>>", self._on_node_pick)
 
-        # Actions
         act = ttk.Frame(f)
         act.pack(fill=tk.X, **pad)
-        ttk.Button(act, text="Test connection", command=self._test_connection).pack(side=tk.LEFT, padx=4)
+        ttk.Button(act, text="Test node", command=self._test_node).pack(side=tk.LEFT, padx=4)
         self.btn_connect = ttk.Button(act, text="Connect", command=self._toggle_connect)
         self.btn_connect.pack(side=tk.LEFT, padx=4)
+        ttk.Button(act, text="Open local dashboard", command=self._open_dashboard).pack(side=tk.LEFT, padx=4)
         ttk.Button(act, text="Save settings", command=self._save_settings).pack(side=tk.LEFT, padx=4)
-        self.lbl_conn_state = ttk.Label(act, text="● Disconnected", foreground="#c44")
-        self.lbl_conn_state.pack(side=tk.RIGHT, padx=8)
+        self.lbl_conn = ttk.Label(act, text="● Disconnected", foreground="#c44")
+        self.lbl_conn.pack(side=tk.RIGHT, padx=8)
+
+        push = ttk.LabelFrame(f, text="Push mode — configure BlueApro transport URI to this PC")
+        push.pack(fill=tk.X, **pad)
+        self.lbl_push_uri = ttk.Label(push, text="", font=("Consolas", 9))
+        self.lbl_push_uri.pack(padx=8, pady=6, anchor=tk.W)
+        ttk.Label(
+            push,
+            text="In BlueApro web UI → Transport → HTTP → set URI to the address above (Basic Auth optional).",
+            font=("TkDefaultFont", 8),
+            foreground="#666",
+        ).pack(padx=8, pady=(0, 6), anchor=tk.W)
 
     def _build_tags_tab(self) -> None:
         f = self.tab_tags
         pad = {"padx": 8, "pady": 4}
-
         bar = ttk.Frame(f)
         bar.pack(fill=tk.X, **pad)
-        self.btn_scan = ttk.Button(bar, text="▶ Start tag scan", command=self._toggle_scan)
-        self.btn_scan.pack(side=tk.LEFT, padx=4)
-        ttk.Button(bar, text="Clear list", command=self._clear_tags).pack(side=tk.LEFT, padx=4)
-        self.var_tags_only = tk.BooleanVar(value=False)
-        ttk.Checkbutton(bar, text="Tags only (hide phones)", variable=self.var_tags_only).pack(
-            side=tk.LEFT, padx=8
-        )
-        self.var_forward = tk.BooleanVar(value=True)
-        ttk.Checkbutton(bar, text="Forward to server when connected", variable=self.var_forward).pack(
-            side=tk.LEFT, padx=8
-        )
-        self.lbl_scan_state = ttk.Label(bar, text="Scan stopped")
-        self.lbl_scan_state.pack(side=tk.RIGHT, padx=8)
+        self.btn_poll = ttk.Button(bar, text="▶ Start receiving tags", command=self._toggle_polling)
+        self.btn_poll.pack(side=tk.LEFT, padx=4)
+        ttk.Button(bar, text="Refresh now", command=self._poll_once).pack(side=tk.LEFT, padx=4)
+        ttk.Button(bar, text="Clear", command=self._clear_tags).pack(side=tk.LEFT, padx=4)
+        self.var_uplink = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bar, text="Forward to central HOLO-RTLS", variable=self.var_uplink).pack(side=tk.LEFT, padx=12)
+        self.lbl_poll = ttk.Label(bar, text="Stopped")
+        self.lbl_poll.pack(side=tk.RIGHT, padx=8)
 
         paned = ttk.PanedWindow(f, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=True, **pad)
-
         left = ttk.Frame(paned)
         paned.add(left, weight=3)
-        cols = ("mac", "name", "rssi", "type", "strength")
+        cols = ("mac", "name", "rssi", "type", "source", "age")
         self.tag_tree = ttk.Treeview(left, columns=cols, show="headings")
-        for c, w in zip(cols, (140, 120, 60, 100, 70)):
+        for c, w in zip(cols, (140, 110, 55, 90, 70, 60)):
             self.tag_tree.heading(c, text=c.upper())
             self.tag_tree.column(c, width=w)
         self.tag_tree.pack(fill=tk.BOTH, expand=True)
-        self.tag_tree.bind("<<TreeviewSelect>>", self._on_tag_select)
+        self.tag_tree.bind("<<TreeviewSelect>>", self._on_tag_pick)
 
         right = ttk.LabelFrame(paned, text="Tag settings")
         paned.add(right, weight=2)
-        self._tag_detail_vars = {}
+        self._tag_vars = {}
         row = 0
-        ttk.Label(right, text="MAC address:").grid(row=row, column=0, sticky=tk.W, padx=8, pady=4)
-        self._tag_detail_vars["mac"] = tk.StringVar()
-        ttk.Entry(right, textvariable=self._tag_detail_vars["mac"], width=32, state="readonly").grid(
-            row=row, column=1, sticky=tk.EW, padx=8, pady=4
-        )
-        row += 1
-        ttk.Label(right, text="Display name:").grid(row=row, column=0, sticky=tk.W, padx=8, pady=4)
-        self._tag_detail_vars["display_name"] = tk.StringVar()
-        ttk.Entry(right, textvariable=self._tag_detail_vars["display_name"], width=32).grid(
-            row=row, column=1, sticky=tk.EW, padx=8, pady=4
-        )
-        row += 1
-        ttk.Label(right, text="Scan type:").grid(row=row, column=0, sticky=tk.W, padx=8, pady=4)
-        self._tag_detail_vars["scan_type"] = tk.StringVar()
-        self.cmb_scan_type = ttk.Combobox(
-            right,
-            textvariable=self._tag_detail_vars["scan_type"],
-            values=list(SCAN_TYPE_LABELS.keys()),
-            state="readonly",
-            width=30,
-        )
-        self.cmb_scan_type.grid(row=row, column=1, sticky=tk.EW, padx=8, pady=4)
-        row += 1
-        ttk.Label(right, text="MOKO password:").grid(row=row, column=0, sticky=tk.W, padx=8, pady=4)
-        self._tag_detail_vars["moko_password"] = tk.StringVar()
-        ttk.Entry(right, textvariable=self._tag_detail_vars["moko_password"], width=32, show="*").grid(
-            row=row, column=1, sticky=tk.EW, padx=8, pady=4
-        )
-        row += 1
-        ttk.Label(right, text="Notes:").grid(row=row, column=0, sticky=tk.W, padx=8, pady=4)
-        self._tag_detail_vars["notes"] = tk.StringVar()
-        ttk.Entry(right, textvariable=self._tag_detail_vars["notes"], width=32).grid(
-            row=row, column=1, sticky=tk.EW, padx=8, pady=4
-        )
-        row += 1
-
-        ttk.Label(right, text="Beacon / raw:").grid(row=row, column=0, sticky=tk.NW, padx=8, pady=4)
-        self.txt_beacon = tk.Text(right, height=6, width=40, font=("Consolas", 9))
-        self.txt_beacon.grid(row=row, column=1, sticky=tk.NSEW, padx=8, pady=4)
+        for key, label, ro in [("mac", "MAC", True), ("display_name", "Display name", False), ("scan_type", "Scan type", False),
+                                ("moko_password", "MOKO / tag password", False), ("notes", "Notes", False)]:
+            ttk.Label(right, text=label + ":").grid(row=row, column=0, sticky=tk.W, padx=8, pady=3)
+            var = tk.StringVar()
+            self._tag_vars[key] = var
+            kw = {"width": 32, "state": "readonly" if ro else "normal"}
+            if key == "moko_password":
+                kw["show"] = "*"
+            ttk.Entry(right, textvariable=var, **kw).grid(row=row, column=1, sticky=tk.EW, padx=8, pady=3)
+            row += 1
+        self.cmb_type = ttk.Combobox(right, textvariable=self._tag_vars["scan_type"], values=list(SCAN_TYPE_LABELS.keys()), state="readonly", width=30)
+        self.cmb_type.grid(row=2, column=1, sticky=tk.EW, padx=8, pady=3)
+        ttk.Label(right, text="Raw payload:").grid(row=row, column=0, sticky=tk.NW, padx=8, pady=4)
+        self.txt_raw = tk.Text(right, height=8, width=42, font=("Consolas", 9))
+        self.txt_raw.grid(row=row, column=1, sticky=tk.NSEW, padx=8, pady=4)
         right.rowconfigure(row, weight=1)
         right.columnconfigure(1, weight=1)
         row += 1
+        ttk.Button(right, text="Save tag profile", command=self._save_tag).grid(row=row, column=1, sticky=tk.E, padx=8, pady=8)
 
-        ttk.Button(right, text="Save tag profile", command=self._save_tag_profile).grid(
-            row=row, column=1, sticky=tk.E, padx=8, pady=8
-        )
-        row += 1
-        ttk.Label(
-            right,
-            text="MOKO password is used when configuring the tag over BLE\n(same as BeaconX Pro app). Stored locally only.",
-            font=("TkDefaultFont", 8),
-            foreground="#666",
-        ).grid(row=row, column=0, columnspan=2, sticky=tk.W, padx=8, pady=4)
-
-    def _build_data_tab(self) -> None:
-        f = self.tab_data
+    def _build_log_tab(self) -> None:
+        f = self.tab_log
         pad = {"padx": 8, "pady": 4}
         bar = ttk.Frame(f)
         bar.pack(fill=tk.X, **pad)
-        ttk.Label(bar, text="Filter:").pack(side=tk.LEFT)
-        self.var_log_filter = tk.StringVar(value="ALL")
-        for val in ("ALL", "HTTP", "MQTT", "BLE"):
-            ttk.Radiobutton(bar, text=val, variable=self.var_log_filter, value=val, command=self._refresh_log_view).pack(
-                side=tk.LEFT, padx=4
-            )
-        ttk.Button(bar, text="Clear log", command=self._clear_log).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(bar, text="Export log", command=self._export_log).pack(side=tk.RIGHT, padx=4)
-
-        self.txt_log = tk.Text(f, font=("Consolas", 9), wrap=tk.NONE)
+        self.var_filt = tk.StringVar(value="ALL")
+        for v in ("ALL", "NODE", "LOCAL", "UPLINK"):
+            ttk.Radiobutton(bar, text=v, variable=self.var_filt, value=v, command=self._refresh_log).pack(side=tk.LEFT, padx=4)
+        ttk.Button(bar, text="Clear", command=self._clear_log).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(bar, text="Export", command=self._export_log).pack(side=tk.RIGHT, padx=4)
+        self.txt_log = tk.Text(f, font=("Consolas", 9))
         self.txt_log.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
-        sb = ttk.Scrollbar(f, orient=tk.VERTICAL, command=self.txt_log.yview)
-        self.txt_log.configure(yscrollcommand=sb.set)
 
-        ttk.Label(
-            f,
-            text="Shows traffic TO/FROM server (HTTP/MQTT) and BLE advertisements seen by this PC.",
-            font=("TkDefaultFont", 8),
-            foreground="#666",
-        ).pack(anchor=tk.W, padx=8, pady=4)
+    def _build_adv_tab(self) -> None:
+        f = self.tab_adv
+        pad = {"padx": 8, "pady": 4}
+        api = ttk.LabelFrame(f, text="Node API paths (vendor firmware)")
+        api.pack(fill=tk.X, **pad)
+        self.var_dev_path = tk.StringVar(value="/api/ble/devices")
+        self.var_health_path = tk.StringVar(value="/api/system")
+        self.var_listen_port = tk.IntVar(value=8765)
+        self.var_poll_sec = tk.DoubleVar(value=2.0)
+        fields = [
+            ("Devices GET path:", self.var_dev_path),
+            ("Health GET path:", self.var_health_path),
+            ("PC listen port (push):", self.var_listen_port),
+            ("Poll interval (sec):", self.var_poll_sec),
+        ]
+        for i, (lbl, var) in enumerate(fields):
+            ttk.Label(api, text=lbl).grid(row=i, column=0, sticky=tk.W, padx=8, pady=4)
+            ttk.Entry(api, textvariable=var, width=40).grid(row=i, column=1, sticky=tk.W, padx=8, pady=4)
+
+        upl = ttk.LabelFrame(f, text="Optional uplink — central HOLO-RTLS server")
+        upl.pack(fill=tk.X, **pad)
+        self.var_up_host = tk.StringVar(value="127.0.0.1")
+        self.var_up_port = tk.IntVar(value=5000)
+        self.var_up_key = tk.StringVar(value="scanner-dev-key")
+        self.var_up_mac = tk.StringVar()
+        for i, (lbl, var) in enumerate([
+            ("Server host:", self.var_up_host),
+            ("Server HTTP port:", self.var_up_port),
+            ("Scanner API key:", self.var_up_key),
+            ("Anchor MAC (this node):", self.var_up_mac),
+        ]):
+            ttk.Label(upl, text=lbl).grid(row=i, column=0, sticky=tk.W, padx=8, pady=4)
+            ttk.Entry(upl, textvariable=var, width=40, show="*" if "key" in lbl.lower() else "").grid(row=i, column=1, padx=8, pady=4)
 
     # ── Config ────────────────────────────────────────────────────────────────
 
-    def _load_form_from_config(self) -> None:
+    def _load_form(self) -> None:
         c = self.cfg
-        self.var_host.set(c.server_host)
-        self.var_server_port.set(c.server_port)
-        self.var_transport.set(c.transport)
-        self.var_mqtt_port.set(c.mqtt_port)
-        self.var_mqtt_tls.set(c.mqtt_use_tls)
-        self.var_mqtt_topic.set(c.mqtt_topic)
-        self.var_api_key.set(c.scanner_api_key)
-        self.var_anchor_mac.set(c.anchor_mac or _local_mac())
-        self.var_anchor_name.set(c.anchor_name)
-        self.var_admin_email.set(c.admin_email)
-        self.var_admin_password.set(c.admin_password)
-        self.var_tags_only.set(c.tags_only)
-        self.var_forward.set(c.forward_to_server)
-        for node in c.saved_nodes:
-            self._add_node_row(node)
+        self.var_host.set(c.node_host)
+        self.var_port.set(c.node_port)
+        self.var_https.set(c.node_use_https)
+        self.var_user.set(c.node_username)
+        self.var_node_pass.set(c.node_password)
+        self.var_serial.set(c.node_serial or "261FBLUEAO004")
+        self.var_http_mode.set(c.http_mode)
+        self.var_dev_path.set(c.devices_path)
+        self.var_health_path.set(c.health_path)
+        self.var_listen_port.set(c.listen_port)
+        self.var_poll_sec.set(c.poll_interval_sec)
+        self.var_uplink.set(c.uplink_enabled)
+        self.var_up_host.set(c.uplink_host)
+        self.var_up_port.set(c.uplink_port)
+        self.var_up_key.set(c.uplink_api_key)
+        self.var_up_mac.set(c.uplink_anchor_mac)
+        self._update_push_uri()
 
     def _save_settings(self) -> None:
-        self.cfg.server_host = self.var_host.get().strip()
-        self.cfg.server_port = int(self.var_server_port.get())
-        self.cfg.transport = self.var_transport.get()
-        self.cfg.mqtt_port = int(self.var_mqtt_port.get())
-        self.cfg.mqtt_use_tls = bool(self.var_mqtt_tls.get())
-        self.cfg.mqtt_topic = self.var_mqtt_topic.get().strip()
-        self.cfg.scanner_api_key = self.var_api_key.get()
-        self.cfg.anchor_mac = self.var_anchor_mac.get().strip().upper()
-        self.cfg.anchor_name = self.var_anchor_name.get().strip()
-        self.cfg.admin_email = self.var_admin_email.get().strip()
-        self.cfg.admin_password = self.var_admin_password.get()
-        self.cfg.tags_only = bool(self.var_tags_only.get())
-        self.cfg.forward_to_server = bool(self.var_forward.get())
+        self.cfg.node_host = self.var_host.get().strip()
+        self.cfg.node_port = int(self.var_port.get())
+        self.cfg.node_use_https = bool(self.var_https.get())
+        self.cfg.node_username = self.var_user.get().strip()
+        self.cfg.node_password = self.var_node_pass.get()
+        self.cfg.node_serial = self.var_serial.get().strip()
+        self.cfg.http_mode = self.var_http_mode.get()
+        self.cfg.devices_path = self.var_dev_path.get().strip()
+        self.cfg.health_path = self.var_health_path.get().strip()
+        self.cfg.listen_port = int(self.var_listen_port.get())
+        self.cfg.poll_interval_sec = float(self.var_poll_sec.get())
+        self.cfg.uplink_enabled = bool(self.var_uplink.get())
+        self.cfg.uplink_host = self.var_up_host.get().strip()
+        self.cfg.uplink_port = int(self.var_up_port.get())
+        self.cfg.uplink_api_key = self.var_up_key.get()
+        self.cfg.uplink_anchor_mac = self.var_up_mac.get().strip().upper()
         save_config(self.cfg)
+        self._update_push_uri()
         self._set_status("Settings saved")
-        messagebox.showinfo("Saved", f"Settings saved to config folder.")
 
-    # ── Connection actions ────────────────────────────────────────────────────
+    def _client_instance(self) -> BlueAproClient:
+        return BlueAproClient(
+            host=self.var_host.get().strip(),
+            port=int(self.var_port.get()),
+            use_https=bool(self.var_https.get()),
+            username=self.var_user.get().strip(),
+            password=self.var_node_pass.get(),
+            devices_path=self.var_dev_path.get().strip(),
+            health_path=self.var_health_path.get().strip(),
+        )
 
-    def _scan_network(self) -> None:
-        self._set_status("Scanning local network for HOLO-RTLS servers…")
-        port = int(self.var_server_port.get())
+    def _update_push_uri(self) -> None:
+        port = int(self.var_listen_port.get())
+        path = self.cfg.listen_path
+        import socket
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            pc_ip = s.getsockname()[0]
+            s.close()
+        except OSError:
+            pc_ip = "YOUR_PC_IP"
+        self.lbl_push_uri.configure(text=f"http://{pc_ip}:{port}{path}")
 
-        def work() -> None:
-            found = scan_network_for_servers(port=port)
-            self.after(0, lambda: self._network_scan_done(found))
+    # ── Node actions ──────────────────────────────────────────────────────────
+
+    def _scan_nodes(self) -> None:
+        self._set_status("Scanning network for BlueApro / HTTP nodes…")
+        ports = self.cfg.discovery_ports
+
+        def work():
+            nodes = scan_network(ports=ports)
+            self.after(0, lambda: self._scan_done(nodes))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _network_scan_done(self, hosts: list[str]) -> None:
-        if not hosts:
-            messagebox.showinfo("Network scan", "No servers found on HTTP port. Enter host manually.")
-            self._set_status("Network scan: no hosts found")
-            return
-        if len(hosts) == 1:
-            self.var_host.set(hosts[0])
-        else:
-            dlg = tk.Toplevel(self)
-            dlg.title("Select server")
-            ttk.Label(dlg, text="Servers found on your network:").pack(padx=12, pady=8)
-            lb = tk.Listbox(dlg, height=min(8, len(hosts)))
-            for h in hosts:
-                lb.insert(tk.END, h)
-            lb.pack(padx=12, pady=4)
-
-            def pick() -> None:
-                sel = lb.curselection()
-                if sel:
-                    self.var_host.set(hosts[sel[0]])
-                dlg.destroy()
-
-            ttk.Button(dlg, text="Use selected", command=pick).pack(pady=8)
-        self._set_status(f"Found {len(hosts)} server(s)")
-
-    def _load_nodes_from_server(self) -> None:
-        host = self.var_host.get().strip()
-        port = int(self.var_server_port.get())
-        email = self.var_admin_email.get().strip()
-        password = self.var_admin_password.get()
-        if not email or not password:
-            messagebox.showwarning("Login required", "Enter admin email and password to load nodes.")
-            return
-        res = self.transport.login(host, port, email, password)
-        if not res.ok:
-            messagebox.showerror("Login failed", res.message + "\n" + res.detail)
-            return
-        nodes, err = self.transport.fetch_nodes(host, port)
-        if err:
-            messagebox.showerror("Error", err)
-            return
+    def _scan_done(self, nodes) -> None:
         for i in self.node_tree.get_children():
             self.node_tree.delete(i)
-        self.cfg.saved_nodes = []
         for n in nodes:
-            self._add_node_row(n)
-            self.cfg.saved_nodes.append(n)
-        save_config(self.cfg)
-        self._set_status(f"Loaded {len(nodes)} node(s) from server")
+            self.node_tree.insert("", tk.END, values=(n.ip, n.port, ",".join(map(str, n.open_ports)), n.label))
+        self._set_status(f"Found {len(nodes)} host(s)")
+        if not nodes:
+            messagebox.showinfo("Scan", "No nodes found. Try direct IP 192.168.4.1 (BlueApro AP mode) or check LAN.")
 
-    def _add_node_row(self, n: dict) -> None:
-        name = n.get("assigned_name") or n.get("name") or "Node"
-        mac = n.get("mac_address") or n.get("mac") or ""
-        status = n.get("status_label") or str(n.get("status", ""))
-        pos = f"{n.get('pos_x', 0):.1f}, {n.get('pos_y', 0):.1f}"
-        self.node_tree.insert("", tk.END, values=(name, mac, status, pos), iid=mac or name)
-
-    def _on_node_select(self, _evt=None) -> None:
+    def _on_node_pick(self, _evt=None) -> None:
         sel = self.node_tree.selection()
         if not sel:
             return
         vals = self.node_tree.item(sel[0], "values")
-        if len(vals) >= 2 and vals[1]:
-            self.var_anchor_mac.set(vals[1])
         if vals:
-            self.var_anchor_name.set(vals[0])
+            self.var_host.set(vals[0])
+            self.var_port.set(int(vals[1]))
 
-    def _test_connection(self) -> None:
-        host = self.var_host.get().strip()
-        port = int(self.var_server_port.get())
-        transport = self.var_transport.get()
-        api_key = self.var_api_key.get()
-        if transport == "http":
-            res = self.transport.test_http(host, port, api_key)
-        else:
-            res = self.transport.connect(
-                host, port, "mqtt",
-                int(self.var_mqtt_port.get()),
-                bool(self.var_mqtt_tls.get()),
-                self.var_mqtt_topic.get(),
-                api_key="",  # mqtt user optional — extend later
-            )
-            if res.ok:
-                self.transport.disconnect()
+    def _test_node(self) -> None:
+        if self.var_http_mode.get() == "push":
+            ok, msg = self.ingest.start() if not self.ingest.running else (True, "Listener already running")
+            if ok:
+                messagebox.showinfo("Push mode", f"Local listener OK.\nConfigure BlueApro URI:\n{self.lbl_push_uri.cget('text')}")
+            else:
+                messagebox.showerror("Push mode", msg)
+            return
+        res = self._client_instance().test_connection()
         if res.ok:
             messagebox.showinfo("Test OK", res.message)
         else:
-            messagebox.showerror("Test failed", res.message + "\n" + res.detail)
-        self._set_status(res.message)
+            messagebox.showerror("Test failed", f"{res.message}\n{res.detail}")
+        self._log("OUT", "NODE", f"TEST → {res.message}")
 
     def _toggle_connect(self) -> None:
-        if self.transport.is_connected:
-            self.transport.disconnect()
-            self.btn_connect.configure(text="Connect")
-            self.lbl_conn_state.configure(text="● Disconnected", foreground="#c44")
-            self._set_status("Disconnected")
-            self._stop_forward_loop()
+        if self._connected:
+            self._disconnect()
             return
-        host = self.var_host.get().strip()
-        port = int(self.var_server_port.get())
-        res = self.transport.connect(
-            host,
-            port,
-            self.var_transport.get(),
-            int(self.var_mqtt_port.get()),
-            bool(self.var_mqtt_tls.get()),
-            self.var_mqtt_topic.get(),
-            api_key=self.var_api_key.get(),
-        )
-        if res.ok:
+        self._save_settings()
+        mode = self.var_http_mode.get()
+        if mode == "push":
+            self.ingest.port = int(self.var_listen_port.get())
+            ok, msg = self.ingest.start()
+            if not ok:
+                messagebox.showerror("Connect failed", msg)
+                return
+            self._connected = True
             self.btn_connect.configure(text="Disconnect")
-            self.lbl_conn_state.configure(text="● Connected", foreground="#2a8")
-            self._set_status(res.message)
-            if self.var_forward.get():
-                self._start_forward_loop()
+            self.lbl_conn.configure(text="● Listening (push mode)", foreground="#2a8")
+            self._set_status(msg)
+            self._log("OUT", "LOCAL", msg)
+            return
+
+        res = self._client_instance().test_connection()
+        if not res.ok:
+            messagebox.showerror("Connect failed", f"{res.message}\n{res.detail}")
+            return
+        self._client = self._client_instance()
+        self._connected = True
+        self.btn_connect.configure(text="Disconnect")
+        self.lbl_conn.configure(text=f"● Connected {self.var_host.get()}:{self.var_port.get()}", foreground="#2a8")
+        self._set_status(res.message)
+        self._log("OUT", "NODE", f"CONNECT {self._client.base_url}")
+
+        if not self.ingest.running:
+            self.ingest.port = int(self.var_listen_port.get())
+            self.ingest.start()
+
+    def _disconnect(self) -> None:
+        self._stop_polling()
+        self._connected = False
+        self._client = None
+        self.btn_connect.configure(text="Connect")
+        self.lbl_conn.configure(text="● Disconnected", foreground="#c44")
+        self._set_status("Disconnected")
+
+    # ── Tags ──────────────────────────────────────────────────────────────────
+
+    def _toggle_polling(self) -> None:
+        if self._polling:
+            self._stop_polling()
         else:
-            messagebox.showerror("Connect failed", res.message + "\n" + res.detail)
+            if not self._connected:
+                messagebox.showwarning("Not connected", "Connect to BlueApro node first.")
+                return
+            self._polling = True
+            self.btn_poll.configure(text="■ Stop receiving tags")
+            self.lbl_poll.configure(text="Receiving…")
+            if self.var_http_mode.get() == "pull" and self._client:
+                self._client.start_scan()
+            self._poll_loop()
 
-    # ── Tag scan ──────────────────────────────────────────────────────────────
+    def _stop_polling(self) -> None:
+        self._polling = False
+        if self._poll_job:
+            self.after_cancel(self._poll_job)
+            self._poll_job = None
+        self.btn_poll.configure(text="▶ Start receiving tags")
+        self.lbl_poll.configure(text="Stopped")
+        if self._client:
+            self._client.stop_scan()
 
-    def _toggle_scan(self) -> None:
-        if self._scanning:
-            self._stop_scan()
-        else:
-            self._start_scan()
+    def _poll_loop(self) -> None:
+        if not self._polling:
+            return
+        if self.var_http_mode.get() == "pull":
+            self._poll_once()
+        interval = max(0.5, float(self.var_poll_sec.get())) * 1000
+        self._poll_job = self.after(int(interval), self._poll_loop)
 
-    def _start_scan(self) -> None:
-        self.ble.rssi_min = self.cfg.rssi_min
-        self.ble.tags_only = bool(self.var_tags_only.get())
-        self.ble.start()
-        self._scanning = True
-        self.btn_scan.configure(text="■ Stop tag scan")
-        self.lbl_scan_state.configure(text="Scanning BLE…")
-        self._set_status("BLE tag scan started — bring MOKO tag near PC")
+    def _poll_once(self) -> None:
+        if self.var_http_mode.get() == "push":
+            self._merge_devices(self.ingest.state.devices.values(), "node-push")
+            return
+        if not self._client:
+            return
 
-    def _stop_scan(self) -> None:
-        self._scanning = False
-        self.ble.stop()
-        self.btn_scan.configure(text="▶ Start tag scan")
-        self.lbl_scan_state.configure(text="Scan stopped")
+        def work():
+            devices, err = self._client.fetch_devices()
+            self.after(0, lambda: self._poll_result(devices, err))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _poll_result(self, devices: list[NodeDevice], err: str) -> None:
+        if err:
+            self._log("IN", "NODE", f"Poll error: {err}")
+            return
+        self._log("IN", "NODE", f"GET devices → {len(devices)} tag(s)")
+        self._merge_devices(devices, "node")
+        if self.var_uplink.get() and devices:
+            self._uplink(devices)
+
+    def _on_push_devices(self, devices: list[NodeDevice]) -> None:
+        self.after(0, lambda: self._merge_devices(devices, "node-push"))
+        self._log("IN", "NODE", f"POST push → {len(devices)} tag(s)")
+        if self.var_uplink.get() and devices:
+            self._uplink(devices)
+
+    def _merge_devices(self, devices, source: str) -> None:
+        now = time.time()
+        for d in devices:
+            mac = d.mac if hasattr(d, "mac") else d.get("mac", "")
+            if not mac:
+                continue
+            name = getattr(d, "name", None) or d.get("name", "")
+            rssi = getattr(d, "rssi", None) if hasattr(d, "rssi") else d.get("rssi", -999)
+            st = getattr(d, "scan_type", None) or d.get("scan_type", "UNKNOWN_BLE")
+            raw = getattr(d, "raw", None) or d
+            self._devices[mac] = {
+                "mac": mac, "name": name, "rssi": rssi, "scan_type": st,
+                "source": source, "last_seen": now, "raw": raw,
+            }
+        self._refresh_tag_tree()
+
+    def _refresh_tag_tree(self) -> None:
+        now = time.time()
+        for mac, d in self._devices.items():
+            age = int(now - d["last_seen"])
+            vals = (
+                mac,
+                d.get("name") or "—",
+                d.get("rssi", -999),
+                SCAN_TYPE_LABELS.get(d.get("scan_type", ""), d.get("scan_type", "")),
+                d.get("source", ""),
+                f"{age}s",
+            )
+            if self.tag_tree.exists(mac):
+                self.tag_tree.item(mac, values=vals)
+            else:
+                self.tag_tree.insert("", tk.END, iid=mac, values=vals)
 
     def _clear_tags(self) -> None:
-        self.ble.clear()
+        self._devices.clear()
         for i in self.tag_tree.get_children():
             self.tag_tree.delete(i)
 
-    def _on_ble_update(self, det: TagDetection, is_new: bool) -> None:
-        self.after(0, lambda: self._upsert_tag_row(det))
-        self._log_message("IN", "BLE", f"{det.mac} {det.rssi} dBm {det.name or 'Unknown'}")
-
-    def _upsert_tag_row(self, det: TagDetection) -> None:
-        vals = (
-            det.mac,
-            det.name or "—",
-            det.rssi,
-            SCAN_TYPE_LABELS.get(det.scan_type, det.scan_type),
-            det.strength,
-        )
-        if self.tag_tree.exists(det.mac):
-            self.tag_tree.item(det.mac, values=vals)
-        else:
-            self.tag_tree.insert("", tk.END, iid=det.mac, values=vals)
-
-    def _on_tag_select(self, _evt=None) -> None:
+    def _on_tag_pick(self, _evt=None) -> None:
         sel = self.tag_tree.selection()
         if not sel:
             return
         mac = sel[0]
         prof = self.tag_profiles.get(mac, TagProfile(mac=mac))
-        self._tag_detail_vars["mac"].set(mac)
-        self._tag_detail_vars["display_name"].set(prof.display_name)
-        self._tag_detail_vars["scan_type"].set(prof.scan_type)
-        self._tag_detail_vars["moko_password"].set(prof.moko_password)
-        self._tag_detail_vars["notes"].set(prof.notes)
+        self._tag_vars["mac"].set(mac)
+        self._tag_vars["display_name"].set(prof.display_name)
+        self._tag_vars["scan_type"].set(prof.scan_type)
+        self._tag_vars["moko_password"].set(prof.moko_password)
+        self._tag_vars["notes"].set(prof.notes)
+        self.txt_raw.delete("1.0", tk.END)
+        rec = self._devices.get(mac, {})
+        raw = rec.get("raw")
+        if raw:
+            import json
+            try:
+                self.txt_raw.insert(tk.END, json.dumps(raw, indent=2)[:4000])
+            except Exception:
+                self.txt_raw.insert(tk.END, str(raw)[:4000])
 
-        det = next((d for d in self.ble.get_all() if d.mac == mac), None)
-        self.txt_beacon.delete("1.0", tk.END)
-        if det:
-            lines = []
-            if det.ibeacon:
-                lines.append(det.ibeacon)
-            if det.eddystone:
-                lines.append(det.eddystone)
-            if det.raw_mfg:
-                lines.append("mfg=" + str({hex(k): v.hex() for k, v in det.raw_mfg.items()}))
-            if det.uuids:
-                lines.append("uuids=" + str(det.uuids))
-            self.txt_beacon.insert(tk.END, "\n".join(lines) or "(no beacon payload)")
-
-    def _save_tag_profile(self) -> None:
-        mac = self._tag_detail_vars["mac"].get().strip().upper()
+    def _save_tag(self) -> None:
+        mac = self._tag_vars["mac"].get().strip().upper()
         if not mac:
             return
-        prof = TagProfile(
+        self.tag_profiles[mac] = TagProfile(
             mac=mac,
-            display_name=self._tag_detail_vars["display_name"].get(),
-            scan_type=self._tag_detail_vars["scan_type"].get() or "UNKNOWN_BLE",
-            moko_password=self._tag_detail_vars["moko_password"].get(),
-            notes=self._tag_detail_vars["notes"].get(),
+            display_name=self._tag_vars["display_name"].get(),
+            scan_type=self._tag_vars["scan_type"].get() or "UNKNOWN_BLE",
+            moko_password=self._tag_vars["moko_password"].get(),
+            notes=self._tag_vars["notes"].get(),
         )
-        self.tag_profiles[mac] = prof
         save_tag_profiles(self.tag_profiles)
-        self._set_status(f"Saved profile for {mac}")
         messagebox.showinfo("Saved", f"Tag profile saved for {mac}")
 
-    # ── Forward loop ──────────────────────────────────────────────────────────
-
-    def _start_forward_loop(self) -> None:
-        self._stop_forward_loop()
-        self._forward_loop()
-
-    def _stop_forward_loop(self) -> None:
-        if self._forward_job:
-            self.after_cancel(self._forward_job)
-            self._forward_job = None
-
-    def _forward_loop(self) -> None:
-        if not self.transport.is_connected or not self.var_forward.get():
-            return
+    def _uplink(self, devices: list) -> None:
         detections = []
-        for d in self.ble.get_all():
-            detections.append({
-                "mac_address": d.mac,
-                "rssi": d.rssi,
-                "signal_type": 2,
-                "adv_name": d.name or "",
-            })
-        if detections:
-            self.transport.send_detections(
-                self.var_host.get().strip(),
-                int(self.var_server_port.get()),
-                self.var_api_key.get(),
-                self.var_anchor_mac.get().strip(),
-                detections,
-            )
-        interval = max(0.5, float(self.cfg.scan_interval_sec)) * 1000
-        self._forward_job = self.after(int(interval), self._forward_loop)
+        for d in devices:
+            mac = d.mac if hasattr(d, "mac") else d.get("mac")
+            rssi = d.rssi if hasattr(d, "rssi") else d.get("rssi", -999)
+            name = getattr(d, "name", "") if hasattr(d, "name") else d.get("name", "")
+            detections.append({"mac_address": mac, "rssi": rssi, "signal_type": 2, "adv_name": name or ""})
+        anchor = self.var_up_mac.get().strip() or self.var_host.get()
+        res = self.transport.send_detections(
+            self.var_up_host.get(), int(self.var_up_port.get()),
+            self.var_up_key.get(), anchor, detections,
+        )
+        ch = "UPLINK"
+        self._log("OUT" if res.ok else "IN", ch, f"Forward → {res.message}")
 
-    # ── Data log ──────────────────────────────────────────────────────────────
+    # ── Log ───────────────────────────────────────────────────────────────────
 
-    def _log_message(self, direction: str, channel: str, message: str) -> None:
+    def _log(self, direction: str, channel: str, msg: str) -> None:
         ts = time.strftime("%H:%M:%S")
-        entry = (ts, direction, channel, message)
+        entry = (ts, direction, channel, msg)
         self._data_log.append(entry)
-        if len(self._data_log) > 2000:
-            self._data_log = self._data_log[-1500:]
-        self.after(0, self._append_log_line, entry)
+        if len(self._data_log) > 3000:
+            self._data_log = self._data_log[-2000:]
+        self.after(0, self._append_log, entry)
 
-    def _append_log_line(self, entry: tuple[str, str, str, str]) -> None:
-        ts, direction, channel, message = entry
-        filt = self.var_log_filter.get()
+    def _append_log(self, entry) -> None:
+        ts, direction, channel, msg = entry
+        filt = self.var_filt.get()
         if filt != "ALL" and channel != filt:
             return
         arrow = "→" if direction == "OUT" else "←"
-        line = f"[{ts}] {arrow} {channel:4} {message}\n"
-        self.txt_log.insert(tk.END, line)
+        self.txt_log.insert(tk.END, f"[{ts}] {arrow} {channel:6} {msg}\n")
         self.txt_log.see(tk.END)
 
-    def _refresh_log_view(self) -> None:
+    def _refresh_log(self) -> None:
         self.txt_log.delete("1.0", tk.END)
-        filt = self.var_log_filter.get()
-        for entry in self._data_log:
-            if filt == "ALL" or entry[2] == filt:
-                self._append_log_line(entry)
+        for e in self._data_log:
+            self._append_log(e)
 
     def _clear_log(self) -> None:
         self._data_log.clear()
@@ -620,31 +589,32 @@ class NodeReaderApp(tk.Tk):
 
     def _export_log(self) -> None:
         from tkinter import filedialog
-
-        path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Text", "*.txt"), ("All", "*.*")],
-        )
+        path = filedialog.asksaveasfilename(defaultextension=".txt")
         if not path:
             return
         with open(path, "w", encoding="utf-8") as f:
-            for ts, direction, channel, message in self._data_log:
-                f.write(f"[{ts}] {direction} {channel} {message}\n")
-        messagebox.showinfo("Exported", f"Log saved to {path}")
+            for ts, d, c, m in self._data_log:
+                f.write(f"[{ts}] {d} {c} {m}\n")
+
+    def _open_dashboard(self) -> None:
+        port = int(self.var_listen_port.get())
+        if not self.ingest.running:
+            self.ingest.port = port
+            self.ingest.start()
+        webbrowser.open(f"http://127.0.0.1:{port}/")
 
     def _set_status(self, text: str) -> None:
         self.status.configure(text=text)
 
     def _on_close(self) -> None:
-        self._stop_scan()
-        self._stop_forward_loop()
+        self._stop_polling()
+        self.ingest.stop()
         self.transport.disconnect()
         self.destroy()
 
 
 def main() -> None:
-    app = NodeReaderApp()
-    app.mainloop()
+    NodeReaderApp().mainloop()
 
 
 if __name__ == "__main__":
