@@ -30,6 +30,41 @@ class NodeHealth:
     message: str
     detail: str = ""
     info: dict | None = None
+    device_type: str = "unknown"  # blueapro | openwrt | generic | unknown
+
+
+def detect_host_type(body: str, content_type: str = "") -> str:
+    """Guess whether HTTP response is from BlueApro, OpenWrt router, etc."""
+    text = (body or "")[:8000].lower()
+    if "openwrt" in text or "luci" in text or "cgi-bin/luci" in text:
+        return "openwrt"
+    if any(k in text for k in ("blueup", "tinygateway", "blueapro", "blue beacon")):
+        return "blueapro"
+    if "json" in (content_type or "").lower():
+        try:
+            data = json.loads(body)
+            if isinstance(data, dict) and any(k in data for k in ("devices", "ble", "gateway", "scanner")):
+                return "blueapro"
+        except json.JSONDecodeError:
+            pass
+    if "<html" in text:
+        return "generic_web"
+    return "unknown"
+
+
+ROUTER_HINT = (
+    "192.168.1.1 is usually your WiFi/router (OpenWrt), not the BlueApro BLE scanner.\n\n"
+    "Fix:\n"
+    "1) Scan WiFi nodes again and pick a different IP (not .1 unless it is really the BlueApro).\n"
+    "2) Or use Push mode: in BlueApro web UI set HTTP transport URI to your PC address shown below.\n"
+    "   Vendor firmware sends tags TO your PC — it does not expose /api/tags for Pull."
+)
+
+PUSH_MODE_HINT = (
+    "No BLE tag API on this host (all paths returned 404).\n"
+    "BlueApro vendor firmware usually uses Push mode:\n"
+    "  BlueApro web UI → Transport → HTTP → URI = http://YOUR_PC_IP:8765/ingest/blueapro"
+)
 
 
 class _SourceIPAdapter(HTTPAdapter):
@@ -104,30 +139,88 @@ class BlueAproClient:
         return urljoin(self.base_url + "/", path.lstrip("/"))
 
     def test_connection(self) -> NodeHealth:
+        """Verify host is reachable AND looks like a BlueApro (or warn if router)."""
+        # Prefer proving a BLE devices endpoint exists
+        devices, dev_err = self.fetch_devices()
+        if devices:
+            return NodeHealth(
+                True,
+                f"BlueApro BLE API OK ({len(devices)} tag(s) visible)",
+                device_type="blueapro",
+            )
+
         paths = [self.health_path] + [p for p in self.FALLBACK_HEALTH_PATHS if p != self.health_path]
-        last_err = ""
+        last_err = dev_err or ""
+        page_type = "unknown"
         for path in paths:
             try:
                 r = self._session.get(self._url(path), timeout=self.timeout)
                 if r.status_code == 401:
                     return NodeHealth(False, "Authentication failed", "Check node username/password")
-                if r.status_code < 500:
-                    info = {}
+                if r.status_code >= 500:
+                    last_err = f"HTTP {r.status_code}"
+                    continue
+                page_type = detect_host_type(r.text, r.headers.get("content-type", ""))
+                if page_type == "openwrt":
+                    return NodeHealth(
+                        False,
+                        "Connected to OpenWrt router — not a BlueApro scanner",
+                        ROUTER_HINT,
+                        device_type="openwrt",
+                    )
+                if r.status_code == 200 and page_type == "blueapro":
+                    return NodeHealth(
+                        True,
+                        "BlueApro web UI detected",
+                        PUSH_MODE_HINT,
+                        device_type="blueapro",
+                    )
+                if path != "/" and r.status_code == 200:
                     try:
                         if r.headers.get("content-type", "").startswith("application/json"):
-                            info = r.json()
+                            return NodeHealth(
+                                True,
+                                f"Node reachable ({path})",
+                                PUSH_MODE_HINT,
+                                device_type="blueapro",
+                            )
                     except Exception:
-                        info = {"body": r.text[:200]}
-                    return NodeHealth(True, f"Node reachable ({path})", detail=str(info)[:300], info=info if isinstance(info, dict) else None)
-                last_err = f"HTTP {r.status_code}"
+                        pass
             except requests.RequestException as e:
                 last_err = str(e)
-        return NodeHealth(False, "Cannot reach BlueApro node", last_err)
+
+        if page_type == "generic_web":
+            return NodeHealth(
+                False,
+                "HTTP device is not a BlueApro BLE gateway",
+                (last_err + "\n\n" if last_err else "") + PUSH_MODE_HINT,
+                device_type="generic",
+            )
+
+        return NodeHealth(False, "Cannot reach BlueApro node", last_err or dev_err)
+
+    def probe_endpoints(self) -> list[tuple[str, int, str]]:
+        """Diagnostic: try all known paths and return status summaries."""
+        results: list[tuple[str, int, str]] = []
+        seen: set[str] = set()
+        for path in [self.devices_path, *self.FALLBACK_DEVICE_PATHS, *self.FALLBACK_HEALTH_PATHS]:
+            if path in seen:
+                continue
+            seen.add(path)
+            try:
+                r = self._session.get(self._url(path), timeout=self.timeout)
+                hint = detect_host_type(r.text, r.headers.get("content-type", ""))
+                results.append((path, r.status_code, hint))
+            except requests.RequestException as e:
+                results.append((path, -1, str(e)[:80]))
+        return results
 
     def fetch_devices(self) -> tuple[list[NodeDevice], str]:
         paths = [self.devices_path] + [p for p in self.FALLBACK_DEVICE_PATHS if p != self.devices_path]
         last_err = ""
+        tried: list[str] = []
         for path in paths:
+            tried.append(path)
             try:
                 r = self._session.get(self._url(path), timeout=self.timeout)
                 if r.status_code == 404:
@@ -138,13 +231,16 @@ class BlueAproClient:
                 if r.status_code >= 400:
                     last_err = f"{path} HTTP {r.status_code}"
                     continue
+                if detect_host_type(r.text, r.headers.get("content-type", "")) == "openwrt":
+                    return [], "Host is OpenWrt router — not a tag scanner. " + ROUTER_HINT.replace("\n", " ")
                 devices = parse_device_payload(r.text, r.headers.get("content-type", ""))
                 if devices:
                     return devices, ""
                 last_err = f"{path} returned no devices"
             except requests.RequestException as e:
                 last_err = str(e)
-        return [], last_err or "No device endpoint responded"
+        summary = f"No BLE API ({', '.join(tried[:3])}… all missing). Use Push mode."
+        return [], summary if "not found" in (last_err or "") else (last_err or summary)
 
     def start_scan(self) -> NodeHealth:
         return self._post_action(self.scan_start_path, "Scan start requested")

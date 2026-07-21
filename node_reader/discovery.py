@@ -75,7 +75,9 @@ def scan_network(
         open_ports = sorted(set(open_ports))
         primary = open_ports[0]
         label = "BlueApro AP?" if ip == "192.168.4.1" else ""
+        if ip.endswith(".1"):
+            label = (label + " " if label else "") + "Often router — verify"
         if bind_ip and ip == bind_ip:
             label = "This PC"
-        nodes.append(DiscoveredNode(ip=ip, port=primary, open_ports=open_ports, label=label))
+        nodes.append(DiscoveredNode(ip=ip, port=primary, open_ports=open_ports, label=label.strip()))
     return nodes

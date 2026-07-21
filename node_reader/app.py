@@ -55,6 +55,8 @@ class NodeReaderApp(tk.Tk):
         self._devices: dict[str, dict] = {}
         self._data_log: list[tuple[str, str, str, str]] = []
         self._ifaces: list = []
+        self._poll_err_count = 0
+        self._poll_warn_shown = False
 
         self._build_ui()
         self._load_form()
@@ -157,6 +159,7 @@ class NodeReaderApp(tk.Tk):
         act = ttk.Frame(f)
         act.pack(fill=tk.X, **pad)
         ttk.Button(act, text="Test node", command=self._test_node).pack(side=tk.LEFT, padx=4)
+        ttk.Button(act, text="Probe API paths", command=self._probe_node).pack(side=tk.LEFT, padx=4)
         self.btn_connect = ttk.Button(act, text="Connect", command=self._toggle_connect)
         self.btn_connect.pack(side=tk.LEFT, padx=4)
         ttk.Button(act, text="Open local dashboard", command=self._open_dashboard).pack(side=tk.LEFT, padx=4)
@@ -444,6 +447,30 @@ class NodeReaderApp(tk.Tk):
             self.var_host.set(vals[0])
             self.var_port.set(int(vals[1]))
 
+    def _probe_node(self) -> None:
+        client = self._client_instance()
+        self._set_status("Probing node HTTP paths…")
+
+        def work():
+            rows = client.probe_endpoints()
+            self.after(0, lambda: self._probe_done(rows))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _probe_done(self, rows: list[tuple[str, int, str]]) -> None:
+        lines = ["Path probe results:", ""]
+        for path, code, hint in rows:
+            lines.append(f"  {path:30} → {code if code >= 0 else 'ERR'}  ({hint})")
+        lines.append("")
+        lines.append("BlueApro tags need a 200 on a BLE devices path, OR use Push mode.")
+        text = "\n".join(lines)
+        self._log("OUT", "NODE", "Probe API paths")
+        for line in lines[2:-2]:
+            if line.strip():
+                self._log("IN", "NODE", line.strip())
+        messagebox.showinfo("API probe", text)
+        self._set_status("Probe complete — see Data log")
+
     def _test_node(self) -> None:
         if self.var_http_mode.get() == "push":
             ok, msg = self._start_ingest()
@@ -454,9 +481,12 @@ class NodeReaderApp(tk.Tk):
             return
         res = self._client_instance().test_connection()
         if res.ok:
-            messagebox.showinfo("Test OK", res.message)
+            msg = res.message
+            if res.detail:
+                msg += f"\n\n{res.detail}"
+            messagebox.showinfo("Test OK", msg)
         else:
-            messagebox.showerror("Test failed", f"{res.message}\n{res.detail}")
+            messagebox.showerror("Test failed", f"{res.message}\n\n{res.detail}")
         self._log("OUT", "NODE", f"TEST → {res.message}")
 
     def _toggle_connect(self) -> None:
@@ -479,10 +509,29 @@ class NodeReaderApp(tk.Tk):
 
         res = self._client_instance().test_connection()
         if not res.ok:
-            messagebox.showerror("Connect failed", f"{res.message}\n{res.detail}")
+            messagebox.showerror("Connect failed", f"{res.message}\n\n{res.detail}")
             return
+        if res.detail and "Push mode" in res.detail:
+            if messagebox.askyesno(
+                "Use Push mode?",
+                f"{res.message}\n\n{res.detail}\n\nSwitch to Push mode now?",
+            ):
+                self.var_http_mode.set("push")
+                ok, msg = self._start_ingest()
+                if not ok:
+                    messagebox.showerror("Connect failed", msg)
+                    return
+                self._connected = True
+                self.btn_connect.configure(text="Disconnect")
+                self.lbl_conn.configure(text="● Listening (push mode)", foreground="#2a8")
+                self._set_status(msg)
+                self._log("OUT", "LOCAL", msg)
+                return
+
         self._client = self._client_instance()
         self._connected = True
+        self._poll_err_count = 0
+        self._poll_warn_shown = False
         self.btn_connect.configure(text="Disconnect")
         self.lbl_conn.configure(text=f"● Connected {self.var_host.get()}:{self.var_port.get()}", foreground="#2a8")
         self._set_status(res.message)
@@ -548,8 +597,21 @@ class NodeReaderApp(tk.Tk):
 
     def _poll_result(self, devices: list[NodeDevice], err: str) -> None:
         if err:
-            self._log("IN", "NODE", f"Poll error: {err}")
+            self._poll_err_count += 1
+            if self._poll_err_count <= 3 or self._poll_err_count % 15 == 0:
+                self._log("IN", "NODE", f"Poll error: {err}")
+            self._set_status(err[:120])
+            if not self._poll_warn_shown and self._poll_err_count >= 3:
+                self._poll_warn_shown = True
+                self.after(0, lambda: messagebox.showwarning(
+                    "No tags from Pull mode",
+                    f"{err}\n\n"
+                    "Your BlueApro likely does not support Pull (GET /api/tags).\n"
+                    "Switch to Push mode and set BlueApro transport URI to:\n"
+                    f"  {self.lbl_push_uri.cget('text')}",
+                ))
             return
+        self._poll_err_count = 0
         self._log("IN", "NODE", f"GET devices → {len(devices)} tag(s)")
         self._merge_devices(devices, "node")
         if self.var_uplink.get() and devices:
