@@ -20,10 +20,13 @@ pyinstaller node_reader/build.spec
 
 | Step | Action |
 |------|--------|
-| 1 | Power BlueApro, connect PC to its WiFi (or same LAN) |
-| 2 | Default AP: `http://192.168.4.1` port **80** |
-| 3 | Set web UI password in BlueApro system menu |
-| 4 | In Node Reader: enter IP, **port**, username/password → **Test** → **Connect** |
+| 1 | **Select PC network** — Wi-Fi or Ethernet (same LAN as BlueApro) |
+| 2 | Power BlueApro, connect PC to same network |
+| 3 | **Scan WiFi nodes** → pick row (e.g. `10.7.15.x` port 80) |
+| 4 | Enter **node web password** → **Test node** → **Connect** |
+| 5 | **Tags** tab → **Start receiving tags** |
+
+Direct AP mode: `http://192.168.4.1` port **80**
 
 **S/N example:** `261FBLUEAO004`
 

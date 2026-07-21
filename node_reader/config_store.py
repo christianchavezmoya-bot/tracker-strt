@@ -32,6 +32,10 @@ class AppConfig:
     node_serial: str = ""
     node_model: str = "BlueApro 6/6E"
 
+    # PC network interface for scan + HTTP bind + push URI
+    network_interface_key: str = ""   # e.g. "Wi-Fi|10.7.15.76"
+    network_bind_ip: str = ""         # cached IP for selected interface
+
     # HTTP mode: pull = PC GETs node API; push = node POSTs to PC listener
     http_mode: str = "pull"  # pull | push
     devices_path: str = "/api/ble/devices"

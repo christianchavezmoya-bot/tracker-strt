@@ -25,10 +25,12 @@ def _local_subnet_prefix() -> str | None:
         return None
 
 
-def probe_port(ip: str, port: int, timeout: float = 0.35) -> bool:
+def probe_port(ip: str, port: int, timeout: float = 0.35, bind_ip: str | None = None) -> bool:
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
+        if bind_ip:
+            sock.bind((bind_ip, 0))
         ok = sock.connect_ex((ip, port)) == 0
         sock.close()
         return ok
@@ -36,14 +38,18 @@ def probe_port(ip: str, port: int, timeout: float = 0.35) -> bool:
         return False
 
 
-def scan_network(ports: list[int] | None = None, timeout: float = 0.35) -> list[DiscoveredNode]:
-    """Scan /24 for hosts with common HTTP ports open."""
+def scan_network(
+    ports: list[int] | None = None,
+    timeout: float = 0.35,
+    subnet_prefix: str | None = None,
+    bind_ip: str | None = None,
+) -> list[DiscoveredNode]:
+    """Scan /24 for hosts with common HTTP ports open on the chosen interface subnet."""
     ports = ports or [80, 8080, 8765, 5000]
-    prefix = _local_subnet_prefix()
+    prefix = subnet_prefix or _local_subnet_prefix()
     if not prefix:
         return []
 
-    # Always include BlueApro factory AP address if on direct link
     candidates = {f"{prefix}.{i}" for i in range(1, 255)}
     candidates.add("192.168.4.1")
 
@@ -52,7 +58,7 @@ def scan_network(ports: list[int] | None = None, timeout: float = 0.35) -> list[
     threads: list[threading.Thread] = []
 
     def check(ip: str, port: int) -> None:
-        if probe_port(ip, port, timeout):
+        if probe_port(ip, port, timeout, bind_ip=bind_ip):
             with lock:
                 found.setdefault(ip, []).append(port)
 
@@ -69,5 +75,7 @@ def scan_network(ports: list[int] | None = None, timeout: float = 0.35) -> list[
         open_ports = sorted(set(open_ports))
         primary = open_ports[0]
         label = "BlueApro AP?" if ip == "192.168.4.1" else ""
+        if bind_ip and ip == bind_ip:
+            label = "This PC"
         nodes.append(DiscoveredNode(ip=ip, port=primary, open_ports=open_ports, label=label))
     return nodes

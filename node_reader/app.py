@@ -25,6 +25,7 @@ from node_reader.blueapro_client import BlueAproClient, NodeDevice
 from node_reader.config_store import AppConfig, TagProfile, load_config, load_tag_profiles, save_config, save_tag_profiles
 from node_reader.discovery import scan_network
 from node_reader.ingest_server import IngestServer
+from node_reader.net_ifaces import NetInterface, find_interface, list_interfaces
 from node_reader.tag_classifier import SCAN_TYPE_LABELS
 from node_reader.transport import ServerTransport
 
@@ -53,6 +54,7 @@ class NodeReaderApp(tk.Tk):
         self._poll_job = None
         self._devices: dict[str, dict] = {}
         self._data_log: list[tuple[str, str, str, str]] = []
+        self._ifaces: list = []
 
         self._build_ui()
         self._load_form()
@@ -97,6 +99,21 @@ class NodeReaderApp(tk.Tk):
 
         conn = ttk.LabelFrame(f, text="Connect to BlueApro node (HTTP)")
         conn.pack(fill=tk.X, **pad)
+
+        net = ttk.Frame(conn)
+        net.pack(fill=tk.X, padx=8, pady=(6, 2))
+        ttk.Label(net, text="PC network:").pack(side=tk.LEFT)
+        self.cmb_iface = ttk.Combobox(net, width=52, state="readonly")
+        self.cmb_iface.pack(side=tk.LEFT, padx=6)
+        self.cmb_iface.bind("<<ComboboxSelected>>", self._on_iface_change)
+        ttk.Button(net, text="Refresh", command=self._refresh_interfaces).pack(side=tk.LEFT, padx=4)
+        self.lbl_iface_hint = ttk.Label(
+            net,
+            text="",
+            font=("TkDefaultFont", 8),
+            foreground="#666",
+        )
+        self.lbl_iface_hint.pack(side=tk.LEFT, padx=8)
 
         r1 = ttk.Frame(conn)
         r1.pack(fill=tk.X, padx=8, pady=6)
@@ -156,7 +173,79 @@ class NodeReaderApp(tk.Tk):
             text="In BlueApro web UI → Transport → HTTP → set URI to the address above (Basic Auth optional).",
             font=("TkDefaultFont", 8),
             foreground="#666",
-        ).pack(padx=8, pady=(0, 6), anchor=tk.W)
+        ).pack(padx=8, pady=(0, 2), anchor=tk.W)
+
+        flow = ttk.LabelFrame(f, text="How this screen connects to your BlueApro (from your setup)")
+        flow.pack(fill=tk.X, **pad)
+        ttk.Label(
+            flow,
+            text=(
+                "1) Select PC network (Wi-Fi or Ethernet) — must be same LAN as the node.\n"
+                "2) Scan WiFi nodes → picks hosts on that subnet (e.g. 10.7.15.x).\n"
+                "3) Click a row → fills Node IP + Port (80 or 8080).\n"
+                "4) Pull: Test node → Connect → Tags → Start receiving (PC GETs node).\n"
+                "5) Push: set BlueApro transport URI to this PC IP below → Connect → Start receiving."
+            ),
+            justify=tk.LEFT,
+            font=("TkDefaultFont", 8),
+            foreground="#444",
+        ).pack(padx=8, pady=6, anchor=tk.W)
+
+    def _refresh_interfaces(self, select_key: str | None = None) -> None:
+        self._ifaces = list_interfaces()
+        labels = [i.label for i in self._ifaces]
+        self.cmb_iface["values"] = labels
+        if not labels:
+            self.cmb_iface.set("(no interfaces)")
+            self.lbl_iface_hint.configure(text="")
+            return
+        key = select_key or self.cfg.network_interface_key
+        idx = 0
+        for i, iface in enumerate(self._ifaces):
+            if iface.key == key or iface.ip == self.cfg.network_bind_ip:
+                idx = i
+                break
+        self.cmb_iface.current(idx)
+        self._on_iface_change()
+
+    def _selected_iface(self) -> NetInterface | None:
+        if not self._ifaces:
+            return None
+        idx = self.cmb_iface.current()
+        if idx < 0 or idx >= len(self._ifaces):
+            return self._ifaces[0]
+        return self._ifaces[idx]
+
+    def _on_iface_change(self, _evt=None) -> None:
+        iface = self._selected_iface()
+        if not iface:
+            return
+        self.cfg.network_interface_key = iface.key
+        self.cfg.network_bind_ip = iface.ip
+        self.lbl_iface_hint.configure(
+            text=f"Scan subnet {iface.subnet_prefix}.x · Push URI uses {iface.ip}"
+        )
+        self._update_push_uri()
+        if self.ingest.running:
+            self.ingest.stop()
+            self.ingest.host = iface.ip
+            self.ingest.start()
+
+    def _bind_ip(self) -> str | None:
+        iface = self._selected_iface()
+        return iface.ip if iface else (self.cfg.network_bind_ip or None)
+
+    def _subnet_prefix(self) -> str | None:
+        iface = self._selected_iface()
+        return iface.subnet_prefix if iface else None
+
+    def _start_ingest(self) -> tuple[bool, str]:
+        self.ingest.port = int(self.var_listen_port.get())
+        bind = self._bind_ip()
+        self.ingest.host = bind or "0.0.0.0"
+        if self.ingest.running:
+            return True, f"Listening on {bind or '0.0.0.0'}:{self.ingest.port}"
+        return self.ingest.start()
 
     def _build_tags_tab(self) -> None:
         f = self.tab_tags
@@ -275,9 +364,14 @@ class NodeReaderApp(tk.Tk):
         self.var_up_port.set(c.uplink_port)
         self.var_up_key.set(c.uplink_api_key)
         self.var_up_mac.set(c.uplink_anchor_mac)
+        self._refresh_interfaces(select_key=c.network_interface_key)
         self._update_push_uri()
 
     def _save_settings(self) -> None:
+        iface = self._selected_iface()
+        if iface:
+            self.cfg.network_interface_key = iface.key
+            self.cfg.network_bind_ip = iface.ip
         self.cfg.node_host = self.var_host.get().strip()
         self.cfg.node_port = int(self.var_port.get())
         self.cfg.node_use_https = bool(self.var_https.get())
@@ -307,29 +401,27 @@ class NodeReaderApp(tk.Tk):
             password=self.var_node_pass.get(),
             devices_path=self.var_dev_path.get().strip(),
             health_path=self.var_health_path.get().strip(),
+            source_ip=self._bind_ip(),
         )
 
     def _update_push_uri(self) -> None:
         port = int(self.var_listen_port.get())
         path = self.cfg.listen_path
-        import socket
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            pc_ip = s.getsockname()[0]
-            s.close()
-        except OSError:
-            pc_ip = "YOUR_PC_IP"
+        pc_ip = self._bind_ip() or "YOUR_PC_IP"
         self.lbl_push_uri.configure(text=f"http://{pc_ip}:{port}{path}")
 
     # ── Node actions ──────────────────────────────────────────────────────────
 
     def _scan_nodes(self) -> None:
-        self._set_status("Scanning network for BlueApro / HTTP nodes…")
+        iface = self._selected_iface()
+        subnet = self._subnet_prefix()
+        bind = self._bind_ip()
+        hint = f" on {iface.name} ({subnet}.x)" if iface else ""
+        self._set_status(f"Scanning network{hint}…")
         ports = self.cfg.discovery_ports
 
         def work():
-            nodes = scan_network(ports=ports)
+            nodes = scan_network(ports=ports, subnet_prefix=subnet, bind_ip=bind)
             self.after(0, lambda: self._scan_done(nodes))
 
         threading.Thread(target=work, daemon=True).start()
@@ -354,7 +446,7 @@ class NodeReaderApp(tk.Tk):
 
     def _test_node(self) -> None:
         if self.var_http_mode.get() == "push":
-            ok, msg = self.ingest.start() if not self.ingest.running else (True, "Listener already running")
+            ok, msg = self._start_ingest()
             if ok:
                 messagebox.showinfo("Push mode", f"Local listener OK.\nConfigure BlueApro URI:\n{self.lbl_push_uri.cget('text')}")
             else:
@@ -374,8 +466,7 @@ class NodeReaderApp(tk.Tk):
         self._save_settings()
         mode = self.var_http_mode.get()
         if mode == "push":
-            self.ingest.port = int(self.var_listen_port.get())
-            ok, msg = self.ingest.start()
+            ok, msg = self._start_ingest()
             if not ok:
                 messagebox.showerror("Connect failed", msg)
                 return
@@ -398,8 +489,7 @@ class NodeReaderApp(tk.Tk):
         self._log("OUT", "NODE", f"CONNECT {self._client.base_url}")
 
         if not self.ingest.running:
-            self.ingest.port = int(self.var_listen_port.get())
-            self.ingest.start()
+            self._start_ingest()
 
     def _disconnect(self) -> None:
         self._stop_polling()
@@ -599,9 +689,9 @@ class NodeReaderApp(tk.Tk):
     def _open_dashboard(self) -> None:
         port = int(self.var_listen_port.get())
         if not self.ingest.running:
-            self.ingest.port = port
-            self.ingest.start()
-        webbrowser.open(f"http://127.0.0.1:{port}/")
+            self._start_ingest()
+        host = self._bind_ip() or "127.0.0.1"
+        webbrowser.open(f"http://{host}:{port}/")
 
     def _set_status(self, text: str) -> None:
         self.status.configure(text=text)

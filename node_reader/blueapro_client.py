@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 import requests
+from requests.adapters import HTTPAdapter
 from requests.auth import HTTPBasicAuth
 
 from node_reader.tag_classifier import classify_scan_type, parse_eddystone, parse_ibeacon
@@ -29,6 +30,18 @@ class NodeHealth:
     message: str
     detail: str = ""
     info: dict | None = None
+
+
+class _SourceIPAdapter(HTTPAdapter):
+    """Bind outbound HTTP to a specific PC interface IP."""
+
+    def __init__(self, source_ip: str, **kwargs):
+        self._source_ip = source_ip
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["source_address"] = (self._source_ip, 0)
+        return super().init_poolmanager(*args, **kwargs)
 
 
 class BlueAproClient:
@@ -57,6 +70,7 @@ class BlueAproClient:
         scan_start_path: str = "/api/ble/scanner/start",
         scan_stop_path: str = "/api/ble/scanner/stop",
         timeout: float = 8.0,
+        source_ip: str | None = None,
     ):
         self.host = host.strip()
         self.port = int(port)
@@ -68,7 +82,12 @@ class BlueAproClient:
         self.scan_start_path = scan_start_path
         self.scan_stop_path = scan_stop_path
         self.timeout = timeout
+        self.source_ip = source_ip
         self._session = requests.Session()
+        if source_ip:
+            adapter = _SourceIPAdapter(source_ip)
+            self._session.mount("http://", adapter)
+            self._session.mount("https://", adapter)
         if username or password:
             self._session.auth = HTTPBasicAuth(username, password or "")
 
