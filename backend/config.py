@@ -84,6 +84,9 @@ VAPID_CLAIMS_EMAIL = os.getenv("VAPID_CLAIMS_EMAIL", "mailto:admin@holo-rtls.loc
 WEB_PUSH_ENABLED = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY)
 
 # ── MQTT ─────────────────────────────────────────────────────────────────────
+MQTT_BROKER_ENABLED = os.getenv("MQTT_BROKER_ENABLED", "0") == "1"
+MQTT_BROKER_BIND = os.getenv("MQTT_BROKER_BIND", "0.0.0.0")
+MQTT_BROKER_ALLOW_ANONYMOUS = os.getenv("MQTT_BROKER_ALLOW_ANONYMOUS", "1") == "1"
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "localhost")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", 1883))
 MQTT_BROKER_USERNAME = os.getenv("MQTT_BROKER_USERNAME", "")

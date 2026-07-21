@@ -407,13 +407,34 @@ def _init_positioning(app):
         mqtt_pub = init_mqtt_publisher(
             getattr(cfg, 'MQTT_BROKER_HOST', 'localhost'),
             int(getattr(cfg, 'MQTT_BROKER_PORT', 1883)),
-            getattr(cfg, 'MQTT_USERNAME', None),
-            getattr(cfg, 'MQTT_PASSWORD', None),
+            getattr(cfg, 'MQTT_BROKER_USERNAME', None) or None,
+            getattr(cfg, 'MQTT_BROKER_PASSWORD', None) or None,
         )
         logger.info(f"MQTT publisher: {getattr(cfg, 'MQTT_BROKER_HOST', 'localhost')}")
     except Exception as e:
         logger.warning(f"MQTT not configured: {e}")
         mqtt_pub = None
+
+    mqtt_broker = None
+    if getattr(cfg, "MQTT_BROKER_ENABLED", False):
+        try:
+            from backend.services.mqtt_broker_service import init_mqtt_broker
+            from backend.services.mqtt_tag_ingest import init_mqtt_tag_ingest
+
+            ingest = init_mqtt_tag_ingest(app=app)
+            mqtt_broker = init_mqtt_broker(
+                bind=getattr(cfg, "MQTT_BROKER_BIND", "0.0.0.0"),
+                port=int(getattr(cfg, "MQTT_BROKER_PORT", 1883)),
+                allow_anonymous=getattr(cfg, "MQTT_BROKER_ALLOW_ANONYMOUS", True),
+                on_message=ingest.handle_message,
+            )
+            ok, msg = mqtt_broker.start()
+            if ok:
+                logger.info("Embedded MQTT broker: %s", msg)
+            else:
+                logger.warning("Embedded MQTT broker failed: %s", msg)
+        except Exception as e:
+            logger.warning("Embedded MQTT broker not started: %s", e)
 
     bridge_mgr = HardwareBridgeManager(db.session, app)
     bridge_mgr.start_all(anchors=anchors)
@@ -428,6 +449,7 @@ def _init_positioning(app):
     logger.info(
         f"HOLO-RTLS online — {anchors_loaded} anchors, "
         f"{len(bridge_mgr._bridges)} bridges, "
+        f"mqtt_broker: {'running' if mqtt_broker and mqtt_broker.running else 'disabled'}, "
         f"alerts: {'running' if alert_svc else 'disabled'}, "
         f"ingestion: {'running' if ingestion else 'FAILED'}"
     )

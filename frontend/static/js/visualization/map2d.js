@@ -538,12 +538,20 @@ async function saveCalibration() {
 //  UNPLACED NODES (fetched once, refreshed on demand)
 // ══════════════════════════════════════════════════════════════════════════════
 
+function isNodeUnplaced(n) {
+  const meta = typeof n.metadata === 'object' ? n.metadata : null;
+  if (meta?.placed_on_map === true) return false;
+  const x = n.position?.x ?? n.pos_x;
+  const y = n.position?.y ?? n.pos_y;
+  return x == null || y == null || (x === 0 && y === 0);
+}
+
 async function loadUnplacedNodes() {
   try {
     const res = await API.get('/nodes');
     const data = await API.json(res);
     if (!res || !res.ok) return [];
-    _unplacedNodes = (data.items || []).filter(n => n.pos_x == null && n.pos_y == null);
+    _unplacedNodes = (data.items || []).filter(isNodeUnplaced);
   } catch {
     _unplacedNodes = [];
   }

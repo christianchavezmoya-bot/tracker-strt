@@ -64,15 +64,20 @@ class PositioningService:
 
         try:
             # Import here to avoid circular import
-            from backend.models import WifiNode
+            from backend.models.tracker import WifiNode, NodeStatus
 
             anchors = self._db.query(WifiNode).filter(
-                WifiNode.status == "active"
+                WifiNode.status == int(NodeStatus.ACTIVE)
             ).all()
 
             self._anchors.clear()
             for node in anchors:
-                self._anchors[node.mac] = (float(node.x), float(node.y), float(node.z or 0.0))
+                mac = node.mac_address
+                self._anchors[mac] = (
+                    float(node.pos_x),
+                    float(node.pos_y),
+                    float(node.pos_z or 0.0),
+                )
 
             logger.info(f"Loaded {len(self._anchors)} anchors: {list(self._anchors.keys())}")
             return len(self._anchors)

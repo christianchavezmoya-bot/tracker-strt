@@ -184,6 +184,20 @@ def get_anchor(anchor_id):
     return jsonify({"anchor": anchor.to_dict()})
 
 
+@scanner_bp.route("/anchors/<int:anchor_id>", methods=["DELETE"])
+@jwt_required()
+def delete_anchor(anchor_id):
+    """Delete a scanner anchor and its raw detection events."""
+    anchor = db.session.query(WifiAnchor).get(anchor_id)
+    if not anchor:
+        return jsonify({"error": "Anchor not found"}), 404
+
+    db.session.query(DetectionEvent).filter_by(anchor_id=anchor.id).delete()
+    db.session.delete(anchor)
+    db.session.commit()
+    return jsonify({"ok": True, "deleted_id": anchor_id})
+
+
 @scanner_bp.route("/anchors/<int:anchor_id>", methods=["PATCH"])
 @jwt_required()
 def update_anchor(anchor_id):
