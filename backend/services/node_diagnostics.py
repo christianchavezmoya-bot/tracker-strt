@@ -10,7 +10,7 @@ from backend.models.detection import DetectionEvent, WifiAnchor
 from backend.models.tracker import WifiNode
 from backend.services.mqtt_broker_manager import broker_status_summary
 from backend.services.mqtt_tag_ingest import get_mqtt_tag_ingest
-from backend.services.node_utils import is_node_placed, is_node_offline
+from backend.services.node_utils import is_node_placed, is_node_offline, get_node_metadata
 
 ONLINE_THRESHOLD_SEC = 60.0
 WEAK_THRESHOLD_SEC = 120.0
@@ -78,9 +78,9 @@ def compute_node_diagnostics(node: WifiNode, session=None) -> dict:
     status_label, online = _connectivity_label(age, offline_flag)
     hints = _ingest_hints(mac)
     anchor = _anchor_for_node(session, mac)
-
+    meta = get_node_metadata(node)
     since = datetime.utcnow() - timedelta(hours=1)
-    messages_last_hour = 0
+    messages_last_hour = hints.get("messages_total", 0) if hints else 0
     avg_rssi = None
     tags_recent = 0
     if anchor:
@@ -116,7 +116,11 @@ def compute_node_diagnostics(node: WifiNode, session=None) -> dict:
         "avg_rssi": round(float(avg_rssi), 1) if avg_rssi is not None else None,
         "tags_seen_last_hour": int(tags_recent),
         "last_payload": hints.get("last_payload"),
-        "last_topic": hints.get("last_topic") or "rssi/data",
+        "last_topic": hints.get("last_topic") or meta.get("last_mqtt_topic") or "—",
+        "mqtt_auto_detected": meta.get("mqtt_auto_detected", False),
+        "mqtt_acknowledged": meta.get("mqtt_acknowledged", False),
+        "payload_format": meta.get("payload_format", "unknown"),
+        "strata_node_id": meta.get("strata_node_id"),
         "broker": broker_status_summary(),
     }
 
@@ -130,6 +134,9 @@ def compute_all_diagnostics(session=None) -> dict:
     offline = sum(1 for i in items if i["connectivity"] in ("offline", "unknown"))
     broker = broker_status_summary()
     ingest = get_mqtt_tag_ingest()
+    from backend.services.mqtt_traffic_log import get_mqtt_traffic_log
+
+    traffic = get_mqtt_traffic_log().summary()
     return {
         "broker": broker,
         "summary": {
@@ -138,7 +145,10 @@ def compute_all_diagnostics(session=None) -> dict:
             "weak": weak,
             "offline": offline,
             "broker_running": broker.get("running"),
+            "mqtt_traffic_total": traffic.get("total_received", 0),
+            "mqtt_traffic_unparsed": traffic.get("recent_unparsed", 0),
         },
+        "mqtt_traffic": traffic,
         "ingest": ingest.diagnostics() if ingest else None,
         "nodes": items,
         "timestamp": datetime.utcnow().isoformat(),

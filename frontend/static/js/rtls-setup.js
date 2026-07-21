@@ -111,10 +111,14 @@ async function loadWifiSetupCard(containerId) {
     const rows = [
       ['Broker address', data.broker_host],
       ['Port', String(data.broker_port)],
-      ['Topic', data.topic],
+      ['Topic', data.topic + (data.topic_note ? ' — see Diagnostics' : '')],
       ['Payload format', data.payload_format],
-      ['Example', data.example_payload],
+      ['Example (CSV)', data.example_payload],
     ];
+    if (data.example_strata_topic) {
+      rows.push(['Example (STRATA topic)', data.example_strata_topic]);
+      rows.push(['Example (STRATA payload)', data.example_strata_payload]);
+    }
     el.innerHTML = `
       <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text-primary)"><i class="fa-solid fa-copy" style="color:var(--cyan)"></i> ${data.title || 'WiFi unit settings'}</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${data.note || ''}</div>

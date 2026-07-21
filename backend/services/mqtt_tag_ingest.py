@@ -35,13 +35,50 @@ class MqttTagIngestService:
         self.per_node_last_topic: dict[str, str] = {}
 
     def handle_message(self, client_id: str, topic: str, payload: str) -> None:
+        from backend.services.mqtt_node_detect import detect_node_from_mqtt, register_node_from_mqtt
+        from backend.services.mqtt_traffic_log import get_mqtt_traffic_log
+
         with self._lock:
             self.message_count += 1
             self.last_message_at = datetime.utcnow()
             self.last_payload = (payload or "")[:500]
             self.last_topic = topic or ""
 
+        node_key, detect_hints = detect_node_from_mqtt(topic, payload)
+        node_id = None
+        if node_key:
+            with self._lock:
+                mac = node_key.upper()
+                self.per_node_last_payload[mac] = (payload or "")[:500]
+                self.per_node_last_topic[mac] = topic or ""
+
         readings = parse_mqtt_payload(payload, topic)
+        parsed = len(readings) > 0
+
+        if node_key and self.app:
+            with self.app.app_context():
+                try:
+                    node = register_node_from_mqtt(node_key, detect_hints)
+                    node_id = node.id
+                    mac = node_key.upper()
+                    with self._lock:
+                        self.per_node_counts[mac] += 1
+                        self.per_node_last_at[mac] = datetime.utcnow()
+                except Exception:
+                    logger.exception("Failed to register node from MQTT %s", node_key)
+                    db.session.rollback()
+
+        get_mqtt_traffic_log().append(
+            client_id=client_id,
+            topic=topic or "",
+            payload=payload or "",
+            node_key=node_key,
+            node_id=node_id,
+            parsed=parsed,
+            parse_count=len(readings),
+            payload_format=detect_hints.get("payload_format", "unknown"),
+        )
+
         if not readings:
             logger.debug("MQTT message had no parseable tags (%s)", topic)
             return

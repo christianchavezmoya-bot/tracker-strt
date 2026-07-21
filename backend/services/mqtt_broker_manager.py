@@ -68,15 +68,22 @@ def wifi_unit_setup_info(request_host: str | None = None) -> dict:
         "broker_port": port,
         "broker_url": f"mqtt://{host}:{port}",
         "topic": "rssi/data",
-        "payload_format": "NodeMAC,TagMAC,RSSI,Battery",
+        "topic_note": "Your units may use a different topic (e.g. strata/v1/bluetooth/…). Check Diagnostics → Incoming traffic.",
+        "payload_format": "NodeMAC,TagMAC,RSSI,Battery (or vendor JSON/array — see Incoming traffic)",
         "example_payload": "00:C0:CA:A1:4B:18,F9:2F:B6:2C:DE:24,-72,98",
+        "example_strata_payload": "[1,1750690877,30,273983315172900,1,828033288983,-95]",
+        "example_strata_topic": "strata/v1/bluetooth/1/273983315172900",
         "steps": [
             f"Set MQTT broker address to {host}",
             f"Set port to {port}",
-            "Set publish topic to rssi/data",
-            "Use CSV payload: NodeMAC,TagMAC,RSSI,Battery",
+            "Point units at this server — topic may vary by firmware",
+            "Open Anchors → Diagnostics → Incoming traffic to verify raw messages",
         ],
-        "note": "Use this server address in production — the PC HOLO-MQTT-Broker app is for testing only.",
+        "note": (
+            "Configure broker IP and port on each WiFi unit. "
+            "If tags do not appear on the map yet, use Incoming traffic to inspect the real topic and payload — "
+            "server parsing can be added once the format is confirmed."
+        ),
     }
 
 

@@ -186,6 +186,43 @@ def refresh_positions():
     return jsonify({"ok": True, **result})
 
 
+@nodes_bp.route("/mqtt-traffic", methods=["GET"])
+@jwt_required()
+def mqtt_traffic():
+    """Recent raw MQTT messages (for commissioning / format discovery)."""
+    from backend.services.mqtt_traffic_log import get_mqtt_traffic_log
+    from backend.services.mqtt_broker_manager import broker_status_summary
+
+    limit = request.args.get("limit", 100)
+    node_id = request.args.get("node_id", type=int)
+    node_key = request.args.get("node_key")
+    log = get_mqtt_traffic_log()
+    return jsonify({
+        "broker": broker_status_summary(),
+        "summary": log.summary(),
+        "items": log.list_entries(limit=limit, node_id=node_id, node_key=node_key),
+    })
+
+
+@nodes_bp.route("/<int:node_id>/acknowledge", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.MANAGE_NODE)
+def acknowledge_node(node_id):
+    """Confirm an auto-detected MQTT node as a real anchor."""
+    from backend.services.mqtt_node_detect import acknowledge_mqtt_node
+
+    node = WifiNode.query.get_or_404(node_id)
+    body = request.get_json() or {}
+    node = acknowledge_mqtt_node(node, user_label=body.get("assigned_name"))
+    AuditLog.log(
+        action="node.acknowledge",
+        user_id=int(get_jwt_identity()),
+        entity_type="WifiNode",
+        entity_id=node.id,
+    )
+    return jsonify({"ok": True, "node": node.to_dict()})
+
+
 @nodes_bp.route("/diagnostics", methods=["GET"])
 @jwt_required()
 def all_nodes_diagnostics():

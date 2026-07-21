@@ -179,6 +179,11 @@
     </div><!-- /nodesListView -->
 
     <div id="nodesDiagnosticsView" style="display:none">
+      <div class="node-tabs" role="tablist" style="margin-bottom:12px">
+        <button type="button" class="node-tab active" data-diag="health" onclick="setDiagSubView('health')"><i class="fa-solid fa-heart-pulse"></i> Node health</button>
+        <button type="button" class="node-tab" data-diag="traffic" onclick="setDiagSubView('traffic')"><i class="fa-solid fa-tower-broadcast"></i> Incoming traffic</button>
+      </div>
+      <div id="diagHealthPanel">
       <div class="info-banner" style="margin-bottom:16px">
         <i class="fa-solid fa-server"></i>
         <div class="info-banner-text" id="diagBrokerSummary">Loading broker status…</div>
@@ -189,10 +194,10 @@
             <tr>
               <th>Node</th>
               <th>Status</th>
+              <th>Detected</th>
               <th>Last heard</th>
-              <th>Msgs / hr</th>
-              <th>Avg RSSI</th>
-              <th>Tags (1h)</th>
+              <th>Msgs</th>
+              <th>Format</th>
               <th></th>
             </tr>
           </thead>
@@ -200,6 +205,39 @@
             <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics…</td></tr>
           </tbody>
         </table>
+      </div>
+      </div>
+      <div id="diagTrafficPanel" style="display:none">
+        <div class="info-banner" style="margin-bottom:12px">
+          <i class="fa-solid fa-circle-info"></i>
+          <div class="info-banner-text">
+            Live raw MQTT from WiFi units. Nodes are <strong>auto-detected</strong> from traffic even before tag parsing is enabled.
+            Use this to confirm broker IP/port and discover the real topic + payload format.
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="loadMqttTraffic(true)"><i class="fa-solid fa-rotate"></i> Refresh</button>
+          <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="trafficAutoRefresh" checked onchange="toggleTrafficAutoRefresh()"> Auto-refresh
+          </label>
+          <span id="trafficSummary" style="font-size:12px;color:var(--text-muted);margin-left:auto"></span>
+        </div>
+        <div class="hw-config-table-wrap">
+          <table class="hw-config-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Topic</th>
+                <th>Node</th>
+                <th>Parsed</th>
+                <th>Payload</th>
+              </tr>
+            </thead>
+            <tbody id="mqttTrafficTable">
+              <tr><td colspan="5" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -305,6 +343,9 @@ let editingNodeId = null;
 let nodeFilter = 'all';
 let nodesView = 'list';
 let diagnosticsCache = [];
+let diagSubView = 'health';
+let trafficAutoTimer = null;
+let trafficCache = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
@@ -327,7 +368,122 @@ function setNodesView(view) {
   const diagEl = document.getElementById('nodesDiagnosticsView');
   if (listEl) listEl.style.display = view === 'list' ? 'block' : 'none';
   if (diagEl) diagEl.style.display = view === 'diagnostics' ? 'block' : 'none';
-  if (view === 'diagnostics') loadDiagnosticsView();
+  if (view === 'diagnostics') {
+    loadDiagnosticsView();
+    if (diagSubView === 'traffic') loadMqttTraffic(false);
+  } else {
+    stopTrafficAutoRefresh();
+  }
+}
+
+function setDiagSubView(sub) {
+  diagSubView = sub;
+  document.querySelectorAll('.node-tab[data-diag]').forEach(t => {
+    t.classList.toggle('active', t.dataset.diag === sub);
+  });
+  const health = document.getElementById('diagHealthPanel');
+  const traffic = document.getElementById('diagTrafficPanel');
+  if (health) health.style.display = sub === 'health' ? 'block' : 'none';
+  if (traffic) traffic.style.display = sub === 'traffic' ? 'block' : 'none';
+  if (sub === 'traffic') {
+    loadMqttTraffic(false);
+    toggleTrafficAutoRefresh();
+  } else {
+    stopTrafficAutoRefresh();
+  }
+}
+
+function toggleTrafficAutoRefresh() {
+  stopTrafficAutoRefresh();
+  const on = document.getElementById('trafficAutoRefresh')?.checked;
+  if (on && nodesView === 'diagnostics' && diagSubView === 'traffic') {
+    trafficAutoTimer = setInterval(() => loadMqttTraffic(false), 4000);
+  }
+}
+
+function stopTrafficAutoRefresh() {
+  if (trafficAutoTimer) {
+    clearInterval(trafficAutoTimer);
+    trafficAutoTimer = null;
+  }
+}
+
+async function loadMqttTraffic(showSpinner) {
+  const tbody = document.getElementById('mqttTrafficTable');
+  const summaryEl = document.getElementById('trafficSummary');
+  if (!tbody) return;
+  if (showSpinner) {
+    tbody.innerHTML = '<tr><td colspan="5" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>';
+  }
+  try {
+    const res = await API.get('/nodes/mqtt-traffic?limit=80');
+    const data = await API.json(res);
+    if (!res || !res.ok) throw new Error('load failed');
+    const s = data.summary || {};
+    if (summaryEl) {
+      summaryEl.textContent = `${s.total_received || 0} total · ${s.recent_unparsed || 0} unparsed in buffer · formats: ${Object.keys(s.payload_formats || {}).join(', ') || '—'}`;
+    }
+    const items = data.items || [];
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No MQTT messages yet — turn on broker in Settings and power on WiFi units.</td></tr>';
+      return;
+    }
+    trafficCache = items;
+    tbody.innerHTML = items.map((row, idx) => {
+      const t = row.at ? new Date(row.at).toLocaleTimeString() : '—';
+      const parsed = row.parsed
+        ? `<span style="color:var(--green)">Yes (${row.parse_count})</span>`
+        : `<span style="color:var(--yellow)">No</span>`;
+      const nodeLabel = row.node_key
+        ? `<span class="mono">${row.node_key}</span>${row.node_id ? '' : ' <span style="color:var(--yellow);font-size:10px">new</span>'}`
+        : '<span style="color:var(--text-muted)">—</span>';
+      const preview = (row.payload_preview || row.payload || '').replace(/</g, '&lt;');
+      return `<tr style="cursor:pointer" onclick="showTrafficDetail(${idx})">
+        <td class="mono" style="white-space:nowrap">${t}</td>
+        <td class="mono" style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${row.topic || ''}">${row.topic || '—'}</td>
+        <td>${nodeLabel}</td>
+        <td>${parsed}</td>
+        <td class="mono" style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis" title="${preview}">${preview}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="table-empty" style="color:var(--red)">Failed to load MQTT traffic</td></tr>';
+  }
+}
+
+function showTrafficDetail(idx) {
+  const row = trafficCache[idx];
+  if (!row) return;
+  const modal = document.getElementById('diagDetailModal');
+  const body = document.getElementById('diagDetailBody');
+  const title = document.getElementById('diagDetailTitle');
+  if (!modal || !body) return;
+  if (title) title.textContent = 'Raw MQTT message';
+  body.innerHTML = `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:12px">
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Time</td><td>${row.at || '—'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Topic</td><td class="mono" style="word-break:break-all">${row.topic || '—'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Client</td><td class="mono">${row.client_id || '—'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Node key</td><td class="mono">${row.node_key || '—'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Format</td><td>${row.payload_format || 'unknown'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Parsed tags</td><td>${row.parsed ? 'Yes (' + (row.parse_count || 0) + ')' : 'No — parser not configured for this format yet'}</td></tr>
+    </table>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Full payload</div>
+    <pre style="background:rgba(0,0,0,.35);padding:10px;border-radius:8px;font-size:11px;overflow:auto;max-height:200px;color:var(--cyan);margin:0">${(row.payload || '').replace(/</g, '&lt;')}</pre>
+    ${row.node_id ? `<div style="margin-top:12px"><button class="btn btn-secondary btn-sm" onclick="openDiagDetail(${row.node_id})"><i class="fa-solid fa-anchor"></i> Node details</button></div>` : ''}`;
+  modal.style.display = 'flex';
+}
+
+async function acknowledgeNode(nodeId, name) {
+  const res = await API.post(`/nodes/${nodeId}/acknowledge`, { assigned_name: name || undefined });
+  const data = await API.json(res);
+  if (res && res.ok) {
+    showToast?.('Node acknowledged', 'success');
+    await loadAllNodes();
+    loadDiagnosticsView();
+  } else {
+    showToast?.('Failed: ' + (data?.error || ''), 'error');
+  }
 }
 
 function setNodeFilter(filter) {
@@ -356,8 +512,9 @@ async function loadDiagnosticsView() {
         ? (b.port_reachable ? ' · Port reachable' : ' · Port not reachable from server')
         : '';
       brokerEl.innerHTML = `<strong>${runLabel}</strong>${portHint} · Port ${b.port || 1883} · `
-        + `${s.online || 0} online, ${s.weak || 0} weak, ${s.offline || 0} offline · `
-        + `<span class="mono">${b.broker_url || ''}</span>`;
+        + `${s.online || 0} online · ${s.mqtt_traffic_total || 0} MQTT msgs · `
+        + `<span class="mono">${b.broker_url || ''}</span>`
+        + (s.mqtt_traffic_unparsed ? ` · <span style="color:var(--yellow)">${s.mqtt_traffic_unparsed} unparsed in buffer</span>` : '');
     }
     if (!diagnosticsCache.length) {
       tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No nodes yet — power on WiFi units or add a node manually.</td></tr>';
@@ -366,13 +523,17 @@ async function loadDiagnosticsView() {
     tbody.innerHTML = diagnosticsCache.map(d => {
       const pill = connectivityPill(d.connectivity);
       const heard = d.last_heard_at ? timeAgo(d.last_heard_at) : 'Never';
+      const det = d.mqtt_auto_detected
+        ? (d.mqtt_acknowledged ? '<span style="color:var(--green);font-size:11px">Acknowledged</span>' : '<span style="color:var(--yellow);font-size:11px">Auto-detected</span>')
+        : '<span style="color:var(--text-muted);font-size:11px">Manual</span>';
+      const fmt = d.payload_format && d.payload_format !== 'unknown' ? d.payload_format : '—';
       return `<tr style="cursor:pointer" onclick="openDiagDetail(${d.node_id})">
         <td><strong>${d.name || d.mac_address}</strong><div class="mono" style="font-size:11px;color:var(--text-muted)">${d.mac_address}</div></td>
         <td><span class="status-pill ${pill.cls}"><span class="status-dot-sm"></span>${pill.label}</span></td>
+        <td>${det}</td>
         <td>${heard}</td>
-        <td class="mono">${d.msg_rate_per_hour ?? '—'}</td>
-        <td class="mono">${d.avg_rssi != null ? d.avg_rssi + ' dBm' : '—'}</td>
-        <td class="mono">${d.tags_seen_last_hour ?? 0}</td>
+        <td class="mono">${d.messages_total ?? 0}</td>
+        <td class="mono" style="font-size:11px">${fmt}</td>
         <td><button class="action-btn" title="Details" onclick="event.stopPropagation();openDiagDetail(${d.node_id})"><i class="fa-solid fa-chart-simple"></i></button></td>
       </tr>`;
     }).join('');
@@ -396,32 +557,42 @@ async function openDiagDetail(nodeId) {
   body.innerHTML = '<div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading…</div>';
   modal.style.display = 'flex';
   try {
-    const [dRes, sRes] = await Promise.all([
+    const [dRes, sRes, tRes] = await Promise.all([
       API.get(`/nodes/${nodeId}/diagnostics`),
       API.get(`/nodes/${nodeId}/stats?since=24h`),
+      API.get(`/nodes/mqtt-traffic?node_id=${nodeId}&limit=15`),
     ]);
     const dData = await API.json(dRes);
     const sData = await API.json(sRes);
+    const tData = await API.json(tRes);
     const d = dData.diagnostics || {};
     const st = sData.stats || {};
+    const trafficRows = (tData.items || []).map(r => `
+      <tr><td class="mono" style="font-size:10px;padding:4px 0">${r.at ? new Date(r.at).toLocaleTimeString() : '—'}</td>
+      <td class="mono" style="font-size:10px;word-break:break-all;padding:4px 0 4px 8px">${(r.payload_preview || '').replace(/</g, '&lt;')}</td></tr>`).join('');
     if (title) title.textContent = d.name || d.mac_address || 'Node diagnostics';
     const pill = connectivityPill(d.connectivity);
+    const ackBtn = d.mqtt_auto_detected && !d.mqtt_acknowledged
+      ? `<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="acknowledgeNode(${nodeId}, '${(d.name || '').replace(/'/g, '')}')"><i class="fa-solid fa-check"></i> Acknowledge node</button>`
+      : '';
     body.innerHTML = `
       <div style="margin-bottom:14px"><span class="status-pill ${pill.cls}"><span class="status-dot-sm"></span>${pill.label}</span>
-        ${d.placed_on_map ? '<span style="margin-left:8px;color:var(--green);font-size:12px"><i class="fa-solid fa-map-pin"></i> Placed on map</span>' : '<span style="margin-left:8px;color:var(--yellow);font-size:12px">Not placed on map</span>'}</div>
+        ${d.placed_on_map ? '<span style="margin-left:8px;color:var(--green);font-size:12px"><i class="fa-solid fa-map-pin"></i> Placed on map</span>' : '<span style="margin-left:8px;color:var(--yellow);font-size:12px">Not placed on map</span>'}
+        ${ackBtn}</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse">
-        <tr><td style="padding:6px 0;color:var(--text-muted)">MAC</td><td class="mono">${d.mac_address || '—'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">ID / MAC</td><td class="mono">${d.mac_address || '—'}</td></tr>
+        ${d.strata_node_id ? `<tr><td style="padding:6px 0;color:var(--text-muted)">STRATA node ID</td><td class="mono">${d.strata_node_id}</td></tr>` : ''}
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Payload format</td><td>${d.payload_format || 'unknown'}</td></tr>
         <tr><td style="padding:6px 0;color:var(--text-muted)">Last heard</td><td>${d.last_heard_at ? timeAgo(d.last_heard_at) : 'Never'}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">Messages (total)</td><td>${d.messages_total ?? 0}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">Messages (last hour)</td><td>${d.messages_last_hour ?? 0}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">Avg RSSI (1h)</td><td>${d.avg_rssi != null ? d.avg_rssi + ' dBm' : '—'}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">Tags heard (1h)</td><td>${d.tags_seen_last_hour ?? 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">MQTT messages</td><td>${d.messages_total ?? 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Tags parsed (1h)</td><td>${d.tags_seen_last_hour ?? 0}${(d.messages_total > 0 && !d.tags_seen_last_hour) ? ' <span style="color:var(--yellow);font-size:11px">(raw only — parser pending)</span>' : ''}</td></tr>
         <tr><td style="padding:6px 0;color:var(--text-muted)">Detections (24h)</td><td>${st.detection_count ?? 0}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">Unique tags (24h)</td><td>${st.unique_tags ?? 0}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">RSSI range (24h)</td><td>${st.min_rssi != null ? st.min_rssi + ' … ' + st.max_rssi + ' dBm' : '—'}</td></tr>
         <tr><td style="padding:6px 0;color:var(--text-muted);vertical-align:top">Last payload</td><td class="mono" style="word-break:break-all;color:var(--cyan)">${d.last_payload || '—'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Last topic</td><td class="mono" style="word-break:break-all">${d.last_topic || '—'}</td></tr>
       </table>
-      <div style="margin-top:12px;font-size:11px;color:var(--text-muted)">Broker: ${d.broker?.running ? 'Running' : 'Off'} · Topic ${d.last_topic || 'rssi/data'}</div>`;
+      ${trafficRows ? `<div style="margin-top:14px;font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Recent raw MQTT (this node)</div>
+        <table style="width:100%;border-collapse:collapse">${trafficRows}</table>` : ''}
+      <div style="margin-top:12px;font-size:11px;color:var(--text-muted)">Broker: ${d.broker?.running ? 'Running' : 'Off'}</div>`;
   } catch (e) {
     body.innerHTML = '<div style="color:var(--red)">Could not load node details</div>';
   }

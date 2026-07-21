@@ -84,8 +84,9 @@ class MqttBrokerApp(tk.Tk):
         self.lbl_hint = ttk.Label(
             hint,
             text=(
-                "On each WiFi node: MQTT broker host = your PC IP · port 1883 · topic rssi/data\n"
-                "Payload CSV: NodeMAC,TagMAC,RSSI,Battery  —  allow TCP 1883 inbound in Windows Firewall"
+                f"On each WiFi node: MQTT broker = {ip} · port {port}\n"
+                "Topic varies by firmware (e.g. rssi/data or strata/v1/bluetooth/…).\n"
+                "Use server Diagnostics → Incoming traffic to see raw messages and payload format."
             ),
             justify=tk.LEFT,
             font=("TkDefaultFont", 9),
@@ -153,9 +154,10 @@ class MqttBrokerApp(tk.Tk):
         self.lbl_connect.configure(text=f"mqtt://{ip}:{port}")
         self.lbl_hint.configure(
             text=(
-                f"On each WiFi node: MQTT broker = {ip} · port {port} · topic rssi/data\n"
-                "Payload CSV: NodeMAC,TagMAC,RSSI,Battery  —  allow inbound TCP {port} in Windows Firewall"
-            ).format(port=port)
+                f"On each WiFi node: MQTT broker = {ip} · port {port}\n"
+                "Topic varies by firmware — inspect raw traffic in HOLO server Diagnostics.\n"
+                f"Allow inbound TCP {port} in Windows Firewall."
+            )
         )
 
     def _load_form(self) -> None:
