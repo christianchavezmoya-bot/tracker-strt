@@ -37,8 +37,13 @@ class AppConfig:
     network_bind_ip: str = ""         # cached IP for selected interface
 
     # Transport: how BlueApro sends tags to PC (vendor firmware)
-    transport_mode: str = "udp"  # udp | tcp | http_push | http_pull
+    transport_mode: str = "mqtt"  # mqtt | udp | tcp | http_push | http_pull
     tcp_listen_port: int = 8766
+    mqtt_broker_port: int = 1883
+    mqtt_topics: str = "rssi/data,rssi/raw,ble/rssi,wifi/rssi"
+    mqtt_username: str = ""
+    mqtt_password: str = ""
+    mqtt_tls: bool = False
 
     # HTTP mode (legacy): pull = PC GETs node API; push = node POSTs to PC listener
     http_mode: str = "push"
@@ -53,7 +58,7 @@ class AppConfig:
     listen_path: str = "/ingest/blueapro"
 
     poll_interval_sec: float = 2.0
-    discovery_ports: list = field(default_factory=lambda: [80, 8080, 8765, 5000])
+    discovery_ports: list = field(default_factory=lambda: [80, 1883, 8080, 8765, 5000])
 
     # Optional uplink to central HOLO-RTLS
     uplink_enabled: bool = False

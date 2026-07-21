@@ -53,6 +53,27 @@ LuCI **Network → Interfaces** does **not** configure BLE tag export. Options:
 - Ask vendor how STRATA firmware exports BLE scans (MQTT `rssi/data`, uCentral cloud, etc.)
 - **Do not** use System → Logging → External log server (syslog only)
 
+## Transport modes (MQTT recommended for OpenWrt / STRATA WiFi units)
+
+| Transport | Port | Direction |
+|-----------|------|-----------|
+| **MQTT** (recommended) | **1883** | PC **subscribes** to broker on WiFi unit |
+| UDP | 8765 | WiFi unit pushes to PC |
+| TCP | 8766 | WiFi unit pushes to PC |
+| HTTP push | 8765 | WiFi unit POSTs to PC |
+| HTTP pull | 80 | PC GETs node API (often missing) |
+
+### MQTT setup (OpenWrt / STRATA — your unit)
+
+1. Transport = **mqtt**
+2. Node / broker IP = **192.168.1.1** (WiFi unit)
+3. MQTT port = **1883**
+4. Topics = `rssi/data,rssi/raw,ble/rssi,wifi/rssi`
+5. **Connect** → Tags → **Start receiving tags**
+6. Data log → filter **MQTT** — expect CSV like `NodeMAC,TagMAC,RSSI,Battery`
+
+Payload format: `00:C0:CA:A1:4B:18,F9:2F:B6:2C:DE:24,-72,98`
+
 ## Transport modes (UDP / TCP / HTTP)
 
 There is **no industry-standard UDP port** for BLE gateways — pick any free port and use the **same number on BlueApro and PC**.

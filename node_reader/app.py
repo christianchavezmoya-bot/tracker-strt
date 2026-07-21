@@ -26,6 +26,7 @@ from node_reader.config_store import AppConfig, TagProfile, load_config, load_ta
 from node_reader.discovery import scan_network
 from node_reader.ingest_server import IngestServer
 from node_reader.net_ifaces import NetInterface, find_interface, list_interfaces
+from node_reader.mqtt_ingest import BLUEAPRO_MQTT_HINT, MqttIngestClient
 from node_reader.socket_ingest import (
     BLUEAPRO_TCP_HINT,
     BLUEAPRO_UDP_HINT,
@@ -57,6 +58,7 @@ class NodeReaderApp(tk.Tk):
         )
         self.udp_ingest = UdpIngestServer(on_devices=self._on_push_devices, log=self._log)
         self.tcp_ingest = TcpIngestServer(on_devices=self._on_push_devices, log=self._log)
+        self.mqtt_ingest = MqttIngestClient(on_devices=self._on_push_devices, log=self._log)
 
         self._client: BlueAproClient | None = None
         self._connected = False
@@ -110,7 +112,7 @@ class NodeReaderApp(tk.Tk):
         self.var_serial = tk.StringVar()
         ttk.Entry(r0, textvariable=self.var_serial, width=22).pack(side=tk.LEFT, padx=6)
 
-        conn = ttk.LabelFrame(f, text="BlueApro transport (PC listens — node pushes tags)")
+        conn = ttk.LabelFrame(f, text="Receive tags from WiFi unit (MQTT / UDP / TCP / HTTP)")
         conn.pack(fill=tk.X, **pad)
 
         net = ttk.Frame(conn)
@@ -131,11 +133,11 @@ class NodeReaderApp(tk.Tk):
         r2 = ttk.Frame(conn)
         r2.pack(fill=tk.X, padx=8, pady=4)
         ttk.Label(r2, text="Transport:").pack(side=tk.LEFT)
-        self.var_transport = tk.StringVar(value="udp")
+        self.var_transport = tk.StringVar(value="mqtt")
         self.cmb_transport = ttk.Combobox(
             r2,
             textvariable=self.var_transport,
-            values=("udp", "tcp", "http_push", "http_pull"),
+            values=("mqtt", "udp", "tcp", "http_push", "http_pull"),
             state="readonly",
             width=14,
         )
@@ -145,15 +147,24 @@ class NodeReaderApp(tk.Tk):
         self.var_listen_port_ui = tk.IntVar(value=8765)
         ttk.Spinbox(r2, from_=1024, to=65535, textvariable=self.var_listen_port_ui, width=7).pack(side=tk.LEFT, padx=4)
         ttk.Label(r2, text="(UDP/HTTP)", font=("TkDefaultFont", 8), foreground="#666").pack(side=tk.LEFT)
+        ttk.Label(r2, text="MQTT port:").pack(side=tk.LEFT, padx=(8, 0))
+        self.var_mqtt_port_ui = tk.IntVar(value=1883)
+        ttk.Spinbox(r2, from_=1, to=65535, textvariable=self.var_mqtt_port_ui, width=7).pack(side=tk.LEFT, padx=4)
         ttk.Label(r2, text="TCP port:").pack(side=tk.LEFT, padx=(8, 0))
         self.var_tcp_port_ui = tk.IntVar(value=8766)
         ttk.Spinbox(r2, from_=1024, to=65535, textvariable=self.var_tcp_port_ui, width=7).pack(side=tk.LEFT, padx=4)
+
+        r2m = ttk.Frame(conn)
+        r2m.pack(fill=tk.X, padx=8, pady=2)
+        ttk.Label(r2m, text="MQTT topics:").pack(side=tk.LEFT)
+        self.var_mqtt_topics = tk.StringVar(value="rssi/data,rssi/raw,ble/rssi,wifi/rssi")
+        ttk.Entry(r2m, textvariable=self.var_mqtt_topics, width=52).pack(side=tk.LEFT, padx=6)
 
         r2b = ttk.Frame(conn)
         r2b.pack(fill=tk.X, padx=8, pady=2)
         ttk.Label(
             r2b,
-            text="No standard UDP port — use 8765 (UDP) / 8766 (TCP) on BOTH BlueApro and PC. Allow in Windows Firewall.",
+            text="MQTT (recommended): PC subscribes to broker on WiFi unit · port 1883 · topics rssi/data",
             font=("TkDefaultFont", 8),
             foreground="#666",
         ).pack(side=tk.LEFT)
@@ -161,11 +172,11 @@ class NodeReaderApp(tk.Tk):
         r2c = ttk.Frame(conn)
         r2c.pack(fill=tk.X, padx=8, pady=4)
         ttk.Button(r2c, text="Scan WiFi nodes", command=self._scan_nodes).pack(side=tk.LEFT)
-        ttk.Label(r2c, text="Node IP (web UI / Pull):").pack(side=tk.LEFT, padx=(12, 0))
+        ttk.Label(r2c, text="Node / broker IP:").pack(side=tk.LEFT, padx=(12, 0))
         self.var_host = tk.StringVar()
         ttk.Entry(r2c, textvariable=self.var_host, width=16).pack(side=tk.LEFT, padx=4)
         ttk.Label(r2c, text="Port:").pack(side=tk.LEFT, padx=(8, 0))
-        self.var_port = tk.IntVar(value=80)
+        self.var_port = tk.IntVar(value=1883)
         ttk.Spinbox(r2c, from_=1, to=65535, textvariable=self.var_port, width=7).pack(side=tk.LEFT, padx=4)
         self.var_https = tk.BooleanVar(value=False)
         ttk.Checkbutton(r2c, text="HTTPS", variable=self.var_https).pack(side=tk.LEFT, padx=6)
@@ -178,7 +189,7 @@ class NodeReaderApp(tk.Tk):
         ttk.Label(r3, text="Node password:").pack(side=tk.LEFT, padx=(8, 0))
         self.var_node_pass = tk.StringVar()
         ttk.Entry(r3, textvariable=self.var_node_pass, width=16, show="*").pack(side=tk.LEFT, padx=4)
-        ttk.Label(r3, text="(BlueApro web UI password)", font=("TkDefaultFont", 8), foreground="#666").pack(side=tk.LEFT, padx=6)
+        ttk.Label(r3, text="(MQTT user / web UI password)", font=("TkDefaultFont", 8), foreground="#666").pack(side=tk.LEFT, padx=6)
 
         pick = ttk.LabelFrame(f, text="Discovered nodes — select to fill IP + port")
         pick.pack(fill=tk.BOTH, expand=True, **pad)
@@ -201,7 +212,7 @@ class NodeReaderApp(tk.Tk):
         self.lbl_conn = ttk.Label(act, text="● Disconnected", foreground="#c44")
         self.lbl_conn.pack(side=tk.RIGHT, padx=8)
 
-        push = ttk.LabelFrame(f, text="Configure BlueApro web UI (Transport — NOT OpenWrt router logging)")
+        push = ttk.LabelFrame(f, text="WiFi unit connection hint")
         push.pack(fill=tk.X, **pad)
         self.lbl_pc_ip = ttk.Label(push, text="", font=("Consolas", 9, "bold"))
         self.lbl_pc_ip.pack(padx=8, pady=(6, 2), anchor=tk.W)
@@ -221,13 +232,11 @@ class NodeReaderApp(tk.Tk):
         ttk.Label(
             flow,
             text=(
-                "A) BlueUp TinyGateway UI (has Transport / Encoding / Send realtime):\n"
-                "   Wi-Fi AP TinyGateway → http://192.168.4.1 (password blueup)\n"
-                "   → Configuration → Data transport/encoding → Raw UDP Client → PC IP:8765\n\n"
-                "B) OpenWrt LuCI (your screenshots — Network/Interfaces, STRATA logo):\n"
-                "   NO Transport menu. Check LuCI → Services for BLE/MQTT, or use AP mode (A).\n"
-                "   Do NOT use System → Logging → External log server (syslog only).\n\n"
-                "PC app: Transport=udp · Connect · Tags → Start receiving."
+                "OpenWrt/STRATA WiFi units usually publish BLE tags via MQTT port 1883.\n"
+                "  Transport = mqtt · Node/broker IP = 192.168.1.1 · Port 1883 · Connect\n"
+                "  Tags tab → Start receiving · hold MOKO tag near unit\n\n"
+                "BlueUp TinyGateway (UDP): AP TinyGateway → http://192.168.4.1 → Raw UDP Client\n"
+                "Do NOT use LuCI System → Logging (syslog only)."
             ),
             justify=tk.LEFT,
             font=("TkDefaultFont", 8),
@@ -289,11 +298,25 @@ class NodeReaderApp(tk.Tk):
         return self.var_transport.get()
 
     def _is_push_transport(self) -> bool:
-        return self._transport() in ("udp", "tcp", "http_push")
+        return self._transport() in ("mqtt", "udp", "tcp", "http_push")
+
+    def _mqtt_topics_list(self) -> list[str]:
+        raw = self.var_mqtt_topics.get().strip() or self.cfg.mqtt_topics
+        return [t.strip() for t in raw.split(",") if t.strip()]
+
+    def _mqtt_broker_host(self) -> str:
+        return self.var_host.get().strip() or self.cfg.node_host
 
     def _start_receivers(self) -> tuple[bool, str]:
-        bind = self._bind_ip() or "0.0.0.0"
         mode = self._transport()
+        if mode == "mqtt":
+            self.mqtt_ingest.host = self._mqtt_broker_host()
+            self.mqtt_ingest.port = int(self.var_mqtt_port_ui.get())
+            self.mqtt_ingest.topics = self._mqtt_topics_list()
+            self.mqtt_ingest.username = self.var_user.get().strip()
+            self.mqtt_ingest.password = self.var_node_pass.get()
+            return self.mqtt_ingest.start()
+        bind = self._bind_ip() or "0.0.0.0"
         if mode == "udp":
             self.udp_ingest.host = bind
             self.udp_ingest.port = int(self.var_listen_port_ui.get())
@@ -309,6 +332,7 @@ class NodeReaderApp(tk.Tk):
         return True, "Pull mode — PC polls node (no local listener)"
 
     def _stop_receivers(self) -> None:
+        self.mqtt_ingest.stop()
         self.ingest.stop()
         self.udp_ingest.stop()
         self.tcp_ingest.stop()
@@ -317,7 +341,13 @@ class NodeReaderApp(tk.Tk):
         mode = self._transport()
         pc_ip = self._bind_ip() or "YOUR_PC_IP"
         self.lbl_pc_ip.configure(text=f"Your PC IP on this network: {pc_ip}")
-        if mode == "udp":
+        if mode == "mqtt":
+            host = self._mqtt_broker_host() or "NODE_IP"
+            port = int(self.var_mqtt_port_ui.get())
+            topics = ", ".join(self._mqtt_topics_list())
+            self.lbl_push_uri.configure(text=f"MQTT subscribe → {host}:{port}")
+            self.lbl_transport_hint.configure(text=BLUEAPRO_MQTT_HINT.format(port=port, topics=topics))
+        elif mode == "udp":
             port = int(self.var_listen_port_ui.get())
             self.lbl_push_uri.configure(text=f"UDP → {pc_ip}:{port}")
             self.lbl_transport_hint.configure(text=BLUEAPRO_UDP_HINT.format(port=port))
@@ -396,7 +426,7 @@ class NodeReaderApp(tk.Tk):
         bar = ttk.Frame(f)
         bar.pack(fill=tk.X, **pad)
         self.var_filt = tk.StringVar(value="ALL")
-        for v in ("ALL", "UDP", "TCP", "NODE", "LOCAL", "UPLINK"):
+        for v in ("ALL", "MQTT", "UDP", "TCP", "NODE", "LOCAL", "UPLINK"):
             ttk.Radiobutton(bar, text=v, variable=self.var_filt, value=v, command=self._refresh_log).pack(side=tk.LEFT, padx=4)
         ttk.Button(bar, text="Clear", command=self._clear_log).pack(side=tk.RIGHT, padx=4)
         ttk.Button(bar, text="Export", command=self._export_log).pack(side=tk.RIGHT, padx=4)
@@ -447,13 +477,18 @@ class NodeReaderApp(tk.Tk):
         self.var_user.set(c.node_username)
         self.var_node_pass.set(c.node_password)
         self.var_serial.set(c.node_serial or "261FBLUEAO004")
-        mode = c.transport_mode or ("http_pull" if c.http_mode == "pull" else "http_push")
+        mode = c.transport_mode or ("http_pull" if c.http_mode == "pull" else "mqtt")
         self.var_transport.set(mode)
         self.var_dev_path.set(c.devices_path)
         self.var_health_path.set(c.health_path)
         self.var_listen_port.set(c.listen_port)
         self.var_listen_port_ui.set(c.listen_port)
         self.var_tcp_port_ui.set(c.tcp_listen_port)
+        self.var_mqtt_port_ui.set(c.mqtt_broker_port)
+        self.var_mqtt_topics.set(c.mqtt_topics)
+        if mode == "mqtt" and (not c.node_host or c.node_host == "192.168.4.1"):
+            self.var_host.set("192.168.1.1")
+            self.var_port.set(1883)
         self.var_poll_sec.set(c.poll_interval_sec)
         self.var_uplink.set(c.uplink_enabled)
         self.var_up_host.set(c.uplink_host)
@@ -481,6 +516,10 @@ class NodeReaderApp(tk.Tk):
         self.cfg.health_path = self.var_health_path.get().strip()
         self.cfg.listen_port = int(self.var_listen_port_ui.get())
         self.cfg.tcp_listen_port = int(self.var_tcp_port_ui.get())
+        self.cfg.mqtt_broker_port = int(self.var_mqtt_port_ui.get())
+        self.cfg.mqtt_topics = self.var_mqtt_topics.get().strip()
+        self.cfg.mqtt_username = self.var_user.get().strip()
+        self.cfg.mqtt_password = self.var_node_pass.get()
         self.cfg.poll_interval_sec = float(self.var_poll_sec.get())
         self.cfg.uplink_enabled = bool(self.var_uplink.get())
         self.cfg.uplink_host = self.var_up_host.get().strip()
@@ -535,7 +574,12 @@ class NodeReaderApp(tk.Tk):
         vals = self.node_tree.item(sel[0], "values")
         if vals:
             self.var_host.set(vals[0])
-            self.var_port.set(int(vals[1]))
+            port = int(vals[1])
+            self.var_port.set(port)
+            if port == 1883:
+                self.var_transport.set("mqtt")
+                self.var_mqtt_port_ui.set(1883)
+                self._update_transport_hint()
 
     def _probe_node(self) -> None:
         client = self._client_instance()
@@ -567,8 +611,8 @@ class NodeReaderApp(tk.Tk):
             )
         elif self._is_push_transport():
             lines.append(
-                "UDP/TCP push mode: tags come from BlueApro Transport, not these HTTP paths.\n"
-                "Listening on PC is what matters — ignore probe if BlueApro sends JSON to your PC IP."
+                "Push/MQTT mode: tags come from broker or gateway transport, not HTTP probe paths.\n"
+                "For MQTT: Connect first, then watch Data log filter MQTT for rssi/data messages."
             )
         else:
             lines.append("BlueApro tags need HTTP 200 on a BLE devices path, OR use udp/tcp push mode.")
@@ -581,6 +625,19 @@ class NodeReaderApp(tk.Tk):
         self._set_status("Probe complete — see Data log")
 
     def _test_node(self) -> None:
+        if self._transport() == "mqtt":
+            ok, msg = self._start_receivers()
+            if ok:
+                messagebox.showinfo(
+                    "MQTT OK",
+                    f"{msg}\n\nBroker: {self._mqtt_broker_host()}:{self.var_mqtt_port_ui.get()}\n"
+                    f"Topics: {self.var_mqtt_topics.get()}\n\n"
+                    "Tags tab → Start receiving · check Data log (filter MQTT).",
+                )
+            else:
+                messagebox.showerror("MQTT failed", msg)
+            return
+
         host = self.var_host.get().strip()
         if host:
             res = self._client_instance().test_connection()
@@ -631,7 +688,7 @@ class NodeReaderApp(tk.Tk):
                 messagebox.showerror("Connect failed", msg)
                 return
             host = self.var_host.get().strip()
-            if host.endswith(".1") or host in ("192.168.1.1", "10.0.0.1"):
+            if self._transport() != "mqtt" and (host.endswith(".1") or host in ("192.168.1.1", "10.0.0.1")):
                 messagebox.showwarning(
                     "Check node IP",
                     f"{host} is usually your router, not BlueApro.\n\n"
@@ -640,8 +697,10 @@ class NodeReaderApp(tk.Tk):
                 )
             self._connected = True
             self.btn_connect.configure(text="Disconnect")
-            label = {"udp": "UDP", "tcp": "TCP", "http_push": "HTTP push"}.get(self._transport(), "push")
-            self.lbl_conn.configure(text=f"● Listening ({label})", foreground="#2a8")
+            label = {"mqtt": "MQTT", "udp": "UDP", "tcp": "TCP", "http_push": "HTTP push"}.get(
+                self._transport(), "push"
+            )
+            self.lbl_conn.configure(text=f"● Connected ({label})", foreground="#2a8")
             self._set_status(msg)
             self._log("OUT", "LOCAL", msg)
             return
@@ -763,10 +822,10 @@ class NodeReaderApp(tk.Tk):
 
     def _on_push_devices(self, devices: list[NodeDevice]) -> None:
         src = devices[0].source if devices else "node-push"
-        label = {"udp": "udp", "tcp": "tcp"}.get(src, "node-push")
-        ch = {"udp": "UDP", "tcp": "TCP"}.get(src, "NODE")
+        label = {"udp": "udp", "tcp": "tcp", "mqtt": "mqtt"}.get(src, "node-push")
+        ch = {"udp": "UDP", "tcp": "TCP", "mqtt": "MQTT"}.get(src, "NODE")
         self.after(0, lambda: self._merge_devices(devices, label))
-        self._log("IN", ch, f"Push → {len(devices)} tag(s)")
+        self._log("IN", ch, f"→ {len(devices)} tag(s)")
         if self.var_uplink.get() and devices:
             self._uplink(devices)
 
