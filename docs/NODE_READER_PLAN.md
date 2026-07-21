@@ -1,7 +1,8 @@
-# HOLO-RTLS Node Reader — Windows Plan (v3)
+# HOLO-RTLS Node Reader — Windows Plan (v3 — BlueApro 6/6E)
 
-> **Corrected goal:** The Windows `.exe` **connects to a WiFi 6 / 6E Alfa network node** (edge scanner), receives tag data from that node, displays raw traffic, and optionally forwards to central HOLO-RTLS.  
-> **Port selection** = how the PC talks to the Alfa node (HTTP port, MQTT port, etc.).
+> **Device:** BlueApro WiFi 6/6E (e.g. S/N `261FBLUEAO004`), **vendor firmware** (BlueUp TinyGateway family).  
+> **Default link:** HTTP to node. **Port:** user-selectable in PC app (default 80).  
+> **Implemented:** `node_reader/` — pull + push modes, `.exe` via PyInstaller.
 
 ---
 
