@@ -1,4 +1,4 @@
-"""HOLO-RTLS Node Reader package."""
+"""HOLO MQTT Broker — PC broker for WiFi nodes."""
 from node_reader.app import main
 
 if __name__ == "__main__":

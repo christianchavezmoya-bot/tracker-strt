@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for HOLO-RTLS Node Reader Windows .exe"""
+"""PyInstaller spec for HOLO MQTT Broker Windows .exe"""
 
 block_cipher = None
 
@@ -8,11 +8,19 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[],
-    hiddenimports=['bleak', 'paho.mqtt.client', 'asyncio'],
+    hiddenimports=[
+        'paho.mqtt.client',
+        'amqtt',
+        'amqtt.broker',
+        'amqtt.plugins.authentication',
+        'node_reader.capture_plugin',
+        'node_reader.pc_broker',
+        'node_reader.mqtt_parse',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['bleak'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -27,7 +35,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='HOLO-RTLS-NodeReader',
+    name='HOLO-MQTT-Broker',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
