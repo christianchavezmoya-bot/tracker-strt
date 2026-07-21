@@ -553,10 +553,15 @@ async function render3DNodes() {
     _nodeMeshes3D = {};
 
     data.items.forEach(node => {
+      if (window.HoloCoords && !window.HoloCoords.isNodePlaced(node)) return;
+      const floorIdx = window._currentFloor != null ? window._currentFloor : 0;
+      if (window._applyFloorFilter3D && window.HoloCoords && !window.HoloCoords.nodeOnFloor(node, floorIdx)) return;
       const rx = node.pos_x ?? node.position?.x;
       const ry = node.pos_y ?? node.position?.y;
+      const rz = Number(node.pos_z ?? node.position?.z ?? 0);
       if (rx == null || ry == null) return;
       const w = mineToWorldXZ(Number(rx), Number(ry));
+      const height = Math.max(0.5, rz + 1.25);
       const geo = new THREE.CylinderGeometry(0.4, 0.5, 2.5, 8);
       const mat = new THREE.MeshStandardMaterial({
         color: 0x00e5ff,
@@ -565,14 +570,17 @@ async function render3DNodes() {
         roughness: 0.4,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(w.x, 1.25, w.z);
+      mesh.position.set(w.x, height, w.z);
       mesh._nodeId = node.id;
+      mesh.userData.node = node;
       window._scene.add(mesh);
       _nodeMeshes3D[node.id] = mesh;
     });
     mark3DDirty();
   } catch (_) { /* ignore */ }
 }
+
+window.render3DNodes = render3DNodes;
 
 // ── 3D Tracker dots (instanced) ───────────────────────────────────────────────
 function render3DTrackerDots() {
@@ -791,8 +799,71 @@ function on3DClick(e) {
     ((e.clientX - rect.left) / rect.width) * 2 - 1,
     -((e.clientY - rect.top) / rect.height) * 2 + 1,
   );
+  if (raycastNode(mouse)) return;
   raycastTracker(mouse);
 }
+
+function raycastNode(mouse) {
+  const meshes = Object.values(_nodeMeshes3D || {});
+  if (!meshes.length || !window._camera) return false;
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, window._camera);
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (hits.length > 0 && hits[0].object.userData.node) {
+    showNodeEditPanel3D(hits[0].object.userData.node);
+    return true;
+  }
+  return false;
+}
+
+function showNodeEditPanel3D(node) {
+  let panel = document.getElementById('nodeEdit3DPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'nodeEdit3DPanel';
+    panel.style.cssText = 'position:absolute;top:72px;right:16px;z-index:30;width:min(300px,90vw);background:rgba(8,15,30,.95);border:1px solid rgba(0,229,255,.35);border-radius:12px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,.45)';
+    document.getElementById('map3d')?.appendChild(panel);
+  }
+  const rx = node.pos_x ?? node.position?.x ?? 0;
+  const ry = node.pos_y ?? node.position?.y ?? 0;
+  const rz = node.pos_z ?? node.position?.z ?? 0;
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:#00e5ff"><i class="fa-solid fa-anchor"></i> Edit anchor</div>
+      <button type="button" id="nodeEdit3DClose" style="background:none;border:none;color:#94a3b8;cursor:pointer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px">Name</label>
+    <input id="nodeEdit3DName" class="form-input" style="width:100%;margin-bottom:10px;box-sizing:border-box" value="${(node.assigned_name || '').replace(/"/g, '&quot;')}">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+      <div><label style="font-size:10px;color:#94a3b8">X (m)</label><input id="nodeEdit3DX" type="number" step="0.1" class="form-input" style="width:100%" value="${Number(rx).toFixed(2)}"></div>
+      <div><label style="font-size:10px;color:#94a3b8">Y (m)</label><input id="nodeEdit3DY" type="number" step="0.1" class="form-input" style="width:100%" value="${Number(ry).toFixed(2)}"></div>
+      <div><label style="font-size:10px;color:#94a3b8">Z / floor</label><input id="nodeEdit3DZ" type="number" step="0.1" class="form-input" style="width:100%" value="${Number(rz).toFixed(2)}"></div>
+    </div>
+    <div style="font-size:10px;color:#64748b;margin-bottom:10px;font-family:monospace">${node.mac_address || ''}</div>
+    <button type="button" id="nodeEdit3DSave" class="btn btn-primary btn-sm" style="width:100%"><i class="fa-solid fa-floppy-disk"></i> Save</button>`;
+  panel.style.display = 'block';
+  panel.querySelector('#nodeEdit3DClose').onclick = () => { panel.style.display = 'none'; };
+  panel.querySelector('#nodeEdit3DSave').onclick = async () => {
+    const body = {
+      assigned_name: panel.querySelector('#nodeEdit3DName').value.trim(),
+      pos_x: parseFloat(panel.querySelector('#nodeEdit3DX').value) || 0,
+      pos_y: parseFloat(panel.querySelector('#nodeEdit3DY').value) || 0,
+      pos_z: parseFloat(panel.querySelector('#nodeEdit3DZ').value) || 0,
+      metadata: { placed_on_map: true },
+    };
+    const res = await API.patch('/nodes/' + node.id, body);
+    if (res && res.ok) {
+      if (window.showToast) window.showToast('Anchor updated', 'success');
+      await render3DNodes();
+      if (window.renderNodeMarkers) await window.renderNodeMarkers();
+      if (window.refreshRtlsSetupUi) window.refreshRtlsSetupUi();
+      try { await API.post('/nodes/refresh-positions', {}); } catch (_) {}
+      panel.style.display = 'none';
+    } else if (window.showToast) window.showToast('Save failed', 'error');
+  };
+}
+
+window.showNodeEditPanel3D = showNodeEditPanel3D;
 
 function on3DTouchEnd(e) {
   if (e.changedTouches.length === 1) {
@@ -860,6 +931,7 @@ function updateTrackerSelectionVisuals() {
  */
 window.set3DFloor = function(floorIndex) {
   window._currentFloor = floorIndex;
+  window._applyFloorFilter = true;
   window._applyFloorFilter3D = true;
 
   const camPhis = [0.45, 0.35, 0.25];
@@ -878,7 +950,15 @@ window.set3DFloor = function(floorIndex) {
     if (wireMesh) wireMesh.visible = show;
   });
 
+  Object.values(_nodeMeshes3D || {}).forEach(mesh => {
+    const node = mesh.userData && mesh.userData.node;
+    if (!node) return;
+    const show = !window.HoloCoords || window.HoloCoords.nodeOnFloor(node, floorIndex);
+    mesh.visible = show;
+  });
+
   render3DTrackerDots();
+  if (window.renderNodeMarkers) window.renderNodeMarkers();
   mark3DDirty();
 };
 

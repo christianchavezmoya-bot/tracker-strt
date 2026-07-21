@@ -66,12 +66,59 @@ def touch_node_heartbeat(mac: str) -> None:
 
 def sync_anchor_position_from_node(node: WifiNode, anchor: WifiAnchor) -> None:
     """Copy calibrated map coordinates from WifiNode to WifiAnchor when set."""
+    if node.assigned_name:
+        anchor.name = node.assigned_name
     if node.pos_x or node.pos_y:
         anchor.real_x = float(node.pos_x)
         anchor.real_y = float(node.pos_y)
         anchor.real_z = float(node.pos_z or 0.0)
         if anchor.status == int(AnchorStatus.CALIBRATING) and (node.pos_x or node.pos_y):
             anchor.status = int(AnchorStatus.ACTIVE)
+
+
+def sync_node_full(node: WifiNode) -> WifiAnchor:
+    """Sync WifiNode fields to matching WifiAnchor (create if needed)."""
+    anchor = ensure_wifi_anchor(node.mac_address, name=node.assigned_name)
+    sync_anchor_position_from_node(node, anchor)
+    return anchor
+
+
+def delete_anchor_for_node(mac: str) -> None:
+    """Remove scanner anchor row when WifiNode is deleted."""
+    from backend.models.detection import DetectionEvent
+
+    mac = mac.upper()
+    anchor = db.session.query(WifiAnchor).filter_by(mac_address=mac).first()
+    if not anchor:
+        return
+    db.session.query(DetectionEvent).filter_by(anchor_id=anchor.id).delete()
+    db.session.delete(anchor)
+
+
+def count_placed_nodes(session=None) -> int:
+    from backend.services.node_utils import is_node_placed
+
+    sess = session or db.session
+    nodes = sess.query(WifiNode).all()
+    return sum(1 for n in nodes if is_node_placed(n))
+
+
+def refresh_tag_positions(session=None) -> dict:
+    """Recompute RSSI positions and push to Live Map via SSE."""
+    from backend.services.wifi_positioning import WifiPositioningService
+
+    sess = session or db.session
+    pos_svc = WifiPositioningService(sess)
+    fixes = pos_svc.compute_all_positions()
+    if fixes:
+        from backend.api.scanner import _sync_scanner_fixes_to_core
+        _sync_scanner_fixes_to_core(fixes)
+    else:
+        sess.commit()
+    return {
+        "positions_computed": len(fixes or []),
+        "anchors_placed": count_placed_nodes(sess),
+    }
 
 
 def ensure_node_pair(mac: str) -> tuple[WifiNode, WifiAnchor]:

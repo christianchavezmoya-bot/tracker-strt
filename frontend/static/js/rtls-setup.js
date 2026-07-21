@@ -164,6 +164,9 @@ async function loadMqttNetworkPanel() {
     const running = data.running;
     const pill = running ? 'pill-green' : (data.enabled ? 'pill-yellow' : 'pill-gray');
     const label = running ? 'Running' : (data.enabled ? 'Not running' : 'Off');
+    const portOk = data.port_reachable === true;
+    const portPill = !data.enabled ? 'pill-gray' : (portOk ? 'pill-green' : 'pill-yellow');
+    const portLabel = !data.enabled ? 'Off' : (portOk ? 'Reachable' : 'Not reachable');
     statusEl.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
         <div class="hw-summary-card" style="padding:14px;text-align:center">
@@ -171,8 +174,8 @@ async function loadMqttNetworkPanel() {
           <div style="font-size:11px;color:var(--text-muted)">Status</div>
         </div>
         <div class="hw-summary-card" style="padding:14px;text-align:center">
-          <div style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:var(--cyan)">${data.port}</div>
-          <div style="font-size:11px;color:var(--text-muted)">Port</div>
+          <div class="status-pill ${portPill}" style="margin:0 auto 8px"><span class="status-dot-sm"></span>${portLabel}</div>
+          <div style="font-size:11px;color:var(--text-muted)">Port ${data.port} check</div>
         </div>
         <div class="hw-summary-card" style="padding:14px;text-align:center">
           <div style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:var(--cyan)">${data.message_count || 0}</div>

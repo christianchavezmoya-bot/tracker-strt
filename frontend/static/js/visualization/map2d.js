@@ -758,8 +758,20 @@ function showNodeForm(realX, realY, pixelX, pixelY) {
       if (res && res.ok) {
         closeNodeForm();
         await renderNodeMarkers();
+        if (window.render3DNodes) await window.render3DNodes();
+        if (window.refreshRtlsSetupUi) await window.refreshRtlsSetupUi();
+        let setupReady = false;
+        try {
+          const refresh = await API.post('/nodes/refresh-positions', {});
+          const rd = await API.json(refresh);
+          setupReady = !!(refresh && refresh.ok && rd.ready);
+        } catch (_) {}
         if (window.showToast) {
-          window.showToast(`"${name}" placed at X=${realX.toFixed(1)}, Y=${realY.toFixed(1)}`, 'success');
+          if (setupReady) {
+            window.showToast('Setup complete — tags should appear on the map', 'success');
+          } else {
+            window.showToast(`"${name}" placed at X=${realX.toFixed(1)}, Y=${realY.toFixed(1)}`, 'success');
+          }
         }
         // Refresh unplaced nodes list
         await loadUnplacedNodes();
@@ -879,9 +891,13 @@ async function renderNodeMarkers() {
     const data = await API.json(res);
     if (gen !== _nodeMarkerRenderGen) return;
     if (!res || !res.ok || !data.items) return;
+    const floorIdx = window._currentFloor != null ? window._currentFloor : 0;
     data.items.forEach(node => {
+      if (window.HoloCoords && !window.HoloCoords.isNodePlaced(node)) return;
+      if (window._applyFloorFilter && window.HoloCoords && !window.HoloCoords.nodeOnFloor(node, floorIdx)) return;
       const rx = node.pos_x ?? node.position?.x;
       const ry = node.pos_y ?? node.position?.y;
+      const rz = node.pos_z ?? node.position?.z ?? 0;
       if (rx == null || ry == null) return;
       const latlng = realToLatLng(Number(rx), Number(ry));
       const typeIconMap = { UWB_ANCHOR: 'fa-wifi', WIFI_AP: 'fa-wifi', GATEWAY: 'fa-tower-cell', REPEATER: 'fa-repeat' };
@@ -906,9 +922,16 @@ async function renderNodeMarkers() {
       marker.on('dragend', async (e) => {
         const real = latLngToReal(e.target.getLatLng());
         try {
-          const res = await API.patch('/nodes/' + node.id, { pos_x: real.x, pos_y: real.y });
+          const res = await API.patch('/nodes/' + node.id, {
+            pos_x: real.x, pos_y: real.y,
+            metadata: { placed_on_map: true },
+          });
           if (res && res.ok) {
             if (window.showToast) window.showToast('Anchor moved', 'success');
+            if (window.refreshRtlsSetupUi) window.refreshRtlsSetupUi();
+            try {
+              await API.post('/nodes/refresh-positions', {});
+            } catch (_) {}
             // Refresh coverage rings
             if (window.layerState && window.layerState.coverage) renderCoverageRings();
           } else if (window.showToast) window.showToast('Failed to save anchor position', 'error');

@@ -352,7 +352,10 @@ async function loadDiagnosticsView() {
     const s = data.summary || {};
     if (brokerEl) {
       const runLabel = b.running ? '🟢 Broker running' : (b.enabled ? '⚠️ Broker enabled but not running' : '⚪ Broker off');
-      brokerEl.innerHTML = `<strong>${runLabel}</strong> · Port ${b.port || 1883} · `
+      const portHint = b.enabled
+        ? (b.port_reachable ? ' · Port reachable' : ' · Port not reachable from server')
+        : '';
+      brokerEl.innerHTML = `<strong>${runLabel}</strong>${portHint} · Port ${b.port || 1883} · `
         + `${s.online || 0} online, ${s.weak || 0} weak, ${s.offline || 0} offline · `
         + `<span class="mono">${b.broker_url || ''}</span>`;
     }

@@ -162,11 +162,28 @@ def create_node():
     elif body.get("metadata_json"):
         node.metadata_json = body["metadata_json"]
     db.session.add(node)
+    db.session.flush()
+    try:
+        from backend.services.anchor_sync import sync_node_full
+        sync_node_full(node)
+    except Exception:
+        pass
     db.session.commit()
 
     AuditLog.log(action="node.create", user_id=int(get_jwt_identity()),
                  entity_type="WifiNode", entity_id=node.id)
     return jsonify({"node": node.to_dict()}), 201
+
+
+@nodes_bp.route("/refresh-positions", methods=["POST"])
+@jwt_required()
+def refresh_positions():
+    """Force trilateration after anchor changes — updates Live Map tags."""
+    from backend.services.anchor_sync import refresh_tag_positions, count_placed_nodes
+    result = refresh_tag_positions(db.session)
+    result["anchors_required"] = 3
+    result["ready"] = count_placed_nodes(db.session) >= 3
+    return jsonify({"ok": True, **result})
 
 
 @nodes_bp.route("/diagnostics", methods=["GET"])
@@ -296,9 +313,10 @@ def update_node(node_id):
         if px or py or (body.get("metadata") or {}).get("placed_on_map"):
             mark_node_placed(node)
             try:
-                from backend.services.anchor_sync import ensure_node_pair, sync_anchor_position_from_node
-                _node, anchor = ensure_node_pair(node.mac_address)
-                sync_anchor_position_from_node(node, anchor)
+                from backend.services.anchor_sync import sync_node_full, count_placed_nodes, refresh_tag_positions
+                sync_node_full(node)
+                if count_placed_nodes(db.session) >= 3:
+                    refresh_tag_positions(db.session)
             except Exception:
                 pass
 
@@ -341,6 +359,11 @@ def delete_node(node_id):
     node = WifiNode.query.get_or_404(node_id)
     AuditLog.log(action="node.delete", user_id=int(get_jwt_identity()),
                  entity_type="WifiNode", entity_id=node.id)
+    try:
+        from backend.services.anchor_sync import delete_anchor_for_node
+        delete_anchor_for_node(node.mac_address)
+    except Exception:
+        pass
     db.session.delete(node)
     db.session.commit()
     return jsonify({"message": "Deleted"}), 200

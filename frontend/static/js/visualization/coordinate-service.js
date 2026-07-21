@@ -95,6 +95,21 @@ window.HoloCoords = (function () {
     return z >= base - 5 && z <= base + 15;
   }
 
+  function nodeOnFloor(node, floorIndex) {
+    const z = node.pos_z != null ? node.pos_z : (node.position && node.position.z != null ? node.position.z : 0);
+    const base = floorHeightForIndex(floorIndex);
+    return z >= base - 5 && z <= base + 15;
+  }
+
+  function isNodePlaced(node) {
+    const meta = typeof node.metadata === 'object' ? node.metadata : null;
+    if (meta && meta.placed_on_map === true) return true;
+    if (meta && meta.placed_on_map === false) return false;
+    const x = node.position && node.position.x != null ? node.position.x : node.pos_x;
+    const y = node.position && node.position.y != null ? node.position.y : node.pos_y;
+    return x != null && y != null && (Number(x) !== 0 || Number(y) !== 0);
+  }
+
   return {
     setCalibration,
     pixelToReal,
@@ -105,6 +120,8 @@ window.HoloCoords = (function () {
     displayToReal,
     floorHeightForIndex,
     trackerOnFloor,
+    nodeOnFloor,
+    isNodePlaced,
     getState: () => ({ ..._state }),
   };
 })();

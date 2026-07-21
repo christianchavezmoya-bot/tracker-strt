@@ -128,6 +128,19 @@ def start_if_configured() -> None:
         start_embedded_broker()
 
 
+def _check_port_listening(host: str, port: int, timeout: float = 1.0) -> bool:
+    import socket
+
+    connect_host = host
+    if connect_host in ("0.0.0.0", "", "*"):
+        connect_host = "127.0.0.1"
+    try:
+        with socket.create_connection((connect_host, int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def broker_status_summary(message: str | None = None, start_ok: bool | None = None) -> dict:
     from backend.services.mqtt_broker_service import get_mqtt_broker
     from backend.services.mqtt_tag_ingest import get_mqtt_tag_ingest
@@ -144,6 +157,8 @@ def broker_status_summary(message: str | None = None, start_ok: bool | None = No
     if enabled and not running:
         status = "error"
 
+    port_reachable = _check_port_listening(host_hint, port) if enabled else False
+
     out = {
         "enabled": enabled,
         "running": running,
@@ -152,6 +167,7 @@ def broker_status_summary(message: str | None = None, start_ok: bool | None = No
         "port": port,
         "host_hint": host_hint,
         "broker_url": f"mqtt://{host_hint}:{port}",
+        "port_reachable": port_reachable,
         "message_count": broker.message_count if broker else 0,
         "last_error": broker.last_error if broker else None,
         "ingest": ingest.diagnostics() if ingest else None,
