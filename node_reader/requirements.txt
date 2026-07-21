@@ -1,0 +1,5 @@
+# HOLO-RTLS Node Reader — standalone PC tag / WiFi node tester
+bleak>=0.21.0
+requests>=2.31.0
+paho-mqtt>=2.0.0
+pyinstaller>=6.0.0
