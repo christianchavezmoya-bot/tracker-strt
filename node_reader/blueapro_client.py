@@ -37,6 +37,8 @@ def detect_host_type(body: str, content_type: str = "") -> str:
     """Guess whether HTTP response is from BlueApro, OpenWrt router, etc."""
     text = (body or "")[:8000].lower()
     if "openwrt" in text or "luci" in text or "cgi-bin/luci" in text:
+        if any(k in text for k in ("strata", "ucentral", "ucentral.io")):
+            return "openwrt_strata"
         return "openwrt"
     if any(k in text for k in ("blueup", "tinygateway", "blueapro", "blue beacon")):
         return "blueapro"
@@ -53,11 +55,25 @@ def detect_host_type(body: str, content_type: str = "") -> str:
 
 
 ROUTER_HINT = (
-    "192.168.1.1 is usually your WiFi/router (OpenWrt), not the BlueApro BLE scanner.\n\n"
-    "Fix:\n"
-    "1) Scan WiFi nodes again and pick a different IP (not .1 unless it is really the BlueApro).\n"
-    "2) Or use Push mode: in BlueApro web UI set HTTP transport URI to your PC address shown below.\n"
-    "   Vendor firmware sends tags TO your PC — it does not expose /api/tags for Pull."
+    "This host runs OpenWrt (LuCI admin) — not the BlueUp Transport UI.\n\n"
+    "You will NOT find Transport / Encoding / Send realtime in LuCI Network menus.\n\n"
+    "If this is BlueApro hardware with OpenWrt/STRATA firmware, BLE export must be "
+    "configured elsewhere (Services tab, MQTT, SSH, or vendor portal).\n\n"
+    "If the device also has BlueUp TinyGateway firmware, try:\n"
+    "  • Wi-Fi AP: SSID TinyGateway / password tinygateway\n"
+    "  • Browser: http://192.168.4.1  (login password: blueup)\n"
+    "  • Configuration → Data transport/encoding → Raw UDP Client\n\n"
+    "Do NOT use LuCI → System → Logging → External log server (syslog only, not tags)."
+)
+
+OPENWRT_STRATA_HINT = (
+    "OpenWrt + STRATA/uCentral detected at this IP.\n\n"
+    "This admin UI manages Wi-Fi/network — it does not stream BLE tags to UDP 8765.\n\n"
+    "Next steps:\n"
+    "1) LuCI → Services — look for BLE, MQTT, scanner, or STRATA apps\n"
+    "2) Try BlueUp UI at http://192.168.4.1 (AP mode: SSID TinyGateway)\n"
+    "3) Ask BlueApro vendor which firmware you have and how to export BLE scans\n"
+    "4) If MQTT broker exists (port 1883), tags may publish to topic rssi/data"
 )
 
 PUSH_MODE_HINT = (
@@ -161,12 +177,13 @@ class BlueAproClient:
                     last_err = f"HTTP {r.status_code}"
                     continue
                 page_type = detect_host_type(r.text, r.headers.get("content-type", ""))
-                if page_type == "openwrt":
+                if page_type in ("openwrt", "openwrt_strata"):
+                    detail = OPENWRT_STRATA_HINT if page_type == "openwrt_strata" else ROUTER_HINT
                     return NodeHealth(
                         False,
-                        "Connected to OpenWrt router — not a BlueApro scanner",
-                        ROUTER_HINT,
-                        device_type="openwrt",
+                        "OpenWrt admin UI — no BlueUp Transport menu here",
+                        detail,
+                        device_type=page_type,
                     )
                 if r.status_code == 200 and page_type == "blueapro":
                     return NodeHealth(

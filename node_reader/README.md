@@ -30,7 +30,30 @@ Direct AP mode: `http://192.168.4.1` port **80**
 
 **S/N example:** `261FBLUEAO004`
 
-## Transport modes (most BlueApro units use UDP or TCP)
+## Which web UI do you have?
+
+| UI you see | Has Transport menu? | How to send tags to PC |
+|------------|---------------------|-------------------------|
+| **BlueUp TinyGateway** (Configuration → BLE / transport) | Yes | Raw UDP Client → PC IP:8765 |
+| **OpenWrt LuCI** (Network, System, STRATA logo) | **No** | Not in LuCI Network — try AP mode or LuCI → Services |
+
+### BlueUp firmware (Transport / Encoding / Send realtime)
+
+1. Connect PC Wi-Fi to gateway AP: SSID **TinyGateway**, password **tinygateway**
+2. Open **http://192.168.4.1** (password **blueup**)
+3. **Configuration → Data transport/encoding → Raw UDP Client**
+4. Host = PC IP, Port = **8765**, Encoding = JSON Parsed, Send realtime ON
+
+### OpenWrt / STRATA firmware (LuCI screenshots)
+
+LuCI **Network → Interfaces** does **not** configure BLE tag export. Options:
+
+- LuCI → **Services** — look for BLE, MQTT, or scanner packages
+- Try BlueUp UI via AP mode (above) if hardware supports both stacks
+- Ask vendor how STRATA firmware exports BLE scans (MQTT `rssi/data`, uCentral cloud, etc.)
+- **Do not** use System → Logging → External log server (syslog only)
+
+## Transport modes (UDP / TCP / HTTP)
 
 There is **no industry-standard UDP port** for BLE gateways — pick any free port and use the **same number on BlueApro and PC**.
 

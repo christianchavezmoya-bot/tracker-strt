@@ -216,17 +216,18 @@ class NodeReaderApp(tk.Tk):
         )
         self.lbl_transport_hint.pack(padx=8, pady=(0, 6), anchor=tk.W)
 
-        flow = ttk.LabelFrame(f, text="Quick steps (UDP / TCP — most BlueApro units)")
+        flow = ttk.LabelFrame(f, text="Two firmware types — pick the right UI")
         flow.pack(fill=tk.X, **pad)
         ttk.Label(
             flow,
             text=(
-                "1) Select PC network (Ethernet or Wi-Fi) — same LAN as BlueApro.\n"
-                "2) Transport = udp (or tcp) · PC ports 8765 / 8766.\n"
-                "3) Connect (starts PC listener) → configure BlueApro Transport (see box above).\n"
-                "4) Tags tab → Start receiving · hold MOKO tag near BlueApro.\n"
-                "5) Open BlueApro web UI at Node IP (not 192.168.1.1 router).\n"
-                "6) Do NOT use OpenWrt LuCI → System → Logging — that sends router syslog, not BLE tags."
+                "A) BlueUp TinyGateway UI (has Transport / Encoding / Send realtime):\n"
+                "   Wi-Fi AP TinyGateway → http://192.168.4.1 (password blueup)\n"
+                "   → Configuration → Data transport/encoding → Raw UDP Client → PC IP:8765\n\n"
+                "B) OpenWrt LuCI (your screenshots — Network/Interfaces, STRATA logo):\n"
+                "   NO Transport menu. Check LuCI → Services for BLE/MQTT, or use AP mode (A).\n"
+                "   Do NOT use System → Logging → External log server (syslog only).\n\n"
+                "PC app: Transport=udp · Connect · Tags → Start receiving."
             ),
             justify=tk.LEFT,
             font=("TkDefaultFont", 8),
@@ -561,6 +562,24 @@ class NodeReaderApp(tk.Tk):
         self._set_status("Probe complete — see Data log")
 
     def _test_node(self) -> None:
+        host = self.var_host.get().strip()
+        if host:
+            res = self._client_instance().test_connection()
+            if res.device_type in ("openwrt", "openwrt_strata", "generic"):
+                messagebox.showwarning("Firmware check", f"{res.message}\n\n{res.detail}")
+                self._log("IN", "NODE", res.message)
+                if self._is_push_transport():
+                    return
+            elif not res.ok and not self._is_push_transport():
+                messagebox.showerror("Test failed", f"{res.message}\n\n{res.detail}")
+                return
+            elif res.ok and not self._is_push_transport():
+                msg = res.message
+                if res.detail:
+                    msg += f"\n\n{res.detail}"
+                messagebox.showinfo("Test OK", msg)
+                return
+
         if self._is_push_transport():
             ok, msg = self._start_receivers()
             if ok:
