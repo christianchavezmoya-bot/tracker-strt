@@ -36,8 +36,12 @@ class AppConfig:
     network_interface_key: str = ""   # e.g. "Wi-Fi|10.7.15.76"
     network_bind_ip: str = ""         # cached IP for selected interface
 
-    # HTTP mode: pull = PC GETs node API; push = node POSTs to PC listener
-    http_mode: str = "pull"  # pull | push
+    # Transport: how BlueApro sends tags to PC (vendor firmware)
+    transport_mode: str = "udp"  # udp | tcp | http_push | http_pull
+    tcp_listen_port: int = 8766
+
+    # HTTP mode (legacy): pull = PC GETs node API; push = node POSTs to PC listener
+    http_mode: str = "push"
     devices_path: str = "/api/ble/devices"
     health_path: str = "/api/system"
     scan_start_path: str = "/api/ble/scanner/start"

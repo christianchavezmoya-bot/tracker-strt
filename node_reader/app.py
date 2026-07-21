@@ -26,6 +26,14 @@ from node_reader.config_store import AppConfig, TagProfile, load_config, load_ta
 from node_reader.discovery import scan_network
 from node_reader.ingest_server import IngestServer
 from node_reader.net_ifaces import NetInterface, find_interface, list_interfaces
+from node_reader.socket_ingest import (
+    BLUEAPRO_TCP_HINT,
+    BLUEAPRO_UDP_HINT,
+    RECOMMENDED_TCP_PORT,
+    RECOMMENDED_UDP_PORT,
+    TcpIngestServer,
+    UdpIngestServer,
+)
 from node_reader.tag_classifier import SCAN_TYPE_LABELS
 from node_reader.transport import ServerTransport
 
@@ -47,6 +55,8 @@ class NodeReaderApp(tk.Tk):
             on_devices=self._on_push_devices,
             log=self._log,
         )
+        self.udp_ingest = UdpIngestServer(on_devices=self._on_push_devices, log=self._log)
+        self.tcp_ingest = TcpIngestServer(on_devices=self._on_push_devices, log=self._log)
 
         self._client: BlueAproClient | None = None
         self._connected = False
@@ -99,7 +109,7 @@ class NodeReaderApp(tk.Tk):
         self.var_serial = tk.StringVar()
         ttk.Entry(r0, textvariable=self.var_serial, width=22).pack(side=tk.LEFT, padx=6)
 
-        conn = ttk.LabelFrame(f, text="Connect to BlueApro node (HTTP)")
+        conn = ttk.LabelFrame(f, text="BlueApro transport (PC listens — node pushes tags)")
         conn.pack(fill=tk.X, **pad)
 
         net = ttk.Frame(conn)
@@ -117,24 +127,47 @@ class NodeReaderApp(tk.Tk):
         )
         self.lbl_iface_hint.pack(side=tk.LEFT, padx=8)
 
-        r1 = ttk.Frame(conn)
-        r1.pack(fill=tk.X, padx=8, pady=6)
-        ttk.Button(r1, text="Scan WiFi nodes", command=self._scan_nodes).pack(side=tk.LEFT)
-        ttk.Label(r1, text="Node IP:").pack(side=tk.LEFT, padx=(12, 0))
-        self.var_host = tk.StringVar()
-        ttk.Entry(r1, textvariable=self.var_host, width=18).pack(side=tk.LEFT, padx=4)
-        ttk.Label(r1, text="Port:").pack(side=tk.LEFT, padx=(8, 0))
-        self.var_port = tk.IntVar(value=80)
-        ttk.Spinbox(r1, from_=1, to=65535, textvariable=self.var_port, width=7).pack(side=tk.LEFT, padx=4)
-        self.var_https = tk.BooleanVar(value=False)
-        ttk.Checkbutton(r1, text="HTTPS", variable=self.var_https).pack(side=tk.LEFT, padx=6)
-
         r2 = ttk.Frame(conn)
         r2.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Label(r2, text="HTTP mode:").pack(side=tk.LEFT)
-        self.var_http_mode = tk.StringVar(value="pull")
-        ttk.Radiobutton(r2, text="Pull (PC → node GET)", variable=self.var_http_mode, value="pull").pack(side=tk.LEFT, padx=6)
-        ttk.Radiobutton(r2, text="Push (node POST → PC)", variable=self.var_http_mode, value="push").pack(side=tk.LEFT, padx=6)
+        ttk.Label(r2, text="Transport:").pack(side=tk.LEFT)
+        self.var_transport = tk.StringVar(value="udp")
+        self.cmb_transport = ttk.Combobox(
+            r2,
+            textvariable=self.var_transport,
+            values=("udp", "tcp", "http_push", "http_pull"),
+            state="readonly",
+            width=14,
+        )
+        self.cmb_transport.pack(side=tk.LEFT, padx=6)
+        self.cmb_transport.bind("<<ComboboxSelected>>", lambda _e: self._update_transport_hint())
+        ttk.Label(r2, text="PC listen port:").pack(side=tk.LEFT, padx=(12, 0))
+        self.var_listen_port_ui = tk.IntVar(value=8765)
+        ttk.Spinbox(r2, from_=1024, to=65535, textvariable=self.var_listen_port_ui, width=7).pack(side=tk.LEFT, padx=4)
+        ttk.Label(r2, text="(UDP/HTTP)", font=("TkDefaultFont", 8), foreground="#666").pack(side=tk.LEFT)
+        ttk.Label(r2, text="TCP port:").pack(side=tk.LEFT, padx=(8, 0))
+        self.var_tcp_port_ui = tk.IntVar(value=8766)
+        ttk.Spinbox(r2, from_=1024, to=65535, textvariable=self.var_tcp_port_ui, width=7).pack(side=tk.LEFT, padx=4)
+
+        r2b = ttk.Frame(conn)
+        r2b.pack(fill=tk.X, padx=8, pady=2)
+        ttk.Label(
+            r2b,
+            text="No standard UDP port — use 8765 (UDP) / 8766 (TCP) on BOTH BlueApro and PC. Allow in Windows Firewall.",
+            font=("TkDefaultFont", 8),
+            foreground="#666",
+        ).pack(side=tk.LEFT)
+
+        r2c = ttk.Frame(conn)
+        r2c.pack(fill=tk.X, padx=8, pady=4)
+        ttk.Button(r2c, text="Scan WiFi nodes", command=self._scan_nodes).pack(side=tk.LEFT)
+        ttk.Label(r2c, text="Node IP (web UI / Pull):").pack(side=tk.LEFT, padx=(12, 0))
+        self.var_host = tk.StringVar()
+        ttk.Entry(r2c, textvariable=self.var_host, width=16).pack(side=tk.LEFT, padx=4)
+        ttk.Label(r2c, text="Port:").pack(side=tk.LEFT, padx=(8, 0))
+        self.var_port = tk.IntVar(value=80)
+        ttk.Spinbox(r2c, from_=1, to=65535, textvariable=self.var_port, width=7).pack(side=tk.LEFT, padx=4)
+        self.var_https = tk.BooleanVar(value=False)
+        ttk.Checkbutton(r2c, text="HTTPS", variable=self.var_https).pack(side=tk.LEFT, padx=6)
 
         r3 = ttk.Frame(conn)
         r3.pack(fill=tk.X, padx=8, pady=4)
@@ -167,27 +200,31 @@ class NodeReaderApp(tk.Tk):
         self.lbl_conn = ttk.Label(act, text="● Disconnected", foreground="#c44")
         self.lbl_conn.pack(side=tk.RIGHT, padx=8)
 
-        push = ttk.LabelFrame(f, text="Push mode — configure BlueApro transport URI to this PC")
+        push = ttk.LabelFrame(f, text="Configure BlueApro web UI (Transport section)")
         push.pack(fill=tk.X, **pad)
+        self.lbl_pc_ip = ttk.Label(push, text="", font=("Consolas", 9, "bold"))
+        self.lbl_pc_ip.pack(padx=8, pady=(6, 2), anchor=tk.W)
         self.lbl_push_uri = ttk.Label(push, text="", font=("Consolas", 9))
-        self.lbl_push_uri.pack(padx=8, pady=6, anchor=tk.W)
-        ttk.Label(
+        self.lbl_push_uri.pack(padx=8, pady=4, anchor=tk.W)
+        self.lbl_transport_hint = ttk.Label(
             push,
-            text="In BlueApro web UI → Transport → HTTP → set URI to the address above (Basic Auth optional).",
+            text="",
             font=("TkDefaultFont", 8),
             foreground="#666",
-        ).pack(padx=8, pady=(0, 2), anchor=tk.W)
+            justify=tk.LEFT,
+        )
+        self.lbl_transport_hint.pack(padx=8, pady=(0, 6), anchor=tk.W)
 
-        flow = ttk.LabelFrame(f, text="How this screen connects to your BlueApro (from your setup)")
+        flow = ttk.LabelFrame(f, text="Quick steps (UDP / TCP — most BlueApro units)")
         flow.pack(fill=tk.X, **pad)
         ttk.Label(
             flow,
             text=(
-                "1) Select PC network (Wi-Fi or Ethernet) — must be same LAN as the node.\n"
-                "2) Scan WiFi nodes → picks hosts on that subnet (e.g. 10.7.15.x).\n"
-                "3) Click a row → fills Node IP + Port (80 or 8080).\n"
-                "4) Pull: Test node → Connect → Tags → Start receiving (PC GETs node).\n"
-                "5) Push: set BlueApro transport URI to this PC IP below → Connect → Start receiving."
+                "1) Select PC network (Ethernet or Wi-Fi) — same LAN as BlueApro.\n"
+                "2) Transport = udp (or tcp) · PC ports 8765 / 8766.\n"
+                "3) Connect (starts PC listener) → configure BlueApro Transport (see box above).\n"
+                "4) Tags tab → Start receiving · hold MOKO tag near BlueApro.\n"
+                "5) Open BlueApro web UI at Node IP (not 192.168.1.1 router)."
             ),
             justify=tk.LEFT,
             font=("TkDefaultFont", 8),
@@ -226,13 +263,16 @@ class NodeReaderApp(tk.Tk):
         self.cfg.network_interface_key = iface.key
         self.cfg.network_bind_ip = iface.ip
         self.lbl_iface_hint.configure(
-            text=f"Scan subnet {iface.subnet_prefix}.x · Push URI uses {iface.ip}"
+            text=f"Scan subnet {iface.subnet_prefix}.x · BlueApro target host uses {iface.ip}"
         )
-        self._update_push_uri()
-        if self.ingest.running:
-            self.ingest.stop()
-            self.ingest.host = iface.ip
-            self.ingest.start()
+        self._update_transport_hint()
+        if self._connected and self._is_push_transport():
+            self._stop_receivers()
+            ok, msg = self._start_receivers()
+            if ok:
+                self._set_status(msg)
+            else:
+                messagebox.showwarning("Listener", msg)
 
     def _bind_ip(self) -> str | None:
         iface = self._selected_iface()
@@ -242,13 +282,60 @@ class NodeReaderApp(tk.Tk):
         iface = self._selected_iface()
         return iface.subnet_prefix if iface else None
 
-    def _start_ingest(self) -> tuple[bool, str]:
-        self.ingest.port = int(self.var_listen_port.get())
-        bind = self._bind_ip()
-        self.ingest.host = bind or "0.0.0.0"
-        if self.ingest.running:
-            return True, f"Listening on {bind or '0.0.0.0'}:{self.ingest.port}"
-        return self.ingest.start()
+    def _transport(self) -> str:
+        return self.var_transport.get()
+
+    def _is_push_transport(self) -> bool:
+        return self._transport() in ("udp", "tcp", "http_push")
+
+    def _start_receivers(self) -> tuple[bool, str]:
+        bind = self._bind_ip() or "0.0.0.0"
+        mode = self._transport()
+        if mode == "udp":
+            self.udp_ingest.host = bind
+            self.udp_ingest.port = int(self.var_listen_port_ui.get())
+            return self.udp_ingest.start()
+        if mode == "tcp":
+            self.tcp_ingest.host = bind
+            self.tcp_ingest.port = int(self.var_tcp_port_ui.get())
+            return self.tcp_ingest.start()
+        if mode == "http_push":
+            self.ingest.port = int(self.var_listen_port_ui.get())
+            self.ingest.host = bind
+            return self.ingest.start()
+        return True, "Pull mode — PC polls node (no local listener)"
+
+    def _stop_receivers(self) -> None:
+        self.ingest.stop()
+        self.udp_ingest.stop()
+        self.tcp_ingest.stop()
+
+    def _update_transport_hint(self) -> None:
+        mode = self._transport()
+        pc_ip = self._bind_ip() or "YOUR_PC_IP"
+        self.lbl_pc_ip.configure(text=f"Your PC IP on this network: {pc_ip}")
+        if mode == "udp":
+            port = int(self.var_listen_port_ui.get())
+            self.lbl_push_uri.configure(text=f"UDP → {pc_ip}:{port}")
+            self.lbl_transport_hint.configure(text=BLUEAPRO_UDP_HINT.format(port=port))
+        elif mode == "tcp":
+            port = int(self.var_tcp_port_ui.get())
+            self.lbl_push_uri.configure(text=f"TCP → {pc_ip}:{port}")
+            self.lbl_transport_hint.configure(text=BLUEAPRO_TCP_HINT.format(port=port))
+        elif mode == "http_push":
+            port = int(self.var_listen_port_ui.get())
+            path = self.cfg.listen_path
+            self.lbl_push_uri.configure(text=f"http://{pc_ip}:{port}{path}")
+            self.lbl_transport_hint.configure(
+                text="BlueApro web UI → Transport → HTTP → set URI above · Enable Send realtime"
+            )
+        else:
+            host = self.var_host.get().strip() or "NODE_IP"
+            port = int(self.var_port.get())
+            self.lbl_push_uri.configure(text=f"Pull GET → http://{host}:{port}{self.cfg.devices_path}")
+            self.lbl_transport_hint.configure(
+                text="PC polls node HTTP API. Many BlueApro units lack /api/tags — prefer UDP/TCP push."
+            )
 
     def _build_tags_tab(self) -> None:
         f = self.tab_tags
@@ -306,7 +393,7 @@ class NodeReaderApp(tk.Tk):
         bar = ttk.Frame(f)
         bar.pack(fill=tk.X, **pad)
         self.var_filt = tk.StringVar(value="ALL")
-        for v in ("ALL", "NODE", "LOCAL", "UPLINK"):
+        for v in ("ALL", "UDP", "TCP", "NODE", "LOCAL", "UPLINK"):
             ttk.Radiobutton(bar, text=v, variable=self.var_filt, value=v, command=self._refresh_log).pack(side=tk.LEFT, padx=4)
         ttk.Button(bar, text="Clear", command=self._clear_log).pack(side=tk.RIGHT, padx=4)
         ttk.Button(bar, text="Export", command=self._export_log).pack(side=tk.RIGHT, padx=4)
@@ -357,10 +444,13 @@ class NodeReaderApp(tk.Tk):
         self.var_user.set(c.node_username)
         self.var_node_pass.set(c.node_password)
         self.var_serial.set(c.node_serial or "261FBLUEAO004")
-        self.var_http_mode.set(c.http_mode)
+        mode = c.transport_mode or ("http_pull" if c.http_mode == "pull" else "http_push")
+        self.var_transport.set(mode)
         self.var_dev_path.set(c.devices_path)
         self.var_health_path.set(c.health_path)
         self.var_listen_port.set(c.listen_port)
+        self.var_listen_port_ui.set(c.listen_port)
+        self.var_tcp_port_ui.set(c.tcp_listen_port)
         self.var_poll_sec.set(c.poll_interval_sec)
         self.var_uplink.set(c.uplink_enabled)
         self.var_up_host.set(c.uplink_host)
@@ -368,7 +458,7 @@ class NodeReaderApp(tk.Tk):
         self.var_up_key.set(c.uplink_api_key)
         self.var_up_mac.set(c.uplink_anchor_mac)
         self._refresh_interfaces(select_key=c.network_interface_key)
-        self._update_push_uri()
+        self._update_transport_hint()
 
     def _save_settings(self) -> None:
         iface = self._selected_iface()
@@ -381,10 +471,13 @@ class NodeReaderApp(tk.Tk):
         self.cfg.node_username = self.var_user.get().strip()
         self.cfg.node_password = self.var_node_pass.get()
         self.cfg.node_serial = self.var_serial.get().strip()
-        self.cfg.http_mode = self.var_http_mode.get()
+        tm = self.var_transport.get()
+        self.cfg.transport_mode = tm
+        self.cfg.http_mode = "pull" if tm == "http_pull" else "push"
         self.cfg.devices_path = self.var_dev_path.get().strip()
         self.cfg.health_path = self.var_health_path.get().strip()
-        self.cfg.listen_port = int(self.var_listen_port.get())
+        self.cfg.listen_port = int(self.var_listen_port_ui.get())
+        self.cfg.tcp_listen_port = int(self.var_tcp_port_ui.get())
         self.cfg.poll_interval_sec = float(self.var_poll_sec.get())
         self.cfg.uplink_enabled = bool(self.var_uplink.get())
         self.cfg.uplink_host = self.var_up_host.get().strip()
@@ -392,7 +485,7 @@ class NodeReaderApp(tk.Tk):
         self.cfg.uplink_api_key = self.var_up_key.get()
         self.cfg.uplink_anchor_mac = self.var_up_mac.get().strip().upper()
         save_config(self.cfg)
-        self._update_push_uri()
+        self._update_transport_hint()
         self._set_status("Settings saved")
 
     def _client_instance(self) -> BlueAproClient:
@@ -406,12 +499,6 @@ class NodeReaderApp(tk.Tk):
             health_path=self.var_health_path.get().strip(),
             source_ip=self._bind_ip(),
         )
-
-    def _update_push_uri(self) -> None:
-        port = int(self.var_listen_port.get())
-        path = self.cfg.listen_path
-        pc_ip = self._bind_ip() or "YOUR_PC_IP"
-        self.lbl_push_uri.configure(text=f"http://{pc_ip}:{port}{path}")
 
     # ── Node actions ──────────────────────────────────────────────────────────
 
@@ -472,12 +559,16 @@ class NodeReaderApp(tk.Tk):
         self._set_status("Probe complete — see Data log")
 
     def _test_node(self) -> None:
-        if self.var_http_mode.get() == "push":
-            ok, msg = self._start_ingest()
+        if self._is_push_transport():
+            ok, msg = self._start_receivers()
             if ok:
-                messagebox.showinfo("Push mode", f"Local listener OK.\nConfigure BlueApro URI:\n{self.lbl_push_uri.cget('text')}")
+                messagebox.showinfo(
+                    "Listener OK",
+                    f"{msg}\n\nConfigure BlueApro Transport:\n{self.lbl_push_uri.cget('text')}\n\n"
+                    f"{self.lbl_transport_hint.cget('text')}",
+                )
             else:
-                messagebox.showerror("Push mode", msg)
+                messagebox.showerror("Listener failed", msg)
             return
         res = self._client_instance().test_connection()
         if res.ok:
@@ -494,15 +585,15 @@ class NodeReaderApp(tk.Tk):
             self._disconnect()
             return
         self._save_settings()
-        mode = self.var_http_mode.get()
-        if mode == "push":
-            ok, msg = self._start_ingest()
+        if self._is_push_transport():
+            ok, msg = self._start_receivers()
             if not ok:
                 messagebox.showerror("Connect failed", msg)
                 return
             self._connected = True
             self.btn_connect.configure(text="Disconnect")
-            self.lbl_conn.configure(text="● Listening (push mode)", foreground="#2a8")
+            label = {"udp": "UDP", "tcp": "TCP", "http_push": "HTTP push"}.get(self._transport(), "push")
+            self.lbl_conn.configure(text=f"● Listening ({label})", foreground="#2a8")
             self._set_status(msg)
             self._log("OUT", "LOCAL", msg)
             return
@@ -513,17 +604,18 @@ class NodeReaderApp(tk.Tk):
             return
         if res.detail and "Push mode" in res.detail:
             if messagebox.askyesno(
-                "Use Push mode?",
-                f"{res.message}\n\n{res.detail}\n\nSwitch to Push mode now?",
+                "Use UDP push?",
+                f"{res.message}\n\n{res.detail}\n\nSwitch to UDP transport now?",
             ):
-                self.var_http_mode.set("push")
-                ok, msg = self._start_ingest()
+                self.var_transport.set("udp")
+                self._update_transport_hint()
+                ok, msg = self._start_receivers()
                 if not ok:
                     messagebox.showerror("Connect failed", msg)
                     return
                 self._connected = True
                 self.btn_connect.configure(text="Disconnect")
-                self.lbl_conn.configure(text="● Listening (push mode)", foreground="#2a8")
+                self.lbl_conn.configure(text="● Listening (UDP)", foreground="#2a8")
                 self._set_status(msg)
                 self._log("OUT", "LOCAL", msg)
                 return
@@ -537,11 +629,9 @@ class NodeReaderApp(tk.Tk):
         self._set_status(res.message)
         self._log("OUT", "NODE", f"CONNECT {self._client.base_url}")
 
-        if not self.ingest.running:
-            self._start_ingest()
-
     def _disconnect(self) -> None:
         self._stop_polling()
+        self._stop_receivers()
         self._connected = False
         self._client = None
         self.btn_connect.configure(text="Connect")
@@ -560,7 +650,7 @@ class NodeReaderApp(tk.Tk):
             self._polling = True
             self.btn_poll.configure(text="■ Stop receiving tags")
             self.lbl_poll.configure(text="Receiving…")
-            if self.var_http_mode.get() == "pull" and self._client:
+            if self._transport() == "http_pull" and self._client:
                 self._client.start_scan()
             self._poll_loop()
 
@@ -577,14 +667,20 @@ class NodeReaderApp(tk.Tk):
     def _poll_loop(self) -> None:
         if not self._polling:
             return
-        if self.var_http_mode.get() == "pull":
+        mode = self._transport()
+        if mode == "http_pull":
             self._poll_once()
+        elif mode == "http_push":
+            self._merge_devices(self.ingest.state.devices.values(), "node-push")
+        if self._devices:
+            self._refresh_tag_tree()
         interval = max(0.5, float(self.var_poll_sec.get())) * 1000
         self._poll_job = self.after(int(interval), self._poll_loop)
 
     def _poll_once(self) -> None:
-        if self.var_http_mode.get() == "push":
-            self._merge_devices(self.ingest.state.devices.values(), "node-push")
+        if self._is_push_transport() and self._transport() != "http_pull":
+            if self._transport() == "http_push":
+                self._merge_devices(self.ingest.state.devices.values(), "node-push")
             return
         if not self._client:
             return
@@ -607,7 +703,7 @@ class NodeReaderApp(tk.Tk):
                     "No tags from Pull mode",
                     f"{err}\n\n"
                     "Your BlueApro likely does not support Pull (GET /api/tags).\n"
-                    "Switch to Push mode and set BlueApro transport URI to:\n"
+                    "Switch Transport to udp and configure BlueApro Raw UDP Client:\n"
                     f"  {self.lbl_push_uri.cget('text')}",
                 ))
             return
@@ -618,8 +714,11 @@ class NodeReaderApp(tk.Tk):
             self._uplink(devices)
 
     def _on_push_devices(self, devices: list[NodeDevice]) -> None:
-        self.after(0, lambda: self._merge_devices(devices, "node-push"))
-        self._log("IN", "NODE", f"POST push → {len(devices)} tag(s)")
+        src = devices[0].source if devices else "node-push"
+        label = {"udp": "udp", "tcp": "tcp"}.get(src, "node-push")
+        ch = {"udp": "UDP", "tcp": "TCP"}.get(src, "NODE")
+        self.after(0, lambda: self._merge_devices(devices, label))
+        self._log("IN", ch, f"Push → {len(devices)} tag(s)")
         if self.var_uplink.get() and devices:
             self._uplink(devices)
 
@@ -749,9 +848,12 @@ class NodeReaderApp(tk.Tk):
                 f.write(f"[{ts}] {d} {c} {m}\n")
 
     def _open_dashboard(self) -> None:
-        port = int(self.var_listen_port.get())
+        if self._transport() != "http_push":
+            messagebox.showinfo("Dashboard", "Local dashboard is only available in http_push transport mode.")
+            return
+        port = int(self.var_listen_port_ui.get())
         if not self.ingest.running:
-            self._start_ingest()
+            self._start_receivers()
         host = self._bind_ip() or "127.0.0.1"
         webbrowser.open(f"http://{host}:{port}/")
 
@@ -760,7 +862,7 @@ class NodeReaderApp(tk.Tk):
 
     def _on_close(self) -> None:
         self._stop_polling()
-        self.ingest.stop()
+        self._stop_receivers()
         self.transport.disconnect()
         self.destroy()
 
