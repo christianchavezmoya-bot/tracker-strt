@@ -202,6 +202,14 @@ def run_node_scan():
     return jsonify({"ok": True, **scan_nodes(db.session)})
 
 
+@nodes_bp.route("/network-interfaces", methods=["GET"])
+@jwt_required()
+def server_network_interfaces():
+    """Local server interfaces (for MQTT ingest troubleshooting)."""
+    from backend.services.net_interface_resolve import list_local_ipv4
+    return jsonify({"interfaces": list_local_ipv4()})
+
+
 @nodes_bp.route("/commission-queue", methods=["GET"])
 @jwt_required()
 def commission_queue_api():

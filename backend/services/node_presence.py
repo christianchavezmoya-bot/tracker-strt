@@ -39,12 +39,28 @@ def log_node_presence(
     )
 
 
-def update_node_ip_metadata(node: WifiNode, ip: str | None) -> None:
-    if not ip:
-        return
+def update_node_connection_metadata(
+    node: WifiNode,
+    *,
+    ip: str | None = None,
+    server_interface: str | None = None,
+    server_interface_label: str | None = None,
+) -> None:
     import json
     meta = get_node_metadata(node)
-    if meta.get("node_ip") == ip:
-        return
-    meta["node_ip"] = ip
-    node.metadata_json = json.dumps(meta)
+    changed = False
+    if ip and meta.get("node_ip") != ip:
+        meta["node_ip"] = ip
+        changed = True
+    if server_interface and meta.get("server_interface") != server_interface:
+        meta["server_interface"] = server_interface
+        changed = True
+    if server_interface_label and meta.get("server_interface_label") != server_interface_label:
+        meta["server_interface_label"] = server_interface_label
+        changed = True
+    if changed:
+        node.metadata_json = json.dumps(meta)
+
+
+def update_node_ip_metadata(node: WifiNode, ip: str | None) -> None:
+    update_node_connection_metadata(node, ip=ip)

@@ -63,21 +63,30 @@ class MqttTagIngestService:
                     from backend.services.mqtt_client_registry import (
                         get_ip_for_node, link_node_key, note_node_ip, register_client,
                     )
-                    from backend.services.node_presence import log_node_presence, update_node_ip_metadata
+                    from backend.services.net_interface_resolve import interface_label, resolve_server_interface
+                    from backend.services.node_presence import log_node_presence, update_node_connection_metadata
                     from backend.services.mqtt_node_detect import _extract_strata_rssi
 
                     if client_ip:
                         register_client(client_id or "", client_ip)
-                    link_node_key(node_key, client_id or "", client_ip=client_ip)
+                    server_iface = resolve_server_interface(client_ip) if client_ip else None
+                    iface_label = interface_label(client_ip, server_iface) if client_ip else None
+                    link_node_key(
+                        node_key, client_id or "",
+                        client_ip=client_ip, server_interface=server_iface,
+                    )
                     node = register_node_from_mqtt(
                         node_key, detect_hints, client_id=client_id, payload=payload,
                     )
                     node_id = node.id
                     rssi = _extract_strata_rssi(payload or "")
                     ip = client_ip or get_ip_for_node(node_key)
-                    if ip:
-                        note_node_ip(node_key, ip)
-                        update_node_ip_metadata(node, ip)
+                    if ip or server_iface:
+                        note_node_ip(node_key, ip, server_interface=server_iface)
+                        update_node_connection_metadata(
+                            node, ip=ip, server_interface=server_iface,
+                            server_interface_label=iface_label,
+                        )
                     log_node_presence(node, online=True, rssi=rssi, node_ip=ip)
                     db.session.commit()
                     mac = node_key.upper()
@@ -88,7 +97,14 @@ class MqttTagIngestService:
                     logger.exception("Failed to register node from MQTT %s", node_key)
                     db.session.rollback()
 
-        from backend.services.mqtt_client_registry import get_ip_for_node
+        from backend.services.mqtt_client_registry import get_ip_for_node, get_iface_for_node
+        from backend.services.net_interface_resolve import interface_label, resolve_server_interface
+
+        resolved_iface = None
+        if client_ip:
+            resolved_iface = resolve_server_interface(client_ip)
+        elif node_key:
+            resolved_iface = get_iface_for_node(node_key)
 
         get_mqtt_traffic_log().append(
             client_id=client_id,
@@ -97,6 +113,7 @@ class MqttTagIngestService:
             node_key=node_key,
             node_id=node_id,
             client_ip=client_ip or (get_ip_for_node(node_key) if node_key else None),
+            server_interface=resolved_iface,
             parsed=parsed,
             parse_count=len(readings),
             payload_format=detect_hints.get("payload_format", "unknown"),

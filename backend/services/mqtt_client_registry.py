@@ -8,6 +8,7 @@ from typing import Optional
 _lock = threading.Lock()
 _by_client: dict[str, str] = {}
 _by_node_key: dict[str, str] = {}
+_by_node_iface: dict[str, str] = {}
 
 
 def _normalize_ip(remote_address: str | None) -> str | None:
@@ -40,7 +41,13 @@ def register_client(client_id: str, remote_address: str | None) -> None:
         _by_client[client_id] = ip
 
 
-def link_node_key(node_key: str, client_id: str, *, client_ip: str | None = None) -> None:
+def link_node_key(
+    node_key: str,
+    client_id: str,
+    *,
+    client_ip: str | None = None,
+    server_interface: str | None = None,
+) -> None:
     if not node_key:
         return
     ip = _normalize_ip(client_ip)
@@ -49,14 +56,25 @@ def link_node_key(node_key: str, client_id: str, *, client_ip: str | None = None
             ip = _by_client.get(client_id)
         if ip:
             _by_node_key[node_key.upper()] = ip
+        if server_interface:
+            _by_node_iface[node_key.upper()] = server_interface
 
 
-def note_node_ip(node_key: str, client_ip: str | None) -> None:
+def note_node_ip(node_key: str, client_ip: str | None, server_interface: str | None = None) -> None:
     ip = _normalize_ip(client_ip)
     if not node_key or not ip:
         return
     with _lock:
         _by_node_key[node_key.upper()] = ip
+        if server_interface:
+            _by_node_iface[node_key.upper()] = server_interface
+
+
+def note_node_interface(node_key: str, server_interface: str | None) -> None:
+    if not node_key or not server_interface:
+        return
+    with _lock:
+        _by_node_iface[node_key.upper()] = server_interface
 
 
 def get_ip_for_client(client_id: str) -> Optional[str]:
@@ -67,3 +85,8 @@ def get_ip_for_client(client_id: str) -> Optional[str]:
 def get_ip_for_node(node_key: str) -> Optional[str]:
     with _lock:
         return _by_node_key.get((node_key or "").upper())
+
+
+def get_iface_for_node(node_key: str) -> Optional[str]:
+    with _lock:
+        return _by_node_iface.get((node_key or "").upper())

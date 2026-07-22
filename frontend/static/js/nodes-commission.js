@@ -26,7 +26,8 @@ function nodeTooltip(item) {
     `ID: ${item.mac_address}`,
     item.strata_node_id ? `STRATA: ${item.strata_node_id}` : '',
     item.node_ip && item.node_ip !== '—' ? `IP: ${item.node_ip}` : '',
-    item.client_ip && item.client_ip !== '—' && item.client_ip !== item.node_ip ? `Client IP: ${item.client_ip}` : '',
+    item.server_interface_label || item.server_interface ? `Interface: ${item.server_interface_label || item.server_interface}` : '',
+    item.ip_conflict ? `⚠ IP shared with: ${(item.ip_shared_with || []).join(', ')}` : '',
     item.last_topic ? `Topic: ${item.last_topic}` : '',
     item.payload_format ? `Format: ${item.payload_format}` : '',
     item.last_heard_at ? `Last heard: ${fmtNodeTime(item.last_heard_at)}` : '',
@@ -72,22 +73,35 @@ function renderCommissionStats(data) {
   const items = data.items || [];
   const online = items.filter(i => i.online).length;
   el.textContent = `${items.length} anchors · ${online} online · scanned ${fmtNodeTime(data.scanned_at)}`;
+  const hint = document.getElementById('commissionIpConflictHint');
+  if (hint) {
+    const conflicts = data.ip_conflicts || {};
+    const keys = Object.keys(conflicts);
+    hint.textContent = keys.length
+      ? `⚠ Same IP on multiple anchors: ${keys.map(ip => `${ip} (${conflicts[ip].length})`).join(', ')} — may be one physical unit or Wi‑Fi relay.`
+      : '';
+  }
 }
 
 function renderCommissionTable() {
   const tbody = document.getElementById('commissionScanBody');
   if (!tbody) return;
   if (!commissionScanCache.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No anchors detected — turn on MQTT receiver and power on WiFi units.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No anchors detected — turn on MQTT receiver and power on WiFi units.</td></tr>';
     return;
   }
   tbody.innerHTML = commissionScanCache.map(item => {
     const name = item.name || item.mac_address;
     const ip = item.node_ip || '—';
+    const iface = item.server_interface_label || item.server_interface || '—';
+    const ipCell = item.ip_conflict
+      ? `<span class="mono" style="color:var(--yellow)" title="Shared IP — ${(item.ip_shared_with || []).join(', ')}">${ip} ⚠</span>`
+      : `<span class="mono">${ip}</span>`;
     const title = nodeTooltip(item).replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
     return `<tr class="${commissionSelectedId === item.node_id ? 'row-selected' : ''}" onclick="selectCommissionNode(${item.node_id})">
       <td title="${title}"><strong>${name}</strong></td>
-      <td class="mono" title="${title}">${ip}</td>
+      <td class="mono" title="${title}">${ipCell}</td>
+      <td title="${title}" style="font-size:11px">${iface}</td>
       <td title="${title}">${fmtNodeTime(item.last_heard_at)}</td>
       <td>${statePill(item.commission_state)}</td>
       <td>${item.online ? '<span style="color:var(--green)">Online</span>' : '<span style="color:var(--text-muted)">Offline</span>'}</td>

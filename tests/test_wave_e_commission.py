@@ -16,15 +16,17 @@ STRATA_PAYLOAD = "[1,1750730515,28,214282185227987,1,828033288983,-94]"
 def test_scan_nodes_api(client, auth_headers, app, db_session):
     with app.app_context():
         ingest = init_mqtt_tag_ingest(app=app)
-        ingest.handle_message("c1", STRATA_TOPIC, STRATA_PAYLOAD)
+        ingest.handle_message("c1", STRATA_TOPIC, STRATA_PAYLOAD, "10.60.1.50")
 
     res = client.get("/api/nodes/scan", headers=auth_headers)
     assert res.status_code == 200
     data = res.get_json()
     assert data["total"] >= 1
+    assert "ip_conflicts" in data
     row = next(i for i in data["items"] if i["mac_address"] == "STRATA:214282185227987")
     assert "name" in row
     assert "node_ip" in row
+    assert "server_interface" in row
     assert "last_heard_at" in row
 
 
