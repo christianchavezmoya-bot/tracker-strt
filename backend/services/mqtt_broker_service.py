@@ -11,7 +11,7 @@ from backend.services.mqtt_capture_plugin import clear_message_handlers, registe
 logger = logging.getLogger(__name__)
 
 LogFn = Callable[[str, str, str], None]
-OnMessage = Callable[[str, str, str], None]  # client_id, topic, payload
+OnMessage = Callable[[str, str, str, str | None], None]  # client_id, topic, payload, client_ip
 
 
 class MqttBrokerService:
@@ -55,11 +55,11 @@ class MqttBrokerService:
         ready = threading.Event()
         result: dict = {"ok": False, "msg": ""}
 
-        def _handler(client_id: str, topic: str, payload: str) -> None:
+        def _handler(client_id: str, topic: str, payload: str, client_ip: str | None = None) -> None:
             self.message_count += 1
-            self.log("IN", "MQTT", f"{client_id} → {topic}: {payload[:200]}")
+            self.log("IN", "MQTT", f"{client_id} ({client_ip or '?'}) → {topic}: {payload[:200]}")
             if self.on_message:
-                self.on_message(client_id, topic, payload)
+                self.on_message(client_id, topic, payload, client_ip)
 
         register_message_handler(_handler)
         bind_addr = f"{self.bind}:{self.port}"

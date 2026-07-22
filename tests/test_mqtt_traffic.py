@@ -38,10 +38,25 @@ def test_traffic_log_ring_buffer():
     assert items[0]["parsed"] is False
 
 
+def test_traffic_log_includes_client_ip():
+    log = get_mqtt_traffic_log()
+    log.append(
+        client_id="c1",
+        topic=STRATA_TOPIC,
+        payload=STRATA_PAYLOAD,
+        node_key="STRATA:273983315172900",
+        client_ip="10.60.1.50",
+        parsed=False,
+        payload_format="strata_v1_array",
+    )
+    item = log.list_entries(limit=1)[0]
+    assert item["client_ip"] == "10.60.1.50"
+
+
 def test_ingest_registers_strata_node_without_parsing(app, db_session):
     with app.app_context():
         ingest = init_mqtt_tag_ingest(app=app)
-        ingest.handle_message("client-1", STRATA_TOPIC, STRATA_PAYLOAD)
+        ingest.handle_message("client-1", STRATA_TOPIC, STRATA_PAYLOAD, "10.60.1.50")
 
     node = db_session.query(WifiNode).filter_by(mac_address="STRATA:273983315172900").first()
     assert node is not None
@@ -51,6 +66,18 @@ def test_ingest_registers_strata_node_without_parsing(app, db_session):
     meta = json.loads(node.metadata_json)
     assert meta.get("mqtt_auto_detected") is True
     assert meta.get("strata_node_id") == "273983315172900"
+    assert meta.get("node_ip") == "10.60.1.50"
+
+
+def test_mqtt_traffic_api_includes_client_ip(client, auth_headers, app):
+    with app.app_context():
+        ingest = init_mqtt_tag_ingest(app=app)
+        ingest.handle_message("c1", STRATA_TOPIC, STRATA_PAYLOAD, "10.60.1.51")
+
+    res = client.get("/api/nodes/mqtt-traffic?limit=10", headers=auth_headers)
+    assert res.status_code == 200
+    items = res.get_json()["items"]
+    assert any(i.get("client_ip") == "10.60.1.51" for i in items)
 
 
 def test_mqtt_traffic_api(client, auth_headers, app):

@@ -16,6 +16,7 @@ class MqttTrafficEntry:
     payload: str
     node_key: Optional[str] = None
     node_id: Optional[int] = None
+    client_ip: Optional[str] = None
     parsed: bool = False
     parse_count: int = 0
     payload_format: str = "unknown"
@@ -44,6 +45,7 @@ class MqttTrafficLog:
         payload: str,
         node_key: str | None = None,
         node_id: int | None = None,
+        client_ip: str | None = None,
         parsed: bool = False,
         parse_count: int = 0,
         payload_format: str = "unknown",
@@ -55,6 +57,7 @@ class MqttTrafficLog:
             payload=(payload or "")[:2000],
             node_key=node_key,
             node_id=node_id,
+            client_ip=client_ip,
             parsed=parsed,
             parse_count=parse_count,
             payload_format=payload_format,

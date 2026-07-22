@@ -335,12 +335,13 @@
                 <th>Time</th>
                 <th>Topic</th>
                 <th>Node</th>
+                <th>IP</th>
                 <th>Parsed</th>
                 <th>Payload</th>
               </tr>
             </thead>
             <tbody id="mqttTrafficTable">
-              <tr><td colspan="5" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>
+              <tr><td colspan="6" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>
             </tbody>
           </table>
         </div>
@@ -541,7 +542,7 @@ async function loadMqttTraffic(showSpinner) {
   const summaryEl = document.getElementById('trafficSummary');
   if (!tbody) return;
   if (showSpinner) {
-    tbody.innerHTML = '<tr><td colspan="5" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>';
   }
   try {
     const res = await API.get('/nodes/mqtt-traffic?limit=80');
@@ -553,7 +554,7 @@ async function loadMqttTraffic(showSpinner) {
     }
     const items = data.items || [];
     if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No MQTT messages yet — turn on broker in Settings and power on WiFi units.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No MQTT messages yet — turn on broker in Settings and power on WiFi units.</td></tr>';
       return;
     }
     trafficCache = items;
@@ -565,17 +566,19 @@ async function loadMqttTraffic(showSpinner) {
       const nodeLabel = row.node_key
         ? `<span class="mono">${row.node_key}</span>${row.node_id ? '' : ' <span style="color:var(--yellow);font-size:10px">new</span>'}`
         : '<span style="color:var(--text-muted)">—</span>';
+      const ip = row.client_ip || '—';
       const preview = (row.payload_preview || row.payload || '').replace(/</g, '&lt;');
       return `<tr style="cursor:pointer" onclick="showTrafficDetail(${idx})">
         <td class="mono" style="white-space:nowrap">${t}</td>
         <td class="mono" style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${row.topic || ''}">${row.topic || '—'}</td>
         <td>${nodeLabel}</td>
+        <td class="mono" title="${ip}">${ip}</td>
         <td>${parsed}</td>
         <td class="mono" style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis" title="${preview}">${preview}</td>
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="5" class="table-empty" style="color:var(--red)">Failed to load MQTT traffic</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty" style="color:var(--red)">Failed to load MQTT traffic</td></tr>';
   }
 }
 
@@ -592,6 +595,7 @@ function showTrafficDetail(idx) {
       <tr><td style="padding:6px 0;color:var(--text-muted)">Time</td><td>${row.at || '—'}</td></tr>
       <tr><td style="padding:6px 0;color:var(--text-muted)">Topic</td><td class="mono" style="word-break:break-all">${row.topic || '—'}</td></tr>
       <tr><td style="padding:6px 0;color:var(--text-muted)">Client</td><td class="mono">${row.client_id || '—'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Client IP</td><td class="mono">${row.client_ip || '—'}</td></tr>
       <tr><td style="padding:6px 0;color:var(--text-muted)">Node key</td><td class="mono">${row.node_key || '—'}</td></tr>
       <tr><td style="padding:6px 0;color:var(--text-muted)">Format</td><td>${row.payload_format || 'unknown'}</td></tr>
       <tr><td style="padding:6px 0;color:var(--text-muted)">Parsed tags</td><td>${row.parsed ? 'Yes (' + (row.parse_count || 0) + ')' : 'No — parser not configured for this format yet'}</td></tr>

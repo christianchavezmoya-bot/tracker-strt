@@ -34,7 +34,9 @@ class MqttTagIngestService:
         self.per_node_last_payload: dict[str, str] = {}
         self.per_node_last_topic: dict[str, str] = {}
 
-    def handle_message(self, client_id: str, topic: str, payload: str) -> None:
+    def handle_message(
+        self, client_id: str, topic: str, payload: str, client_ip: str | None = None,
+    ) -> None:
         from backend.services.mqtt_node_detect import detect_node_from_mqtt, register_node_from_mqtt
         from backend.services.mqtt_traffic_log import get_mqtt_traffic_log
 
@@ -58,18 +60,23 @@ class MqttTagIngestService:
         if node_key and self.app:
             with self.app.app_context():
                 try:
-                    from backend.services.mqtt_client_registry import get_ip_for_node, link_node_key
+                    from backend.services.mqtt_client_registry import (
+                        get_ip_for_node, link_node_key, note_node_ip, register_client,
+                    )
                     from backend.services.node_presence import log_node_presence, update_node_ip_metadata
                     from backend.services.mqtt_node_detect import _extract_strata_rssi
 
-                    link_node_key(node_key, client_id or "")
+                    if client_ip:
+                        register_client(client_id or "", client_ip)
+                    link_node_key(node_key, client_id or "", client_ip=client_ip)
                     node = register_node_from_mqtt(
                         node_key, detect_hints, client_id=client_id, payload=payload,
                     )
                     node_id = node.id
                     rssi = _extract_strata_rssi(payload or "")
-                    ip = get_ip_for_node(node_key)
+                    ip = client_ip or get_ip_for_node(node_key)
                     if ip:
+                        note_node_ip(node_key, ip)
                         update_node_ip_metadata(node, ip)
                     log_node_presence(node, online=True, rssi=rssi, node_ip=ip)
                     db.session.commit()
@@ -81,12 +88,15 @@ class MqttTagIngestService:
                     logger.exception("Failed to register node from MQTT %s", node_key)
                     db.session.rollback()
 
+        from backend.services.mqtt_client_registry import get_ip_for_node
+
         get_mqtt_traffic_log().append(
             client_id=client_id,
             topic=topic or "",
             payload=payload or "",
             node_key=node_key,
             node_id=node_id,
+            client_ip=client_ip or (get_ip_for_node(node_key) if node_key else None),
             parsed=parsed,
             parse_count=len(readings),
             payload_format=detect_hints.get("payload_format", "unknown"),

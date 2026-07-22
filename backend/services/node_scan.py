@@ -43,6 +43,7 @@ def scan_nodes(session=None) -> dict:
             "node_id": n.id,
             "name": n.assigned_name or f"STRATA-{str(meta.get('strata_node_id', ''))[-6:]}" or n.mac_address,
             "node_ip": ip or "—",
+            "client_ip": ip or "—",
             "mac_address": n.mac_address,
             "strata_node_id": meta.get("strata_node_id"),
             "last_heard_at": n.last_heartbeat.isoformat() if n.last_heartbeat else None,

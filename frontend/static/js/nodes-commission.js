@@ -26,6 +26,7 @@ function nodeTooltip(item) {
     `ID: ${item.mac_address}`,
     item.strata_node_id ? `STRATA: ${item.strata_node_id}` : '',
     item.node_ip && item.node_ip !== '—' ? `IP: ${item.node_ip}` : '',
+    item.client_ip && item.client_ip !== '—' && item.client_ip !== item.node_ip ? `Client IP: ${item.client_ip}` : '',
     item.last_topic ? `Topic: ${item.last_topic}` : '',
     item.payload_format ? `Format: ${item.payload_format}` : '',
     item.last_heard_at ? `Last heard: ${fmtNodeTime(item.last_heard_at)}` : '',
