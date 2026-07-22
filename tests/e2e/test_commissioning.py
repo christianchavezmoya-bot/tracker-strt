@@ -38,6 +38,22 @@ def test_nodes_diagnostics_tab(logged_in_page, e2e_base):
     assert "Broker" in broker_text or "Port" in broker_text
 
 
+def test_nodes_commission_tab(logged_in_page, e2e_base):
+    page = logged_in_page
+    page.goto(f"{e2e_base}/nodes")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_selector("#nodesCommissionView", state="visible", timeout=15000)
+    page.wait_for_selector("#commissionScanBody", state="visible", timeout=15000)
+    page.wait_for_selector("#commissionScanInterval", state="visible", timeout=5000)
+    assert page.locator('#commissionScanInterval option[value="30"]').count() == 1
+    assert page.locator('#commissionScanInterval option[value="60"]').count() == 1
+    assert page.locator('#commissionScanInterval option[value="90"]').count() == 1
+    page.click("#commissionChartBtn")
+    page.wait_for_selector("#commissionChartPanel", state="visible", timeout=5000)
+    assert page.locator('#commissionChartWindow option[value="1"]').count() == 1
+    assert page.locator('#commissionChartWindow option[value="1440"]').count() == 1
+
+
 def test_settings_network_mqtt_tab(logged_in_page, e2e_base):
     page = logged_in_page
     page.goto(f"{e2e_base}/settings")

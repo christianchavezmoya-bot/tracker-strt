@@ -186,6 +186,118 @@ def refresh_positions():
     return jsonify({"ok": True, **result})
 
 
+@nodes_bp.route("/scan", methods=["GET"])
+@jwt_required()
+def scan_nodes_list():
+    """Anchor scan snapshot — name, IP, timestamp (for commission table)."""
+    from backend.services.node_scan import scan_nodes
+    return jsonify(scan_nodes(db.session))
+
+
+@nodes_bp.route("/scan/run", methods=["POST"])
+@jwt_required()
+def run_node_scan():
+    """Refresh anchor scan from MQTT traffic + DB."""
+    from backend.services.node_scan import scan_nodes
+    return jsonify({"ok": True, **scan_nodes(db.session)})
+
+
+@nodes_bp.route("/commission-queue", methods=["GET"])
+@jwt_required()
+def commission_queue_api():
+    from backend.services.node_scan import commission_queue
+    return jsonify(commission_queue(db.session))
+
+
+@nodes_bp.route("/presence/timeline", methods=["GET"])
+@jwt_required()
+def node_presence_timeline():
+    """Anchor health timeline (1 min – 24 h), like trackers page."""
+    from backend.services.node_presence_timeline import get_node_presence_timeline
+    minutes = request.args.get("minutes", 60, type=int)
+    ids_raw = request.args.get("node_ids", "")
+    node_ids = [int(x) for x in ids_raw.split(",") if x.strip().isdigit()] if ids_raw else None
+    return jsonify(get_node_presence_timeline(minutes=minutes, node_ids=node_ids))
+
+
+@nodes_bp.route("/<int:node_id>/activate", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.MANAGE_NODE)
+def activate_node(node_id):
+    """Acknowledge + place + activate anchor in one step."""
+    from backend.services.node_utils import mark_node_placed
+    from backend.services.anchor_sync import sync_node_full, count_placed_nodes, refresh_tag_positions
+    import json
+
+    node = WifiNode.query.get_or_404(node_id)
+    body = request.get_json() or {}
+    if body.get("assigned_name"):
+        node.assigned_name = body["assigned_name"].strip()
+    for f in ("pos_x", "pos_y", "pos_z"):
+        if f in body:
+            setattr(node, f, float(body[f]))
+    if body.get("node_ip"):
+        meta = json.loads(node.metadata_json) if node.metadata_json else {}
+        if not isinstance(meta, dict):
+            meta = {}
+        meta["node_ip"] = body["node_ip"].strip()
+        meta["mqtt_acknowledged"] = True
+        node.metadata_json = json.dumps(meta)
+    mark_node_placed(node)
+    from backend.models.tracker import NodeStatus
+    node.status = int(NodeStatus.ACTIVE)
+    try:
+        sync_node_full(node)
+        if count_placed_nodes(db.session) >= 3:
+            refresh_tag_positions(db.session)
+    except Exception:
+        pass
+    db.session.commit()
+    AuditLog.log(action="node.activate", user_id=int(get_jwt_identity()),
+                 entity_type="WifiNode", entity_id=node.id)
+    return jsonify({"ok": True, "node": node.to_dict()})
+
+
+@nodes_bp.route("/<int:node_id>/decommission", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.MANAGE_NODE)
+def decommission_node(node_id):
+    """Mark anchor decommissioned — hidden from RTLS, kept in history."""
+    import json
+    from backend.models.tracker import NodeStatus
+
+    node = WifiNode.query.get_or_404(node_id)
+    meta = json.loads(node.metadata_json) if node.metadata_json else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    meta["decommissioned"] = True
+    meta["operational_state"] = "decommissioned"
+    node.metadata_json = json.dumps(meta)
+    node.status = int(NodeStatus.OFFLINE)
+    db.session.commit()
+    AuditLog.log(action="node.decommission", user_id=int(get_jwt_identity()),
+                 entity_type="WifiNode", entity_id=node.id)
+    return jsonify({"ok": True, "node": node.to_dict()})
+
+
+@nodes_bp.route("/<int:node_id>/inactive", methods=["POST"])
+@jwt_required()
+@require_permission(Permission.MANAGE_NODE)
+def inactive_node(node_id):
+    import json
+    from backend.models.tracker import NodeStatus
+
+    node = WifiNode.query.get_or_404(node_id)
+    meta = json.loads(node.metadata_json) if node.metadata_json else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    meta["operational_state"] = "inactive"
+    node.metadata_json = json.dumps(meta)
+    node.status = int(NodeStatus.OFFLINE)
+    db.session.commit()
+    return jsonify({"ok": True, "node": node.to_dict()})
+
+
 @nodes_bp.route("/mqtt-traffic", methods=["GET"])
 @jwt_required()
 def mqtt_traffic():
@@ -213,7 +325,11 @@ def acknowledge_node(node_id):
 
     node = WifiNode.query.get_or_404(node_id)
     body = request.get_json() or {}
-    node = acknowledge_mqtt_node(node, user_label=body.get("assigned_name"))
+    node = acknowledge_mqtt_node(
+        node,
+        user_label=body.get("assigned_name"),
+        node_ip=body.get("node_ip"),
+    )
     AuditLog.log(
         action="node.acknowledge",
         user_id=int(get_jwt_identity()),

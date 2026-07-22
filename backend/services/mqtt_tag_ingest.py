@@ -58,8 +58,21 @@ class MqttTagIngestService:
         if node_key and self.app:
             with self.app.app_context():
                 try:
-                    node = register_node_from_mqtt(node_key, detect_hints)
+                    from backend.services.mqtt_client_registry import get_ip_for_node, link_node_key
+                    from backend.services.node_presence import log_node_presence, update_node_ip_metadata
+                    from backend.services.mqtt_node_detect import _extract_strata_rssi
+
+                    link_node_key(node_key, client_id or "")
+                    node = register_node_from_mqtt(
+                        node_key, detect_hints, client_id=client_id, payload=payload,
+                    )
                     node_id = node.id
+                    rssi = _extract_strata_rssi(payload or "")
+                    ip = get_ip_for_node(node_key)
+                    if ip:
+                        update_node_ip_metadata(node, ip)
+                    log_node_presence(node, online=True, rssi=rssi, node_ip=ip)
+                    db.session.commit()
                     mac = node_key.upper()
                     with self._lock:
                         self.per_node_counts[mac] += 1
@@ -153,6 +166,12 @@ def init_mqtt_tag_ingest(app=None) -> MqttTagIngestService:
     global _ingest
     if _ingest is None:
         _ingest = MqttTagIngestService(app=app)
-    elif app and _ingest.app is None:
+    elif app is not None:
         _ingest.app = app
     return _ingest
+
+
+def reset_mqtt_tag_ingest() -> None:
+    """Clear singleton (test isolation)."""
+    global _ingest
+    _ingest = None

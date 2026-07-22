@@ -108,3 +108,30 @@ class TrackerPresenceLog(db.Model):
             "online": bool(self.online),
             "rssi": self.rssi,
         }
+
+
+class NodePresenceLog(db.Model):
+    """MQTT heartbeat / online samples for anchor timeline charts."""
+    __tablename__ = "node_presence_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    node_id = db.Column(db.Integer, db.ForeignKey("wifi_nodes.id"), nullable=False, index=True)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    online = db.Column(db.Boolean, default=True, nullable=False)
+    rssi = db.Column(db.Float, nullable=True)
+    node_ip = db.Column(db.String(64), nullable=True)
+
+    __table_args__ = (
+        db.Index("ix_node_presence_ts", "node_id", "timestamp"),
+    )
+
+    node = db.relationship("WifiNode", backref=db.backref("presence_logs", lazy="dynamic"))
+
+    def to_dict(self):
+        return {
+            "node_id": self.node_id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "online": bool(self.online),
+            "rssi": self.rssi,
+            "node_ip": self.node_ip,
+        }

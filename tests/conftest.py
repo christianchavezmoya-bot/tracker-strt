@@ -12,6 +12,22 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-for-testing-only-32
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 
+@pytest.fixture(autouse=True)
+def reset_service_singletons():
+    """Prevent stale Flask app references across in-memory DB tests."""
+    try:
+        from backend.services.mqtt_tag_ingest import reset_mqtt_tag_ingest
+        reset_mqtt_tag_ingest()
+    except Exception:
+        pass
+    yield
+    try:
+        from backend.services.mqtt_tag_ingest import reset_mqtt_tag_ingest
+        reset_mqtt_tag_ingest()
+    except Exception:
+        pass
+
+
 @pytest.fixture(scope="function")
 def app():
     from backend.app import create_app

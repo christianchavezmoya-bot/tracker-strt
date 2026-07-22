@@ -6,6 +6,7 @@
 <button class="btn btn-primary btn-sm" onclick="openNodeModal()"><i class="fa-solid fa-plus"></i> Add Node</button>
 {% endblock %}
 {% block head %}
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
 <style>
 /* Reuse hardware page styles */
 .settings-layout { display:flex; min-height:100vh; background:var(--bg-primary); }
@@ -55,6 +56,17 @@
 .pill-red { background:rgba(255,68,68,0.12); color:var(--red); }
 .pill-red { background:rgba(255,68,68,0.12); color:var(--red); }
 .pill-gray { background:rgba(255,255,255,0.06); color:var(--text-muted); }
+.commission-layout { display:grid; grid-template-columns:1fr 340px; gap:16px; align-items:start; }
+@media (max-width:960px) { .commission-layout { grid-template-columns:1fr; } }
+.commission-pick-cursor, .commission-pick-cursor .leaflet-container { cursor: crosshair !important; }
+.view-toggle-commission { display:flex; gap:4px; background:rgba(255,255,255,.04); border-radius:8px; padding:3px; }
+.view-toggle-commission button { border:none; background:transparent; color:var(--text-muted); padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; }
+.view-toggle-commission button.active { background:rgba(10,132,255,.2); color:var(--cyan); font-weight:600; }
+.commission-map-modal { position:fixed; inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:300; }
+.commission-map-box { width:min(920px,94vw); height:min(560px,80vh); background:var(--bg-card); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+.commission-map-box #commissionMap2d { flex:1; min-height:400px; }
+.hw-config-table tr.row-selected td { background:rgba(0,229,255,0.08); }
+.node-tab[data-view="commission"] { }
 .action-btns { display:flex; gap:4px; }
 .action-btn { width:28px; height:28px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:6px; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.1s; }
 .action-btn:hover { background:rgba(0,229,255,0.1); color:var(--cyan); border-color:var(--cyan); }
@@ -134,11 +146,105 @@
 
     <!-- Main view tabs -->
     <div class="node-tabs" role="tablist" style="margin-bottom:12px">
-      <button type="button" class="node-tab active" data-view="list" onclick="setNodesView('list')"><i class="fa-solid fa-list"></i> Node list</button>
+      <button type="button" class="node-tab active" data-view="commission" onclick="setNodesView('commission')"><i class="fa-solid fa-wifi"></i> Commission</button>
+      <button type="button" class="node-tab" data-view="list" onclick="setNodesView('list')"><i class="fa-solid fa-list"></i> Node list</button>
       <button type="button" class="node-tab" data-view="diagnostics" onclick="setNodesView('diagnostics')"><i class="fa-solid fa-stethoscope"></i> Diagnostics</button>
     </div>
 
-    <div id="nodesListView">
+    <div id="nodesCommissionView">
+      <div class="info-banner" style="margin-bottom:12px">
+        <i class="fa-solid fa-circle-info"></i>
+        <div class="info-banner-text">Scan detects anchors from live MQTT traffic. Minimum columns: <strong>Name</strong> and <strong>IP</strong>. Hover a row for full details. Acknowledge → name → pick map location → Save &amp; activate.</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px">
+        <div class="view-toggle-commission" role="tablist">
+          <button type="button" id="commissionTableBtn" class="active" onclick="setCommissionView('table')"><i class="fa-solid fa-table"></i> Scan table</button>
+          <button type="button" id="commissionChartBtn" onclick="setCommissionView('timeline')"><i class="fa-solid fa-chart-line"></i> Health timeline</button>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" id="btnCommissionRefresh" onclick="runCommissionScan()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px">
+          Auto-refresh
+          <select id="commissionScanInterval" class="form-input" style="width:auto;padding:4px 8px;font-size:12px">
+            <option value="30">30 sec</option>
+            <option value="60" selected>60 sec</option>
+            <option value="90">90 sec</option>
+          </select>
+        </label>
+        <span id="commissionScanSummary" style="font-size:12px;color:var(--text-muted);margin-left:auto"></span>
+      </div>
+      <div class="commission-layout">
+        <div>
+          <div id="commissionTablePanel">
+            <div class="hw-config-table-wrap">
+              <table class="hw-config-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>IP</th>
+                    <th>Last heard</th>
+                    <th>State</th>
+                    <th>Link</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="commissionScanBody">
+                  <tr><td colspan="6" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Scanning…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div id="commissionChartPanel" style="display:none">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+              <label style="font-size:12px;color:var(--text-muted)">Window</label>
+              <select id="commissionChartWindow" class="form-input" style="width:auto;padding:4px 8px" onchange="loadNodeTimelineChart()">
+                <option value="1">1 minute</option>
+                <option value="5">5 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="60" selected>1 hour</option>
+                <option value="360">6 hours</option>
+                <option value="1440">24 hours</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="loadNodeTimelineChart()"><i class="fa-solid fa-rotate"></i> Refresh chart</button>
+            </div>
+            <div style="background:#0a0e14;border:1px solid var(--border);border-radius:10px;padding:12px;overflow-x:auto">
+              <canvas id="commissionTimelineCanvas" height="320" style="display:block;width:100%;min-width:720px"></canvas>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px;display:flex;gap:16px">
+              <span><span style="color:#6bff47">—</span> RSSI signal</span>
+              <span><span style="color:#ff4444">|</span> Offline gap</span>
+            </div>
+          </div>
+        </div>
+        <div id="commissionConfigPanel" class="hw-config-table-wrap" style="display:none;padding:14px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--cyan)" id="commissionConfigTitle">Configure anchor</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:10px;font-family:monospace">
+            <div id="commissionMetaId"></div>
+            <div>STRATA: <span id="commissionMetaStrata">—</span></div>
+          </div>
+          <label class="form-label">Name <span class="form-required">*</span></label>
+          <input class="form-input" id="commissionNodeName" style="margin-bottom:10px;width:100%;box-sizing:border-box" placeholder="e.g. North Gate">
+          <label class="form-label">IP address</label>
+          <input class="form-input mono" id="commissionNodeIp" style="margin-bottom:10px;width:100%;box-sizing:border-box" placeholder="10.60.1.x">
+          <div class="form-label">Position (m)</div>
+          <div class="form-row" style="margin-bottom:8px">
+            <input class="form-input" type="number" step="0.1" id="commissionNodeX" placeholder="X">
+            <input class="form-input" type="number" step="0.1" id="commissionNodeY" placeholder="Y">
+            <input class="form-input" type="number" step="0.1" id="commissionNodeZ" placeholder="Z">
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:10px" onclick="openCommissionMapPick()"><i class="fa-solid fa-crosshairs"></i> Pick on map</button>
+          <div id="commissionCoordPreview" style="font-size:11px;color:var(--text-muted);margin-bottom:12px;font-family:monospace">Click map to set coordinates</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button type="button" class="btn btn-secondary btn-sm" id="commissionAckBtn" onclick="acknowledgeCommissionNode()"><i class="fa-solid fa-check"></i> Acknowledge</button>
+            <button type="button" class="btn btn-primary btn-sm" id="commissionActivateBtn" onclick="activateCommissionNode()"><i class="fa-solid fa-floppy-disk"></i> Save &amp; activate</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="inactiveCommissionNode()">Set inactive</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="decommissionCommissionNode()">Decommission</button>
+            <button type="button" class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="purgeCommissionNode()"><i class="fa-solid fa-trash"></i> Purge</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="nodesListView" style="display:none">
     <!-- Filter tabs -->
     <div class="node-tabs" role="tablist">
       <button type="button" class="node-tab active" data-filter="all" onclick="setNodeFilter('all')">All</button>
@@ -331,9 +437,22 @@
     </div>
   </div>
 </div>
+<div class="commission-map-modal" id="commissionMapModal" onclick="if(event.target===this)closeCommissionMapPick()">
+  <div class="commission-map-box" onclick="event.stopPropagation()">
+    <div style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">
+      <strong style="font-size:13px"><i class="fa-solid fa-crosshairs"></i> Pick anchor location</strong>
+      <button type="button" class="modal-close" onclick="closeCommissionMapPick()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="commissionMap2d"></div>
+    <div style="padding:10px 14px;font-size:11px;color:var(--text-muted)">Crosshair mode — click the map where this anchor is installed.</div>
+  </div>
+</div>
+
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/rtls-setup.js?v=1"></script>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script src="/static/js/nodes-commission.js?v=1"></script>
 <script>
 
 'use strict';
@@ -341,7 +460,7 @@ let nodes = [];
 let allNodes = [];
 let editingNodeId = null;
 let nodeFilter = 'all';
-let nodesView = 'list';
+let nodesView = 'commission';
 let diagnosticsCache = [];
 let diagSubView = 'health';
 let trafficAutoTimer = null;
@@ -357,6 +476,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {}
   renderNodes();
   renderSummary();
+  setNodesView('commission');
 });
 
 function setNodesView(view) {
@@ -366,14 +486,22 @@ function setNodesView(view) {
   });
   const listEl = document.getElementById('nodesListView');
   const diagEl = document.getElementById('nodesDiagnosticsView');
+  const commEl = document.getElementById('nodesCommissionView');
   if (listEl) listEl.style.display = view === 'list' ? 'block' : 'none';
   if (diagEl) diagEl.style.display = view === 'diagnostics' ? 'block' : 'none';
+  if (commEl) commEl.style.display = view === 'commission' ? 'block' : 'none';
   if (view === 'diagnostics') {
     loadDiagnosticsView();
     if (diagSubView === 'traffic') loadMqttTraffic(false);
+  } else if (view === 'commission') {
+    if (typeof initCommissionTab === 'function') initCommissionTab();
   } else {
     stopTrafficAutoRefresh();
+    if (typeof commissionScanTimer !== 'undefined' && commissionScanTimer) {
+      clearInterval(commissionScanTimer);
+    }
   }
+  if (view !== 'diagnostics') stopTrafficAutoRefresh();
 }
 
 function setDiagSubView(sub) {

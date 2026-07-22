@@ -22,6 +22,14 @@ def clear_message_handlers() -> None:
 class MessageCapturePlugin(BasePlugin[BrokerContext]):
     """Broker plugin — forwards every PUBLISH to registered handlers."""
 
+    async def on_broker_client_connected(self, client_id: str, client_session=None) -> None:
+        try:
+            from backend.services.mqtt_client_registry import register_client
+            addr = getattr(client_session, "remote_address", None)
+            register_client(client_id or "?", str(addr) if addr else None)
+        except Exception:
+            pass
+
     async def on_broker_message_received(self, *, client_id: str, message: ApplicationMessage) -> None:
         topic = message.topic or ""
         data = message.data

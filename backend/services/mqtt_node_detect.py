@@ -66,13 +66,30 @@ def detect_node_from_mqtt(topic: str, payload: str) -> tuple[Optional[str], dict
     return None, hints
 
 
-def register_node_from_mqtt(node_key: str, hints: dict | None = None) -> WifiNode:
+def register_node_from_mqtt(
+    node_key: str,
+    hints: dict | None = None,
+    *,
+    client_id: str | None = None,
+    payload: str | None = None,
+) -> WifiNode:
     """Create or update WifiNode from detected MQTT traffic; sync anchor row."""
     hints = hints or {}
     key = node_key.upper()
     sess = db.session
     node = sess.query(WifiNode).filter_by(mac_address=key).first()
     meta = get_node_metadata(node) if node else {}
+
+    if client_id:
+        from backend.services.mqtt_client_registry import link_node_key, get_ip_for_client
+        link_node_key(key, client_id)
+        meta["last_client_id"] = client_id
+        ip = get_ip_for_client(client_id)
+        if ip:
+            meta["node_ip"] = ip
+
+    if payload:
+        meta["last_payload"] = (payload or "")[:500]
 
     strata_id = hints.get("strata_node_id")
     default_name = f"STRATA-{strata_id[-6:]}" if strata_id else f"Node-{key[-8:]}"
@@ -117,10 +134,12 @@ def register_node_from_mqtt(node_key: str, hints: dict | None = None) -> WifiNod
     return node
 
 
-def acknowledge_mqtt_node(node: WifiNode, user_label: str | None = None) -> WifiNode:
+def acknowledge_mqtt_node(node: WifiNode, user_label: str | None = None, node_ip: str | None = None) -> WifiNode:
     """Operator confirms a detected node is a real anchor."""
     meta = get_node_metadata(node)
     meta["mqtt_acknowledged"] = True
+    if node_ip:
+        meta["node_ip"] = node_ip.strip()
     if user_label:
         node.assigned_name = user_label.strip()
     node.metadata_json = json.dumps(meta)
@@ -128,6 +147,18 @@ def acknowledge_mqtt_node(node: WifiNode, user_label: str | None = None) -> Wifi
         node.status = int(NodeStatus.ACTIVE)
     db.session.commit()
     return node
+
+
+def _extract_strata_rssi(payload: str) -> float | None:
+    if not payload or not payload.strip().startswith("["):
+        return None
+    try:
+        data = json.loads(payload)
+        if isinstance(data, list) and len(data) >= 7:
+            return float(data[6])
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None
 
 
 def _norm_mac(mac: str) -> str:
