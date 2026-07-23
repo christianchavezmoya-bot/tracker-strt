@@ -124,6 +124,9 @@
       <button class="hw-tab" data-tab="system" onclick="switchTab('system')">
         <i class="fa-solid fa-server"></i> System
       </button>
+      <button class="hw-tab" data-tab="time" onclick="switchTab('time'); loadTimeNtpStatus()">
+        <i class="fa-regular fa-clock"></i> Time & NTP
+      </button>
       <button class="hw-tab" data-tab="appearance" onclick="switchTab('appearance')">
         <i class="fa-solid fa-palette"></i> Appearance
       </button>
@@ -394,6 +397,24 @@
       </div>
     </div>
 
+    <div class="settings-section" id="section-time" style="display:none">
+      <div class="settings-card">
+        <div class="settings-card-header"><i class="fa-regular fa-clock"></i> Server time status</div>
+        <div style="padding:16px">
+          <p class="page-subtitle" style="margin-bottom:12px">The server keeps RTLS event time in UTC. Node time is used only for diagnostics and future clock drift checks.</p>
+          <div id="timeNtpStatusGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px"></div>
+          <div id="timeNtpHostStatus" style="font-size:12px;color:var(--text-secondary);line-height:1.7"></div>
+        </div>
+      </div>
+      <div class="settings-card" style="margin-top:16px">
+        <div class="settings-card-header"><i class="fa-solid fa-sliders"></i> Node timezone and NTP defaults</div>
+        <div style="padding:16px 16px 8px">
+          <p class="page-subtitle" style="margin-bottom:12px">These values are shown in the WiFi unit setup card so operators can configure OpenWrt / STRATA nodes consistently.</p>
+        </div>
+        <div class="settings-grid" id="timeNtpFields"></div>
+      </div>
+    </div>
+
     <!-- ── Appearance ────────────────────────────────────────────── -->
     <div class="settings-section" id="section-appearance" style="display:none">
       <div class="settings-card">
@@ -584,7 +605,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/rtls-setup.js?v=3"></script>
+<script src="/static/js/rtls-setup.js?v=5"></script>
 <script src="/static/js/floor-plan-coord-wizard.js?v=13"></script>
 <script>
 
@@ -618,7 +639,7 @@ async function applySettingsRoute() {
   if (hash) {
     const parts = hash.split('/').filter(Boolean);
     const hashTab = parts[0];
-    const knownTabs = ['business', 'alerts', 'system', 'appearance', 'positions', 'orgsections', 'floorplans', 'profile', 'location', 'integrations'];
+    const knownTabs = ['business', 'alerts', 'system', 'time', 'appearance', 'positions', 'orgsections', 'floorplans', 'profile', 'location', 'integrations'];
     if (knownTabs.includes(hashTab)) tab = hashTab;
     if (hashTab === 'floorplans' && parts[1] === 'configure') {
       configure = parts[2] || 'first';
@@ -637,6 +658,8 @@ async function applySettingsRoute() {
     loadProfileSecurity();
   } else if (tab === 'location') {
     loadLocationCore();
+  } else if (tab === 'time') {
+    loadTimeNtpStatus();
   } else if (tab === 'integrations') {
     loadIntegrationsStatus();
   }
@@ -879,6 +902,7 @@ function renderAllSections() {
   renderBusinessSection();
   renderAlertSection();
   renderSystemSection();
+  renderTimeSection();
 }
 
 function groupByScope(keys) {
@@ -924,17 +948,94 @@ function renderSystemSection() {
   container.innerHTML = fields.map(k => renderSettingRow(settings[k], k)).filter(Boolean).join('');
 }
 
+
+let timeNtpStatus = null;
+
+function renderTimeSection() {
+  const container = document.getElementById('timeNtpFields');
+  if (!container) return;
+  const fields = [
+    'display_timezone', 'node_timezone', 'node_ntp_mode', 'node_ntp_server', 'node_clock_skew_warn_seconds',
+  ];
+  container.innerHTML = fields.map(k => renderSettingRow(settings[k], k)).filter(Boolean).join('');
+  renderTimeNtpStatus();
+}
+
+async function loadTimeNtpStatus() {
+  const grid = document.getElementById('timeNtpStatusGrid');
+  if (grid) grid.innerHTML = '<div style="color:var(--text-muted)">Loading...</div>';
+  try {
+    const res = await API.get('/system/time-ntp-status');
+    const data = await API.json(res);
+    if (res && res.ok) {
+      timeNtpStatus = data;
+      renderTimeNtpStatus();
+      return;
+    }
+  } catch (e) {
+    console.warn('Time/NTP status load failed', e);
+  }
+  timeNtpStatus = null;
+  renderTimeNtpStatus();
+}
+
+function renderTimeNtpStatus() {
+  const grid = document.getElementById('timeNtpStatusGrid');
+  const host = document.getElementById('timeNtpHostStatus');
+  if (!grid || !host) return;
+  if (!timeNtpStatus) {
+    grid.innerHTML = '<div style="color:var(--red)">Failed to load time status</div>';
+    host.textContent = '';
+    return;
+  }
+  const ntp = timeNtpStatus.ntp || {};
+  const chips = [
+    ['Server UTC', fmtStatusTs(timeNtpStatus.server_time_utc), 'Authoritative event time'],
+    ['Display time', fmtStatusTs(timeNtpStatus.server_time_local), timeNtpStatus.display_timezone || 'UTC'],
+    ['Node timezone', timeNtpStatus.node_timezone || 'UTC', 'Recommended node UI timezone'],
+    ['Node NTP server', timeNtpStatus.node_ntp_server || '?', `Mode: ${timeNtpStatus.node_ntp_mode || 'lan_server'}`],
+  ];
+  grid.innerHTML = chips.map(([label, value, detail]) => `
+    <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${label}</div>
+      <div class="mono" style="font-size:15px;font-weight:700;color:var(--text-primary)">${escapeHtml(String(value || '?'))}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${escapeHtml(String(detail || ''))}</div>
+    </div>`).join('');
+
+  const ntpColor = ntp.status === 'ok' ? 'var(--green)' : (ntp.status === 'warning' ? 'var(--yellow)' : 'var(--text-muted)');
+  const guide = timeNtpStatus.guidance || {};
+  const steps = Array.isArray(guide.windows_ntp_steps) && guide.windows_ntp_steps.length
+    ? `<div style="margin-top:8px"><strong>Windows / LAN time source checklist:</strong><ol style="margin:6px 0 0 18px;padding:0">${guide.windows_ntp_steps.map(step => `<li style="margin:2px 0">${escapeHtml(step)}</li>`).join('')}</ol></div>`
+    : '';
+  host.innerHTML = `
+    <div><strong>Host time service:</strong> <span style="color:${ntpColor}">${escapeHtml(ntp.service_state || 'unknown')}</span></div>
+    <div><strong>Time source:</strong> ${escapeHtml(ntp.source || 'unknown')}</div>
+    <div><strong>Last sync:</strong> ${escapeHtml(ntp.last_sync || 'unknown')}</div>
+    <div><strong>Note:</strong> ${escapeHtml((guide.windows_ntp_note || 'The Flask app does not serve NTP itself. The configured node NTP server must be a real LAN time source on the host/router/network.'))}</div>
+    ${steps}`;
+}
+
+function fmtStatusTs(value) {
+  if (!value) return '?';
+  return String(value).replace('T', ' ').replace(/\.\d+(?=[+-]|Z)/, '');
+}
+
 function renderSettingRow(setting, key) {
+  const defs = DEFAULT_SETTINGS[key] || {};
   if (!setting) {
-    // Provide a default row for known keys
-    const defs = DEFAULT_SETTINGS[key];
-    if (!defs) return '';
+    if (!DEFAULT_SETTINGS[key]) return '';
     return renderInput(key, {
-      ...defs, value: defs.default || '', key, scope: 'BUSINESS', is_secret: false, is_readonly: false,
+      ...defs, value: defs.default || '', key, scope: defs.scope || 'BUSINESS', is_secret: false, is_readonly: false,
       description: defs.description || '', label: defs.label || key,
     });
   }
-  return renderInput(key, setting);
+  return renderInput(key, {
+    ...defs,
+    ...setting,
+    label: setting.label || defs.label || key,
+    description: setting.description || defs.description || '',
+    options: setting.options || defs.options,
+  });
 }
 
 const DEFAULT_SETTINGS = {
@@ -966,6 +1067,11 @@ const DEFAULT_SETTINGS = {
   log_level: { label: 'Log Level', scope: 'SYSTEM', type: 'select', options: ['DEBUG', 'INFO', 'WARNING', 'ERROR'], description: 'Backend log verbosity', default: 'INFO' },
   calibration_required: { label: 'Require Map Calibration', scope: 'SYSTEM', type: 'bool', description: 'Require floor plan calibration before tracking starts', default: 'true' },
   position_smoothing: { label: 'Position Smoothing', scope: 'SYSTEM', type: 'bool', description: 'Smooth live position updates', default: 'true' },
+  display_timezone: { label: 'App display timezone', scope: 'SYSTEM', type: 'text', description: 'IANA timezone used when the app displays local time. Internal storage stays UTC.', default: 'UTC' },
+  node_timezone: { label: 'Default node timezone', scope: 'SYSTEM', type: 'text', description: 'Timezone operators should configure on OpenWrt / STRATA nodes. Recommended: UTC.', default: 'UTC' },
+  node_ntp_mode: { label: 'Node NTP mode', scope: 'SYSTEM', type: 'select', options: ['lan_server', 'external_upstream', 'os_clock_only'], description: 'How nodes should obtain time. lan_server means point nodes at the LAN time source below.', default: 'lan_server', value_type: 'select' },
+  node_ntp_server: { label: 'Node NTP server', scope: 'SYSTEM', type: 'text', description: 'IP or hostname given to WiFi nodes for NTP. If blank, the app falls back to the selected MQTT broker LAN IP.', default: '' },
+  node_clock_skew_warn_seconds: { label: 'Clock skew warning (s)', scope: 'SYSTEM', type: 'number', description: 'Future drift diagnostics threshold for comparing node-reported time to server receive time.', default: '10' },
 };
 
 function renderInput(key, s) {
@@ -1047,6 +1153,11 @@ async function saveAllSettings() {
   pendingChanges = {};
   hasChanges = false;
   document.getElementById('saveBar').style.display = 'none';
+  renderAllSections();
+  if (['display_timezone', 'node_timezone', 'node_ntp_mode', 'node_ntp_server', 'node_clock_skew_warn_seconds'].some(k => keys.includes(k))) {
+    await loadTimeNtpStatus();
+    if (typeof loadMqttNetworkPanel === 'function') await loadMqttNetworkPanel();
+  }
   showToast(errors ? `${saved} saved, ${errors} failed` : `${saved} settings saved`, errors ? 'error' : 'success');
 }
 
@@ -1179,7 +1290,7 @@ function renderFloorPlanTable() {
   }
   tbody.innerHTML = floorPlans.map(f => {
     const img = f.image_url
-      ? `<img src="${f.image_url}" style="height:40px;max-width:70px;object-fit:contain;border-radius:4px;border:1px solid var(--border);background:#fff" onerror="this.style.display='none'">`
+      ? `<img src="${f.image_url}" style="height:40px;max-width:70px;object-fit:contain;border-radius:4px;border:1px solid var(--border);background:#fff" onerror="this.onerror=null;this.src='/static/assets/floor-plan-placeholder.png'">`
       : `<div style="width:70px;height:40px;background:rgba(255,255,255,0.05);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)"><i class="fa-solid fa-image"></i></div>`;
     const esc = s => String(s || '').replace(/'/g, "\\'");
     return `<tr>

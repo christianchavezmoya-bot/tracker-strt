@@ -27,10 +27,12 @@ function nodeTooltip(item) {
     item.strata_node_id ? `STRATA: ${item.strata_node_id}` : '',
     item.node_ip && item.node_ip !== '—' ? `IP: ${item.node_ip}` : '',
     item.server_interface_label || item.server_interface ? `Interface: ${item.server_interface_label || item.server_interface}` : '',
-    item.ip_conflict ? `⚠ IP shared with: ${(item.ip_shared_with || []).join(', ')}` : '',
+    item.logical_count > 1 ? `Merged logical IDs: ${item.logical_count}` : '',
     item.last_topic ? `Topic: ${item.last_topic}` : '',
     item.payload_format ? `Format: ${item.payload_format}` : '',
-    item.last_heard_at ? `Last heard: ${fmtNodeTime(item.last_heard_at)}` : '',
+    item.last_payload_at ? `Last payload: ${fmtNodeTime(item.last_payload_at)}` : (item.last_heard_at ? `Last heard: ${fmtNodeTime(item.last_payload_at || item.last_heard_at)}` : ''),
+    item.last_node_reported_at ? `Node time: ${fmtNodeTime(item.last_node_reported_at)}` : '',
+    item.last_clock_skew_seconds != null ? `Clock skew: ${Number(item.last_clock_skew_seconds).toFixed(1)}s${item.clock_skew_warning ? ' WARNING' : ''}` : '',
     item.placed_on_map ? 'Placed on map' : 'Not placed',
   ].filter(Boolean).join('\n');
 }
@@ -38,8 +40,9 @@ function nodeTooltip(item) {
 function statePill(state) {
   const map = {
     detected: ['pill-yellow', 'Detected'],
-    awaiting_placement: ['pill-yellow', 'Awaiting placement'],
+    acknowledged: ['pill-yellow', 'Acknowledged'],
     active: ['pill-green', 'Active'],
+    offline: ['pill-red', 'Offline'],
     inactive: ['pill-gray', 'Inactive'],
     decommissioned: ['pill-red', 'Decommissioned'],
     manual: ['pill-gray', 'Manual'],
@@ -86,23 +89,26 @@ function renderCommissionStats(data) {
 function renderCommissionTable() {
   const tbody = document.getElementById('commissionScanBody');
   if (!tbody) return;
-  if (!commissionScanCache.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No anchors detected — turn on MQTT receiver and power on WiFi units.</td></tr>';
+  const stateFilter = document.getElementById('commissionStateFilter')?.value || 'all';
+  const rows = stateFilter === 'all' ? commissionScanCache : commissionScanCache.filter(item => (item.commission_state || 'detected') === stateFilter);
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="table-empty">No anchors detected — turn on MQTT receiver and power on WiFi units.</td></tr>';
     return;
   }
-  tbody.innerHTML = commissionScanCache.map(item => {
+  tbody.innerHTML = rows.map(item => {
     const name = item.name || item.mac_address;
     const ip = item.node_ip || '—';
     const iface = item.server_interface_label || item.server_interface || '—';
-    const ipCell = item.ip_conflict
-      ? `<span class="mono" style="color:var(--yellow)" title="Shared IP — ${(item.ip_shared_with || []).join(', ')}">${ip} ⚠</span>`
+    const ipCell = item.logical_count > 1
+      ? `<span class="mono" style="color:var(--cyan)" title="Merged ${item.logical_count} logical IDs into one physical unit">${ip} [merged]</span>`
       : `<span class="mono">${ip}</span>`;
     const title = nodeTooltip(item).replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
     return `<tr class="${commissionSelectedId === item.node_id ? 'row-selected' : ''}" onclick="selectCommissionNode(${item.node_id})">
       <td title="${title}"><strong>${name}</strong></td>
       <td class="mono" title="${title}">${ipCell}</td>
       <td title="${title}" style="font-size:11px">${iface}</td>
-      <td title="${title}">${fmtNodeTime(item.last_heard_at)}</td>
+      <td title="${title}">${fmtNodeTime(item.last_payload_at || item.last_heard_at)}</td>
+      <td title="${title}">${item.last_clock_skew_seconds == null ? '<span style="color:var(--text-muted)">?</span>' : `<span style="color:${item.clock_skew_warning ? 'var(--yellow)' : 'var(--text-secondary)'}">${Number(item.last_clock_skew_seconds).toFixed(1)}s${item.clock_skew_warning ? ' ?' : ''}</span>`}</td>
       <td>${statePill(item.commission_state)}</td>
       <td>${item.online ? '<span style="color:var(--green)">Online</span>' : '<span style="color:var(--text-muted)">Offline</span>'}</td>
       <td>

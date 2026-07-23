@@ -45,6 +45,36 @@ SETTING_DEFAULTS: dict[str, dict] = {
         "scope": SettingScope.BUSINESS,
         "label": "Regional map zoom",
     },
+    "display_timezone": {
+        "value": "UTC",
+        "value_type": "string",
+        "scope": SettingScope.SYSTEM,
+        "label": "Display timezone",
+    },
+    "node_timezone": {
+        "value": "UTC",
+        "value_type": "string",
+        "scope": SettingScope.SYSTEM,
+        "label": "Default node timezone",
+    },
+    "node_ntp_mode": {
+        "value": "lan_server",
+        "value_type": "string",
+        "scope": SettingScope.SYSTEM,
+        "label": "Node NTP mode",
+    },
+    "node_ntp_server": {
+        "value": "",
+        "value_type": "string",
+        "scope": SettingScope.SYSTEM,
+        "label": "Node NTP server",
+    },
+    "node_clock_skew_warn_seconds": {
+        "value": "10",
+        "value_type": "int",
+        "scope": SettingScope.SYSTEM,
+        "label": "Node clock skew warning threshold (s)",
+    },
 }
 
 

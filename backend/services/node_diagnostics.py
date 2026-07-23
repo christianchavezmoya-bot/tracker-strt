@@ -121,6 +121,10 @@ def compute_node_diagnostics(node: WifiNode, session=None) -> dict:
         "mqtt_acknowledged": meta.get("mqtt_acknowledged", False),
         "payload_format": meta.get("payload_format", "unknown"),
         "strata_node_id": meta.get("strata_node_id"),
+        "last_node_reported_at": meta.get("last_node_reported_at"),
+        "last_clock_skew_seconds": meta.get("last_clock_skew_seconds"),
+        "clock_skew_warning": bool(meta.get("clock_skew_warning")),
+        "clock_skew_warn_seconds": meta.get("clock_skew_warn_seconds"),
         "broker": broker_status_summary(),
     }
 
@@ -137,6 +141,7 @@ def compute_all_diagnostics(session=None) -> dict:
     from backend.services.mqtt_traffic_log import get_mqtt_traffic_log
 
     traffic = get_mqtt_traffic_log().summary()
+    skew_warn = sum(1 for i in items if i.get("clock_skew_warning"))
     return {
         "broker": broker,
         "summary": {
@@ -144,9 +149,11 @@ def compute_all_diagnostics(session=None) -> dict:
             "online": online,
             "weak": weak,
             "offline": offline,
+            "clock_skew_warning": skew_warn,
             "broker_running": broker.get("running"),
             "mqtt_traffic_total": traffic.get("total_received", 0),
             "mqtt_traffic_unparsed": traffic.get("recent_unparsed", 0),
+            "mqtt_traffic_clock_skew_warn": traffic.get("recent_clock_skew_warn", 0),
         },
         "mqtt_traffic": traffic,
         "ingest": ingest.diagnostics() if ingest else None,

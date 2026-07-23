@@ -161,13 +161,26 @@ function initMineMapCore() {
   L.control.scale({ imperial: false, position: 'bottomleft', maxWidth: 200 }).addTo(window._map2d);
 }
 
+async function verifyFloorPlanUrl(url) {
+  if (!url) return null;
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(url);
+    img.onerror = () => resolve(null);
+    img.src = url + (url.includes('?') ? "&" : "?") + "t=" + Date.now();
+  });
+}
+
 async function resolveFloorPlanUrl() {
   try {
     const res = await API.get('/zones/sections');
     const data = await API.json(res);
-    if (res && res.ok && data.items && data.items.length > 0 && data.items[0].image_url) {
-      const url = data.items[0].image_url;
-      if (!url.includes('placeholder')) return url;
+    const items = (res && res.ok && data.items) ? data.items : [];
+    for (const item of items) {
+      const url = item && item.image_url;
+      if (!url || url.includes('placeholder')) continue;
+      const verified = await verifyFloorPlanUrl(url);
+      if (verified) return verified;
     }
   } catch (e) { /* ignore */ }
   return '/static/assets/floor-plan-placeholder.png';
@@ -177,8 +190,11 @@ async function checkUploadedFloorPlan() {
   try {
     const res = await API.get('/zones/sections');
     const data = await API.json(res);
-    if (res && res.ok && data.items && data.items.length > 0 && data.items[0].image_url) {
-      return !data.items[0].image_url.includes('placeholder');
+    const items = (res && res.ok && data.items) ? data.items : [];
+    for (const item of items) {
+      const url = item && item.image_url;
+      if (!url || url.includes('placeholder')) continue;
+      if (await verifyFloorPlanUrl(url)) return true;
     }
   } catch (e) { /* ignore */ }
   return false;
@@ -977,15 +993,8 @@ function showNodeDetail(node) {
 
 async function loadFloorPlanImage() {
   if (_floorPlanLayer) { window._map2d.removeLayer(_floorPlanLayer); _floorPlanLayer = null; }
-  try {
-    const res = await API.get('/zones/sections');
-    const data = await API.json(res);
-    if (res && res.ok && data.items && data.items.length > 0 && data.items[0].image_url) {
-      loadFloorPlanFromURL(data.items[0].image_url);
-      return;
-    }
-  } catch {}
-  loadFloorPlanFromURL('/static/assets/floor-plan-placeholder.png');
+  const url = await resolveFloorPlanUrl();
+  loadFloorPlanFromURL(url || '/static/assets/floor-plan-placeholder.png');
 }
 
 function loadFloorPlanFromURL(url) {

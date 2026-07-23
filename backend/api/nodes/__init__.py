@@ -244,13 +244,14 @@ def activate_node(node_id):
     for f in ("pos_x", "pos_y", "pos_z"):
         if f in body:
             setattr(node, f, float(body[f]))
+    meta = json.loads(node.metadata_json) if node.metadata_json else {}
+    if not isinstance(meta, dict):
+        meta = {}
     if body.get("node_ip"):
-        meta = json.loads(node.metadata_json) if node.metadata_json else {}
-        if not isinstance(meta, dict):
-            meta = {}
         meta["node_ip"] = body["node_ip"].strip()
-        meta["mqtt_acknowledged"] = True
-        node.metadata_json = json.dumps(meta)
+    meta["mqtt_acknowledged"] = True
+    meta["operational_state"] = "active"
+    node.metadata_json = json.dumps(meta)
     mark_node_placed(node)
     from backend.models.tracker import NodeStatus
     node.status = int(NodeStatus.ACTIVE)

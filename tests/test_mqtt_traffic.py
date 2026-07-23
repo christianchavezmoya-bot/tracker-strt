@@ -109,3 +109,41 @@ def test_acknowledge_node_api(client, admin_headers, db_session, app):
     import json
     meta = json.loads(db_session.query(WifiNode).get(node.id).metadata_json)
     assert meta.get("mqtt_acknowledged") is True
+
+
+def test_detects_node_reported_time_and_clock_skew():
+    from backend.services.mqtt_node_detect import _extract_clock_skew_seconds, _extract_node_reported_at
+
+    node_time = _extract_node_reported_at(STRATA_PAYLOAD)
+    assert node_time is not None
+    assert node_time.startswith("2025-06-23T15:01:17")
+    skew = _extract_clock_skew_seconds(STRATA_PAYLOAD)
+    assert skew is not None
+
+
+def test_ingest_persists_node_time_and_skew_on_first_discovery(app, db_session):
+    with app.app_context():
+        ingest = init_mqtt_tag_ingest(app=app)
+        ingest.handle_message("c1", STRATA_TOPIC, STRATA_PAYLOAD, "10.60.1.52")
+
+    node = db_session.query(WifiNode).filter_by(mac_address="STRATA:273983315172900").first()
+    assert node is not None
+    import json
+    meta = json.loads(node.metadata_json)
+    assert meta.get("node_ip") == "10.60.1.52"
+    assert meta.get("last_node_reported_at", "").startswith("2025-06-23T15:01:17")
+    assert meta.get("last_clock_skew_seconds") is not None
+    assert meta.get("clock_skew_warn_seconds") is not None
+
+
+def test_mqtt_traffic_api_includes_node_time_and_skew(client, auth_headers, app):
+    with app.app_context():
+        ingest = init_mqtt_tag_ingest(app=app)
+        ingest.handle_message("c1", STRATA_TOPIC, STRATA_PAYLOAD, "10.60.1.52")
+
+    res = client.get("/api/nodes/mqtt-traffic?limit=10", headers=auth_headers)
+    assert res.status_code == 200
+    items = res.get_json()["items"]
+    match = next(i for i in items if i.get("topic") == STRATA_TOPIC)
+    assert match.get("node_reported_at")
+    assert match.get("clock_skew_seconds") is not None

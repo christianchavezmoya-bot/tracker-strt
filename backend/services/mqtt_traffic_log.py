@@ -21,6 +21,9 @@ class MqttTrafficEntry:
     parsed: bool = False
     parse_count: int = 0
     payload_format: str = "unknown"
+    node_reported_at: Optional[str] = None
+    clock_skew_seconds: Optional[float] = None
+    clock_skew_warning: bool = False
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -51,6 +54,9 @@ class MqttTrafficLog:
         parsed: bool = False,
         parse_count: int = 0,
         payload_format: str = "unknown",
+        node_reported_at: str | None = None,
+        clock_skew_seconds: float | None = None,
+        clock_skew_warning: bool = False,
     ) -> MqttTrafficEntry:
         entry = MqttTrafficEntry(
             at=datetime.utcnow(),
@@ -64,6 +70,9 @@ class MqttTrafficLog:
             parsed=parsed,
             parse_count=parse_count,
             payload_format=payload_format,
+            node_reported_at=node_reported_at,
+            clock_skew_seconds=clock_skew_seconds,
+            clock_skew_warning=bool(clock_skew_warning),
         )
         with self._lock:
             self.total_received += 1
@@ -93,15 +102,19 @@ class MqttTrafficLog:
             total = self.total_received
         formats: dict[str, int] = {}
         parsed_n = 0
+        skew_warn_n = 0
         for e in recent:
             formats[e.payload_format] = formats.get(e.payload_format, 0) + 1
             if e.parsed:
                 parsed_n += 1
+            if e.clock_skew_warning:
+                skew_warn_n += 1
         return {
             "total_received": total,
             "buffer_size": len(recent),
             "recent_parsed": parsed_n,
             "recent_unparsed": len(recent) - parsed_n,
+            "recent_clock_skew_warn": skew_warn_n,
             "payload_formats": formats,
         }
 

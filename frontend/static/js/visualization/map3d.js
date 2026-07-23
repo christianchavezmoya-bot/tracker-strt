@@ -376,13 +376,26 @@ function updateGridForFloor(extents) {
   mark3DDirty();
 }
 
+async function verifyFloorPlanUrl3D(url) {
+  if (!url) return null;
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(url);
+    img.onerror = () => resolve(null);
+    img.src = url + (url.includes('?') ? "&" : "?") + "t=" + Date.now();
+  });
+}
+
 async function fetchFloorPlanUrlFromApi() {
   try {
     const res = await API.get('/zones/sections');
     const data = await API.json(res);
-    if (res && res.ok && data.items && data.items.length > 0 && data.items[0].image_url) {
-      const url = data.items[0].image_url;
-      if (!url.includes('placeholder')) return url;
+    const items = (res && res.ok && data.items) ? data.items : [];
+    for (const item of items) {
+      const url = item && item.image_url;
+      if (!url || url.includes('placeholder')) continue;
+      const verified = await verifyFloorPlanUrl3D(url);
+      if (verified) return verified;
     }
   } catch (_) { /* ignore */ }
   return null;
@@ -390,10 +403,13 @@ async function fetchFloorPlanUrlFromApi() {
 
 async function resolveFloorPlanUrl3D() {
   const holoUrl = window.HoloCoords ? window.HoloCoords.getFloorPlanUrl() : null;
-  if (holoUrl && !holoUrl.includes('placeholder')) return holoUrl;
+  if (holoUrl && !holoUrl.includes('placeholder')) {
+    const verified = await verifyFloorPlanUrl3D(holoUrl);
+    if (verified) return verified;
+  }
   const apiUrl = await fetchFloorPlanUrlFromApi();
   if (apiUrl) return apiUrl;
-  return holoUrl || '/static/assets/floor-plan-placeholder.png';
+  return '/static/assets/floor-plan-placeholder.png';
 }
 
 function applyFloorPlaneMesh(texture, extents, imgUrl) {

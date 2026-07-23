@@ -235,13 +235,13 @@ def _aggregate_from_detection_events(since: datetime) -> dict[str, DiscoveredDev
         .limit(5000)
         .all()
     )
-    anchor_names = {
-        a.id: a.name or a.mac_address
+    anchor_info = {
+        a.id: {
+            "name": a.name or a.mac_address,
+            "mac": a.mac_address,
+        }
         for a in WifiAnchor.query.all()
     }
-    # Also map wifi_nodes used by scanner path
-    for n in WifiNode.query.all():
-        pass
 
     by_mac: dict[str, DiscoveredDevice] = {}
     beacon_map: dict[str, dict[str, float]] = {}
@@ -257,10 +257,14 @@ def _aggregate_from_detection_events(since: datetime) -> dict[str, DiscoveredDev
         if ev.signal_type == int(SignalType.BLE):
             st = classify_detection(mac, adv_name=adv)
 
-        anchor_label = anchor_names.get(ev.anchor_id, f"Anchor-{ev.anchor_id}")
-        beacon_map.setdefault(mac, {})[anchor_label] = max(
-            beacon_map[mac].get(anchor_label, -999), float(ev.rssi)
-        )
+        anchor = anchor_info.get(ev.anchor_id, {"name": f"Anchor-{ev.anchor_id}", "mac": None})
+        anchor_label = anchor.get("name") or f"Anchor-{ev.anchor_id}"
+        bucket = beacon_map.setdefault(mac, {})
+        bucket[anchor_label] = {
+            "node": anchor_label,
+            "mac": anchor.get("mac"),
+            "rssi": max(bucket.get(anchor_label, {}).get("rssi", -999), float(ev.rssi)),
+        }
 
         if mac not in by_mac:
             meta = SCAN_TYPES.get(st, SCAN_TYPES["UNKNOWN_BLE"])
@@ -278,10 +282,7 @@ def _aggregate_from_detection_events(since: datetime) -> dict[str, DiscoveredDev
 
     for mac, dev in by_mac.items():
         beacons = beacon_map.get(mac, {})
-        dev.beacons = [
-            {"node": node, "rssi": rssi}
-            for node, rssi in sorted(beacons.items(), key=lambda x: -x[1])
-        ]
+        dev.beacons = sorted(beacons.values(), key=lambda x: -x.get("rssi", -999))
     return by_mac
 
 

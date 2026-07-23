@@ -171,6 +171,16 @@
             <option value="90">90 sec</option>
           </select>
         </label>
+        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px">
+          State
+          <select id="commissionStateFilter" class="form-input" style="width:auto;padding:4px 8px;font-size:12px" onchange="renderCommissionTable()">
+            <option value="all">All</option>
+            <option value="detected">Detected</option>
+            <option value="acknowledged">Acknowledged</option>
+            <option value="active">Active</option>
+            <option value="offline">Offline</option>
+          </select>
+        </label>
         <span id="commissionScanSummary" style="font-size:12px;color:var(--text-muted);margin-left:auto"></span>
         <span id="commissionIpConflictHint" style="font-size:12px;color:var(--yellow);width:100%"></span>
       </div>
@@ -185,13 +195,14 @@
                     <th>IP</th>
                     <th>Server interface</th>
                     <th>Last heard</th>
+                    <th>Clock</th>
                     <th>State</th>
                     <th>Link</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody id="commissionScanBody">
-                  <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Scanning…</td></tr>
+                  <tr><td colspan="8" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Scanning…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -252,7 +263,7 @@
       <i class="fa-solid fa-compass"></i>
       <div class="info-banner-text">
         <strong>Scan &amp; refresh anchors</strong> on the <a href="#" onclick="setNodesView('commission');return false">Commission</a> tab
-        (Refresh button + 30/60/90 sec auto-refresh). This list shows saved anchors from the database.
+        (Refresh button + 30/60/90 sec auto-refresh). This list shows anchors discovered from live MQTT traffic seen by this broker.
       </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
@@ -263,8 +274,9 @@
     <!-- Filter tabs -->
     <div class="node-tabs" role="tablist">
       <button type="button" class="node-tab active" data-filter="all" onclick="setNodeFilter('all')">All</button>
-      <button type="button" class="node-tab" data-filter="discovered" onclick="setNodeFilter('discovered')">Discovered</button>
-      <button type="button" class="node-tab" data-filter="placed" onclick="setNodeFilter('placed')">Placed on map</button>
+      <button type="button" class="node-tab" data-filter="detected" onclick="setNodeFilter('detected')">Detected</button>
+      <button type="button" class="node-tab" data-filter="acknowledged" onclick="setNodeFilter('acknowledged')">Acknowledged</button>
+      <button type="button" class="node-tab" data-filter="active" onclick="setNodeFilter('active')">Active</button>
       <button type="button" class="node-tab" data-filter="offline" onclick="setNodeFilter('offline')">Offline</button>
     </div>
 
@@ -290,12 +302,14 @@
             <th>Position (X, Y, Z)</th>
             <th>Type</th>
             <th>Status</th>
-            <th>Last Heartbeat</th>
+            <th>First seen</th>
+            <th>Last payload</th>
+            <th>Clock</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody id="nodesTable">
-          <tr><td colspan="9" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
+          <tr><td colspan="11" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</td></tr>
         </tbody>
       </table>
     </div>
@@ -354,12 +368,13 @@
                 <th>Node</th>
                 <th>IP</th>
                 <th>Server interface</th>
+                <th>Clock</th>
                 <th>Parsed</th>
                 <th>Payload</th>
               </tr>
             </thead>
             <tbody id="mqttTrafficTable">
-              <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>
+              <tr><td colspan="8" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>
             </tbody>
           </table>
         </div>
@@ -399,6 +414,10 @@
     <div class="form-group">
       <label class="form-label">MAC Address <span class="form-required">*</span></label>
       <input class="form-input mono" id="nodeMac" placeholder="AA:BB:CC:DD:EE:FF" style="text-transform:uppercase">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Node IP</label>
+      <input class="form-input mono" id="nodeIp" placeholder="10.60.1.10">
     </div>
 
     <!-- Position via coordinate input -->
@@ -600,7 +619,7 @@ async function loadMqttTraffic(showSpinner) {
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="7" class="table-empty" style="color:var(--red)">Failed to load MQTT traffic</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="table-empty" style="color:var(--red)">Failed to load MQTT traffic</td></tr>';
   }
 }
 
@@ -791,34 +810,65 @@ async function loadUserInfo() {
   if (u.role === 'ADMIN') document.getElementById('adminNav')?.style && (document.getElementById('adminNav').style.display = 'block');
 }
 
+function mapScanNode(item) {
+  return {
+    id: item.node_id,
+    assigned_name: item.name,
+    mac_address: item.mac_address,
+    node_ip: item.node_ip,
+    commission_state: item.commission_state,
+    online: !!item.online,
+    node_type: item.node_type || 'STANDARD',
+    position: { x: item.pos_x, y: item.pos_y, z: item.pos_z },
+    metadata: {
+      node_ip: item.node_ip,
+      server_interface: item.server_interface,
+      server_interface_label: item.server_interface_label,
+      strata_node_id: item.strata_node_id,
+      first_discovered_at: item.first_discovered_at,
+      last_payload_at: item.last_payload_at,
+      last_seen_at: item.last_timestamp,
+      last_node_reported_at: item.last_node_reported_at,
+      last_clock_skew_seconds: item.last_clock_skew_seconds,
+      clock_skew_warning: item.clock_skew_warning,
+    },
+    last_heartbeat: item.last_heard_at,
+    created_at: item.first_discovered_at,
+  };
+}
+
+function applyNodeFilter(items) {
+  if (!nodeFilter || nodeFilter === 'all') return items;
+  return items.filter(item => (item.commission_state || 'detected') === nodeFilter);
+}
+
 async function loadAllNodes() {
-  const res = await API.get('/nodes');
+  const res = await API.get('/nodes/scan');
   const data = await API.json(res);
-  if (res && res.ok) allNodes = data.items || [];
+  if (res && res.ok) allNodes = (data.items || []).map(mapScanNode);
 }
 
 async function loadNodes() {
-  const q = nodeFilter && nodeFilter !== 'all' ? `?filter=${encodeURIComponent(nodeFilter)}` : '';
-  const res = await API.get('/nodes' + q);
+  const res = await API.get('/nodes/scan');
   const data = await API.json(res);
-  if (res && res.ok) nodes = data.items || [];
+  if (res && res.ok) nodes = applyNodeFilter((data.items || []).map(mapScanNode));
 }
 
 function renderSummary() {
   const src = allNodes.length ? allNodes : nodes;
   document.getElementById('statTotal').textContent = src.length;
-  document.getElementById('statActive').textContent = src.filter(n => n.status === 'ACTIVE').length;
-  document.getElementById('statCalibrating').textContent = src.filter(n => n.status === 'CALIBRATING').length;
-  document.getElementById('statOffline').textContent = src.filter(n => n.status === 'OFFLINE').length;
+  document.getElementById('statActive').textContent = src.filter(n => n.commission_state === 'active').length;
+  document.getElementById('statCalibrating').textContent = src.filter(n => n.commission_state === 'detected' || n.commission_state === 'acknowledged').length;
+  document.getElementById('statOffline').textContent = src.filter(n => n.commission_state === 'offline').length;
 }
 
 function renderNodes() {
   const tbody = document.getElementById('nodesTable');
   if (!nodes.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="table-empty">
+    tbody.innerHTML = `<tr><td colspan="11" class="table-empty">
       <div style="margin-bottom:8px"><i class="fa-solid fa-anchor" style="font-size:28px;color:var(--text-muted)"></i></div>
-      No anchors configured yet.<br>
-      <a href="#" onclick="openNodeModal();return false" style="color:var(--cyan)">Add your first node →</a>
+      No MQTT anchors discovered for this broker yet.<br>
+      <a href="#" onclick="setNodesView('diagnostics');setDiagSubView('traffic');return false" style="color:var(--cyan)">Open Incoming traffic</a>
     </td></tr>`;
     return;
   }
@@ -827,6 +877,8 @@ function renderNodes() {
     const meta = n.metadata || {};
     const nodeIp = meta.node_ip || '—';
     const iface = meta.server_interface_label || meta.server_interface || '—';
+    const firstSeen = meta.first_discovered_at || n.created_at || null;
+    const lastPayload = meta.last_payload_at || meta.last_seen_at || n.last_heartbeat || null;
     const typeIcon = { STANDARD: 'fa-anchor', CHECK_IN: 'fa-right-to-bracket', CHECK_OUT: 'fa-right-from-bracket' }[n.node_type] || 'fa-anchor';
     const statusClass = statusClassFor(n.status);
     const tip = [
@@ -858,8 +910,10 @@ function renderNodes() {
           ${n.node_type || 'Standard'}
         </span>
       </td>
-      <td><span class="status-pill ${statusClass}"><span class="status-dot-sm"></span>${n.status || 'Unknown'}</span></td>
-      <td class="mono">${n.last_heartbeat ? timeAgo(n.last_heartbeat) : '<span style="color:var(--text-muted)">Never</span>'}</td>
+      <td>${typeof statePill === 'function' ? statePill(n.commission_state || 'detected') : `<span class="status-pill ${statusClass}"><span class="status-dot-sm"></span>${n.status || 'Unknown'}</span>`}</td>
+      <td class="mono">${firstSeen ? timeAgo(firstSeen) : '<span style="color:var(--text-muted)">Never</span>'}</td>
+      <td class="mono">${lastPayload ? timeAgo(lastPayload) : '<span style="color:var(--text-muted)">Never</span>'}</td>
+      <td>${meta.last_clock_skew_seconds == null ? '<span style="color:var(--text-muted)">?</span>' : `<span style="color:${meta.clock_skew_warning ? 'var(--yellow)' : 'var(--text-secondary)'}">${Number(meta.last_clock_skew_seconds).toFixed(1)}s${meta.clock_skew_warning ? ' ?' : ''}</span>`}</td>
       <td>
         <div class="action-btns">
           <button class="action-btn" onclick="editNode(${n.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
@@ -884,6 +938,7 @@ function openNodeModal() {
   document.getElementById('nodeModalTitle').textContent = 'Add Node / Anchor';
   document.getElementById('nodeName').value = '';
   document.getElementById('nodeMac').value = '';
+  document.getElementById('nodeIp').value = '';
   document.getElementById('nodeX').value = '0';
   document.getElementById('nodeY').value = '0';
   document.getElementById('nodeZ').value = '0';
@@ -905,6 +960,7 @@ async function editNode(id) {
   document.getElementById('nodeModalTitle').textContent = `Edit: ${n.assigned_name || n.mac_address}`;
   document.getElementById('nodeName').value = n.assigned_name || '';
   document.getElementById('nodeMac').value = n.mac_address || '';
+  document.getElementById('nodeIp').value = n.node_ip || (n.metadata && n.metadata.node_ip) || '';
   const pos = n.position || {};
   document.getElementById('nodeX').value = pos.x ?? 0;
   document.getElementById('nodeY').value = pos.y ?? 0;
@@ -938,9 +994,11 @@ async function saveNode() {
     node_type: parseInt(document.getElementById('nodeType').value),
   };
   const cov = document.getElementById('nodeCoverage').value;
-  if (cov) {
-    body.metadata = { coverage_radius_m: parseFloat(cov) };
-  }
+  const nodeIp = document.getElementById('nodeIp').value.trim();
+  const metadata = {};
+  if (cov) metadata.coverage_radius_m = parseFloat(cov);
+  if (nodeIp) metadata.node_ip = nodeIp;
+  if (Object.keys(metadata).length) body.metadata = metadata;
   let res;
   if (editingNodeId) {
     res = await API.patch(`/nodes/${editingNodeId}`, body);

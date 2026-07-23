@@ -494,8 +494,38 @@ def _ensure_schema_columns():
         log.warning("Schema reconcile skipped: %s", e)
 
 
+def _remove_demo_artifacts(log):
+    """Delete legacy demo anchors, tags, mock bridge, and their residual history."""
+    from backend.models import HardwareConfig, Tracker, WifiNode
+    from backend.models.positioning import PositionSnapshot, TrackerPresenceLog, TrackingHistory
+
+    demo_node_macs = [
+        "AA:00:00:00:00:01",
+        "AA:00:00:00:00:02",
+        "AA:00:00:00:00:03",
+        "AA:00:00:00:00:04",
+    ]
+    demo_tracker_ids = ["TAG_001", "TAG_002", "TAG_003"]
+
+    trackers = Tracker.query.filter(Tracker.hardware_id.in_(demo_tracker_ids)).all()
+    tracker_db_ids = [t.id for t in trackers]
+    if tracker_db_ids:
+        TrackingHistory.query.filter(TrackingHistory.tracker_id.in_(tracker_db_ids)).delete(synchronize_session=False)
+        TrackerPresenceLog.query.filter(TrackerPresenceLog.tracker_id.in_(tracker_db_ids)).delete(synchronize_session=False)
+        PositionSnapshot.query.filter(PositionSnapshot.tracker_id.in_(tracker_db_ids)).delete(synchronize_session=False)
+        Tracker.query.filter(Tracker.id.in_(tracker_db_ids)).delete(synchronize_session=False)
+        log.info("Removed legacy demo trackers and history")
+
+    removed_nodes = WifiNode.query.filter(WifiNode.mac_address.in_(demo_node_macs)).delete(synchronize_session=False)
+    removed_mocks = HardwareConfig.query.filter(HardwareConfig.profile_id == "mock_data").delete(synchronize_session=False)
+    if removed_nodes:
+        log.info("Removed %s legacy demo anchors", removed_nodes)
+    if removed_mocks:
+        log.info("Removed %s mock_data hardware configs", removed_mocks)
+
+
 def _seed_demo_if_needed(app):
-    """Ensure admin + mock simulator exist so Live Map works on first boot."""
+    """Ensure admin exists and purge legacy demo/mock RTLS records on startup."""
     import logging
     from backend.models import User, UserRole, HardwareConfig, WifiNode, Tracker, Setting
     from backend.models.settings import SettingScope
@@ -527,46 +557,8 @@ def _seed_demo_if_needed(app):
         db.session.add(admin)
         log.info("Seeded default admin user")
 
-    demo_nodes = [
-        ("AA:00:00:00:00:01", "Demo Anchor N", 0.0, 0.0, 2.5),
-        ("AA:00:00:00:00:02", "Demo Anchor E", 20.0, 0.0, 2.5),
-        ("AA:00:00:00:00:03", "Demo Anchor S", 20.0, 15.0, 2.5),
-        ("AA:00:00:00:00:04", "Demo Anchor W", 0.0, 15.0, 2.5),
-    ]
-    for mac, name, x, y, z in demo_nodes:
-        if not WifiNode.query.filter_by(mac_address=mac).first():
-            db.session.add(WifiNode(
-                mac_address=mac, assigned_name=name,
-                pos_x=x, pos_y=y, pos_z=z,
-                node_type=int(NodeType.STANDARD),
-                status=int(NodeStatus.ACTIVE),
-            ))
+    _remove_demo_artifacts(log)
 
-    for hid, name, tt, cat in [
-        ("TAG_001", "Operator Alpha", TagType.PERSONNEL, DeviceCategory.PERSONNEL_TAG),
-        ("TAG_002", "Machine Cart B", TagType.MACHINE, DeviceCategory.MACHINE_TAG),
-        ("TAG_003", "Sensor Pack C", TagType.PERSONNEL, DeviceCategory.ENV_SENSOR),
-    ]:
-        if not Tracker.query.filter_by(hardware_id=hid).first():
-            db.session.add(Tracker(
-                hardware_id=hid, assigned_name=name,
-                tag_type=int(tt), category=int(cat),
-            ))
-
-    # Prefer an active mock_data bridge for demos when none exists
-    has_mock = HardwareConfig.query.filter_by(profile_id="mock_data").first()
-    if not has_mock:
-        mock = HardwareConfig(
-            name="Demo Mock Simulator",
-            hardware_type=HardwareType.UWB,
-            protocol=Protocol.SERIAL,
-            profile_id="mock_data",
-            is_active=True,
-            status=ConnectionStatus.DISCONNECTED,
-        )
-        mock.set_settings({"interval": 0.5, "tracker_ids": "TAG_001,TAG_002,TAG_003"})
-        db.session.add(mock)
-        log.info("Seeded demo mock_data hardware config")
 
     for key, meta in SETTING_DEFAULTS.items():
         if not Setting.query.filter_by(key=key).first():

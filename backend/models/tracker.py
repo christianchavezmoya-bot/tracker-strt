@@ -154,6 +154,16 @@ class Tracker(db.Model):
         except Exception:
             return []
 
+    def get_metadata(self) -> dict:
+        import json
+        if not self.metadata_json:
+            return {}
+        try:
+            data = json.loads(self.metadata_json)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
     def get_features(self) -> dict:
         import json
         if not self.features_json:
@@ -166,6 +176,8 @@ class Tracker(db.Model):
 
     def to_dict(self) -> dict:
         feats = self.get_features()
+        meta = self.get_metadata()
+        beacon_detections = self.get_beacon_detections()
         return {
             "id": self.id,
             "hardware_id": self.hardware_id,
@@ -190,7 +202,8 @@ class Tracker(db.Model):
             "phone": self.phone,
             "last_rssi": self.last_rssi,
             "nearest_node": self.nearest_node,
-            "beacon_detections": self.get_beacon_detections(),
+            "beacon_detections": beacon_detections,
+            "anchor_macs": [str(b.get("mac") or "") for b in beacon_detections if b.get("mac")],
             "features": feats,
             "position": {"x": self.pos_x, "y": self.pos_y, "z": self.pos_z},
             "battery_level": self.battery_level,
@@ -208,6 +221,7 @@ class Tracker(db.Model):
             "check_status": CheckInStatus(self.check_status).name,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "is_online": self.is_online,
+            "metadata": meta,
         }
 
 
@@ -265,6 +279,7 @@ class WifiNode(db.Model):
             "id": self.id,
             "mac_address": self.mac_address,
             "assigned_name": self.assigned_name,
+            "node_ip": (meta or {}).get("node_ip"),
             "position": {"x": self.pos_x, "y": self.pos_y, "z": self.pos_z},
             "node_type": self.node_type_name,
             "status": NodeStatus(self.status).name,

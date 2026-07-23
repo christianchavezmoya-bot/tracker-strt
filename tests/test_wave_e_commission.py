@@ -30,6 +30,21 @@ def test_scan_nodes_api(client, auth_headers, app, db_session):
     assert "last_heard_at" in row
 
 
+def test_scan_nodes_merges_same_ip_units(app, db_session):
+    with app.app_context():
+        ingest = init_mqtt_tag_ingest(app=app)
+        ingest.handle_message("c1", "strata/v1/bluetooth/1/214282185227987", "[1,1750730515,28,214282185227987,1,828033288983,-94]", "10.60.1.10")
+        ingest.handle_message("c2", "strata/v1/bluetooth/1/214282185228770", "[1,1750730516,28,214282185228770,1,828033288983,-93]", "10.60.1.10")
+        data = scan_nodes(db_session)
+
+    assert data["total"] == 1
+    row = data["items"][0]
+    assert row["node_ip"] == "10.60.1.10"
+    assert row["logical_count"] == 2
+    assert set(row["logical_strata_ids"]) == {"214282185227987", "214282185228770"}
+    assert row["ip_conflict"] is False
+
+
 def test_commission_queue(client, auth_headers, app, db_session):
     with app.app_context():
         register_node_from_mqtt("STRATA:999999999999999", {"strata_node_id": "999999999999999"})

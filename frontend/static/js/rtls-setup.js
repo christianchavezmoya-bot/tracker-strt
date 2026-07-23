@@ -111,7 +111,10 @@ async function loadWifiSetupCard(containerId) {
     const rows = [
       ['Broker address', data.broker_host],
       ['Port', String(data.broker_port)],
-      ['Topic', data.topic + (data.topic_note ? ' — see Diagnostics' : '')],
+      ['Node timezone', data.node_timezone || 'UTC'],
+      ['Node NTP server', data.node_ntp_server || data.broker_host],
+      ['NTP mode', data.node_ntp_mode || 'lan_server'],
+      ['Topic', data.topic + (data.topic_note ? ' - see Diagnostics' : '')],
       ['Payload format', data.payload_format],
       ['Example (CSV)', data.example_payload],
     ];
@@ -141,6 +144,9 @@ function copyWifiSetup() {
   const text = [
     `Broker: ${d.broker_host}`,
     `Port: ${d.broker_port}`,
+    `Node timezone: ${d.node_timezone || 'UTC'}`,
+    `Node NTP server: ${d.node_ntp_server || d.broker_host}`,
+    `Node NTP mode: ${d.node_ntp_mode || 'lan_server'}`,
     `Topic: ${d.topic}`,
     `Format: ${d.payload_format}`,
     `Example: ${d.example_payload}`,
@@ -171,6 +177,11 @@ async function loadMqttNetworkPanel() {
     const portOk = data.port_reachable === true;
     const portPill = !data.enabled ? 'pill-gray' : (portOk ? 'pill-green' : 'pill-yellow');
     const portLabel = !data.enabled ? 'Off' : (portOk ? 'Reachable' : 'Not reachable');
+    const hostOptions = (data.available_hosts || []).map(item => {
+      const ip = item.ip || '';
+      const labelText = item.label ? `${item.label} - ${ip}` : ip;
+      return `<option value="${ip}" ${ip === data.selected_host ? 'selected' : ''}>${labelText}</option>`;
+    }).join('');
     statusEl.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
         <div class="hw-summary-card" style="padding:14px;text-align:center">
@@ -182,23 +193,44 @@ async function loadMqttNetworkPanel() {
           <div style="font-size:11px;color:var(--text-muted)">Port ${data.port} check</div>
         </div>
         <div class="hw-summary-card" style="padding:14px;text-align:center">
-          <div style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:var(--cyan)">${data.message_count || 0}</div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="window.openMqttMessagesModal && window.openMqttMessagesModal()" style="margin:0 auto 8px;display:inline-flex;min-width:76px;justify-content:center">${data.message_count || 0}</button>
           <div style="font-size:11px;color:var(--text-muted)">Messages received</div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="window.openMqttMessagesModal && window.openMqttMessagesModal()" style="margin:8px auto 0;display:inline-flex">View messages</button>
         </div>
       </div>
-      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:8px">
-        <strong>Address for WiFi units:</strong> <span class="mono" style="color:var(--cyan)">${data.broker_url || ''}</span>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <div style="font-size:12px;color:var(--text-secondary)"><strong>Address for WiFi units:</strong> <span class="mono" style="color:var(--cyan)">${data.broker_url || ''}</span></div>
+        <label style="font-size:12px;color:var(--text-muted)">Use network:</label>
+        <select id="mqttHostSelect" class="setting-select" onchange="onMqttAdvertisedHostChange(this.value)" style="min-width:280px">
+          ${hostOptions}
+        </select>
       </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Select the PC network that your WiFi anchors can actually reach. Use Ethernet when anchors are on the wired LAN.</div>
       ${data.last_error ? `<div style="font-size:12px;color:var(--red);margin-top:8px">${data.last_error}</div>` : ''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="openMqttMessagesModal()"><i class="fa-solid fa-list"></i> View messages</button>
         <a href="/nodes" class="btn btn-ghost btn-sm" style="text-decoration:none"><i class="fa-solid fa-wifi"></i> Anchors → Commission scan</a>
-        <span style="font-size:11px;color:var(--text-muted)">Live traffic with IP + server interface (scrollable)</span>
+        <span style="font-size:11px;color:var(--text-muted)">Click the Messages received count above to open live MQTT traffic.</span>
       </div>
       <div id="wifiSetupCardSettings" style="margin-top:16px"></div>`;
     await loadWifiSetupCard('wifiSetupCardSettings');
   } catch (e) {
     statusEl.innerHTML = '<div style="color:var(--red);font-size:13px">Failed to load MQTT status</div>';
+  }
+}
+
+async function onMqttAdvertisedHostChange(host) {
+  try {
+    const res = await API.post('/system/mqtt-broker', { advertised_host: host || '' });
+    const data = await API.json(res);
+    if (res && res.ok) {
+      showToast?.('MQTT broker address updated', 'success');
+      await loadMqttNetworkPanel();
+      await refreshRtlsSetupUi();
+    } else {
+      showToast?.('Failed: ' + (data?.error || res?.statusText), 'error');
+    }
+  } catch (e) {
+    showToast?.('Network error', 'error');
   }
 }
 
@@ -225,7 +257,10 @@ let _mqttMsgAutoScroll = true;
 
 function openMqttMessagesModal() {
   const modal = document.getElementById('mqttMessagesModal');
-  if (!modal) return;
+  if (!modal) {
+    showToast?.('MQTT messages window is not available on this page. Refresh the browser.', 'error');
+    return;
+  }
   modal.style.display = 'flex';
   _mqttMsgAutoScroll = true;
   refreshMqttMessagesModal(true);
@@ -294,5 +329,6 @@ window.renderReadinessPanel = renderReadinessPanel;
 window.refreshRtlsSetupUi = refreshRtlsSetupUi;
 window.loadWifiSetupCard = loadWifiSetupCard;
 window.loadMqttNetworkPanel = loadMqttNetworkPanel;
+window.onMqttAdvertisedHostChange = onMqttAdvertisedHostChange;
 window.onMqttBrokerToggleChange = onMqttBrokerToggleChange;
 window.copyWifiSetup = copyWifiSetup;

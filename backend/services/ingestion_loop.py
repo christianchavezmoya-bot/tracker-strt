@@ -113,7 +113,7 @@ class IngestionLoop(threading.Thread):
                     from backend.models.tracker import TagType, DeviceCategory
                     tracker = Tracker(
                         hardware_id=hardware_id,
-                        assigned_name=f"Auto-{hardware_id[:12]}",
+                        assigned_name=None,
                         tag_type=int(TagType.PERSONNEL),
                         category=int(DeviceCategory.PERSONNEL_TAG),
                     )

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 import re
 from typing import Optional
 
@@ -10,6 +11,7 @@ from backend.extensions import db
 from backend.models.tracker import NodeStatus, WifiNode
 from backend.services.anchor_sync import ensure_node_pair, touch_node_heartbeat
 from backend.services.node_utils import get_node_metadata
+from backend.services.time_sync_status import CLOCK_SKEW_WARN_KEY, _setting_value
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,62 @@ def detect_node_from_mqtt(topic: str, payload: str) -> tuple[Optional[str], dict
     return None, hints
 
 
+def _extract_node_reported_at(payload: str) -> str | None:
+    body = (payload or '').strip()
+    if not body:
+        return None
+    if body.startswith('['):
+        try:
+            data = json.loads(body)
+            if isinstance(data, list) and len(data) >= 2:
+                return _epochish_to_iso(data[1])
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+    if body.startswith('{'):
+        try:
+            data = json.loads(body)
+            if isinstance(data, dict):
+                return (
+                    _epochish_to_iso(data.get('timestamp'))
+                    or _epochish_to_iso(data.get('ts'))
+                    or _epochish_to_iso(data.get('time'))
+                )
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+    return None
+
+
+def _extract_clock_skew_seconds(payload: str, *, received_at: datetime | None = None) -> float | None:
+    node_iso = _extract_node_reported_at(payload)
+    if not node_iso:
+        return None
+    try:
+        node_dt = datetime.fromisoformat(node_iso.replace('Z', '+00:00'))
+        if node_dt.tzinfo is None:
+            node_dt = node_dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    now = received_at or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return round((now - node_dt).total_seconds(), 3)
+
+
+def _epochish_to_iso(value) -> str | None:
+    if value in (None, ''):
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if num > 10_000_000_000:
+        num = num / 1000.0
+    try:
+        return datetime.fromtimestamp(num, tz=timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 def register_node_from_mqtt(
     node_key: str,
     hints: dict | None = None,
@@ -88,21 +146,39 @@ def register_node_from_mqtt(
         if ip:
             meta["node_ip"] = ip
 
+    now_utc = datetime.now(timezone.utc)
+    now_iso = now_utc.isoformat()
+    meta.setdefault("first_discovered_at", now_iso)
+    meta["last_seen_at"] = now_iso
+    meta["messages_total"] = int(meta.get("messages_total") or 0) + 1
     if payload:
         meta["last_payload"] = (payload or "")[:500]
+        meta["last_payload_at"] = now_iso
+        node_reported_at = _extract_node_reported_at(payload)
+        if node_reported_at:
+            meta["last_node_reported_at"] = node_reported_at
+        skew = _extract_clock_skew_seconds(payload, received_at=now_utc)
+        if skew is not None:
+            meta["last_clock_skew_seconds"] = skew
+            warn_threshold = float(meta.get("clock_skew_warn_seconds") or _setting_value(CLOCK_SKEW_WARN_KEY, 10) or 10)
+            meta["clock_skew_warn_seconds"] = warn_threshold
+            meta["clock_skew_warning"] = abs(skew) >= warn_threshold
 
     strata_id = hints.get("strata_node_id")
     default_name = f"STRATA-{strata_id[-6:]}" if strata_id else f"Node-{key[-8:]}"
 
     if not node:
-        meta = {
+        meta.update({
             "placed_on_map": False,
             "source": "mqtt_traffic",
             "mqtt_auto_detected": True,
             "mqtt_acknowledged": False,
             "payload_format": hints.get("payload_format", "unknown"),
             "last_mqtt_topic": hints.get("topic"),
-        }
+            "first_discovered_at": meta.get("first_discovered_at") or now_iso,
+            "last_seen_at": now_iso,
+            "messages_total": int(meta.get("messages_total") or 0),
+        })
         if strata_id:
             meta["strata_node_id"] = strata_id
         node = WifiNode(

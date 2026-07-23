@@ -69,6 +69,12 @@ function fmtBeacons(t) {
   return b.map(x => `${x.node}:${Math.round(x.rssi)}`).join(', ');
 }
 
+function fmtAnchorMacs(t) {
+  const macs = t.anchor_macs || [];
+  if (!macs.length) return '-';
+  return macs.join(', ');
+}
+
 function displayStatus(t) {
   if (t.ack_status === 'UNACKNOWLEDGED' || t.ack_status_id === 0) return 'Unacknowledged';
   if (t.asset_state === 'OFFLINE' || t.asset_state_id === 2) return 'Offline';
@@ -136,7 +142,7 @@ async function loadTrackers() {
 
   const body = document.getElementById('trackersBody');
   if (!items.length) {
-    body.innerHTML = '<tr><td colspan="19" class="empty-cell">No tags yet. Run a scan or adjust filters.</td></tr>';
+    body.innerHTML = '<tr><td colspan="20" class="empty-cell">No tags yet. Run a scan or adjust filters.</td></tr>';
     return;
   }
 
@@ -159,6 +165,7 @@ async function loadTrackers() {
       ${featCells(t)}
       <td class="mono">${fmtCoords(t)}</td>
       <td>${esc(t.nearest_node || '—')}</td>
+      <td class="mono beacon-col" title="${esc(fmtAnchorMacs(t))}">${esc(fmtAnchorMacs(t))}</td>
       <td class="mono beacon-col" title="${esc(fmtBeacons(t))}">${esc(fmtBeacons(t))}</td>
       <td class="row-actions">
         <button class="icon-btn" title="Acknowledge" data-role-min="operator" onclick="openAck(${t.id})"><i class="fa-solid fa-circle-check"></i></button>

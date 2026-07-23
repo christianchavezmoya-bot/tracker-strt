@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from backend.extensions import db
@@ -37,7 +37,12 @@ class MqttTagIngestService:
     def handle_message(
         self, client_id: str, topic: str, payload: str, client_ip: str | None = None,
     ) -> None:
-        from backend.services.mqtt_node_detect import detect_node_from_mqtt, register_node_from_mqtt
+        from backend.services.mqtt_node_detect import (
+            detect_node_from_mqtt,
+            register_node_from_mqtt,
+            _extract_clock_skew_seconds,
+            _extract_node_reported_at,
+        )
         from backend.services.mqtt_traffic_log import get_mqtt_traffic_log
 
         with self._lock:
@@ -56,6 +61,10 @@ class MqttTagIngestService:
 
         readings = parse_mqtt_payload(payload, topic)
         parsed = len(readings) > 0
+        received_at = datetime.now(timezone.utc)
+        node_reported_at = _extract_node_reported_at(payload)
+        clock_skew_seconds = _extract_clock_skew_seconds(payload, received_at=received_at)
+        clock_skew_warning = abs(clock_skew_seconds) >= 10 if clock_skew_seconds is not None else False
 
         if node_key and self.app:
             with self.app.app_context():
@@ -65,6 +74,7 @@ class MqttTagIngestService:
                     )
                     from backend.services.net_interface_resolve import interface_label, resolve_server_interface
                     from backend.services.node_presence import log_node_presence, update_node_connection_metadata
+                    from backend.services.node_utils import get_node_metadata, is_node_active_for_mqtt
                     from backend.services.mqtt_node_detect import _extract_strata_rssi
 
                     if client_ip:
@@ -79,6 +89,20 @@ class MqttTagIngestService:
                         node_key, detect_hints, client_id=client_id, payload=payload,
                     )
                     node_id = node.id
+                    try:
+                        from backend.services.time_sync_status import CLOCK_SKEW_WARN_KEY, _setting_value
+                        warn_threshold = float(_setting_value(CLOCK_SKEW_WARN_KEY, 10) or 10)
+                    except Exception:
+                        warn_threshold = 10.0
+                    if clock_skew_seconds is not None:
+                        clock_skew_warning = abs(clock_skew_seconds) >= warn_threshold
+                        meta = get_node_metadata(node)
+                        meta['last_clock_skew_seconds'] = clock_skew_seconds
+                        meta['clock_skew_warning'] = clock_skew_warning
+                        meta['clock_skew_warn_seconds'] = warn_threshold
+                        if node_reported_at:
+                            meta['last_node_reported_at'] = node_reported_at
+                        node.metadata_json = __import__('json').dumps(meta)
                     rssi = _extract_strata_rssi(payload or "")
                     ip = client_ip or get_ip_for_node(node_key)
                     if ip or server_iface:
@@ -117,6 +141,9 @@ class MqttTagIngestService:
             parsed=parsed,
             parse_count=len(readings),
             payload_format=detect_hints.get("payload_format", "unknown"),
+            node_reported_at=node_reported_at,
+            clock_skew_seconds=clock_skew_seconds,
+            clock_skew_warning=clock_skew_warning,
         )
 
         if not readings:
@@ -141,10 +168,17 @@ class MqttTagIngestService:
             self._ingest_grouped(grouped)
 
     def _ingest_grouped(self, grouped: dict[str, list]) -> None:
+        from backend.models.tracker import WifiNode
+        from backend.services.node_utils import is_node_active_for_mqtt
+
         pos_svc = WifiPositioningService(db.session)
         for anchor_mac, batch in grouped.items():
             try:
-                ensure_node_pair(anchor_mac)
+                node, _anchor = ensure_node_pair(anchor_mac)
+                if not is_node_active_for_mqtt(node):
+                    logger.debug("Ignoring MQTT detections from non-active node %s", anchor_mac)
+                    touch_node_heartbeat(anchor_mac)
+                    continue
                 detections = readings_to_detections(batch)
                 pos_svc.process_scan_batch(anchor_mac, detections)
                 touch_node_heartbeat(anchor_mac)
