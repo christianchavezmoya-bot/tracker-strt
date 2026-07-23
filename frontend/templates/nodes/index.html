@@ -105,6 +105,7 @@
           Anchors / Nodes
         </h1>
         <p class="page-subtitle">Fixed-position reference points for positioning. Place at known survey coordinates.</p>
+        <p style="font-size:10px;color:var(--text-muted);margin:4px 0 0" id="nodesUiVersion">UI: commission-scan-v3</p>
       </div>
       <button class="btn btn-primary" onclick="openNodeModal()">
         <i class="fa-solid fa-plus"></i> Add Node
@@ -468,9 +469,9 @@
 
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/rtls-setup.js?v=1"></script>
+<script src="/static/js/rtls-setup.js?v=3"></script>
 <script src="/static/vendor/leaflet/leaflet.js"></script>
-<script src="/static/js/nodes-commission.js?v=2"></script>
+<script src="/static/js/nodes-commission.js?v=3"></script>
 <script>
 
 'use strict';
@@ -496,6 +497,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderSummary();
   setNodesView('commission');
   updateNodeListConflictHint();
+  if (window.location.hash === '#commission') setNodesView('commission');
 });
 
 function setNodesView(view) {

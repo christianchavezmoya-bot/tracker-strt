@@ -190,6 +190,11 @@ async function loadMqttNetworkPanel() {
         <strong>Address for WiFi units:</strong> <span class="mono" style="color:var(--cyan)">${data.broker_url || ''}</span>
       </div>
       ${data.last_error ? `<div style="font-size:12px;color:var(--red);margin-top:8px">${data.last_error}</div>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openMqttMessagesModal()"><i class="fa-solid fa-list"></i> View messages</button>
+        <a href="/nodes" class="btn btn-ghost btn-sm" style="text-decoration:none"><i class="fa-solid fa-wifi"></i> Anchors → Commission scan</a>
+        <span style="font-size:11px;color:var(--text-muted)">Live traffic with IP + server interface (scrollable)</span>
+      </div>
       <div id="wifiSetupCardSettings" style="margin-top:16px"></div>`;
     await loadWifiSetupCard('wifiSetupCardSettings');
   } catch (e) {
@@ -214,6 +219,75 @@ async function onMqttBrokerToggleChange(checked) {
     showToast?.('Network error', 'error');
   }
 }
+
+let _mqttMsgTimer = null;
+let _mqttMsgAutoScroll = true;
+
+function openMqttMessagesModal() {
+  const modal = document.getElementById('mqttMessagesModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  _mqttMsgAutoScroll = true;
+  refreshMqttMessagesModal(true);
+  clearInterval(_mqttMsgTimer);
+  _mqttMsgTimer = setInterval(() => refreshMqttMessagesModal(false), 2000);
+}
+
+function closeMqttMessagesModal() {
+  const modal = document.getElementById('mqttMessagesModal');
+  if (modal) modal.style.display = 'none';
+  clearInterval(_mqttMsgTimer);
+  _mqttMsgTimer = null;
+}
+
+async function refreshMqttMessagesModal(showSpinner) {
+  const body = document.getElementById('mqttMessagesBody');
+  const summary = document.getElementById('mqttMessagesSummary');
+  if (!body) return;
+  if (showSpinner) {
+    body.innerHTML = '<div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading messages…</div>';
+  }
+  try {
+    const res = await API.get('/nodes/mqtt-traffic?limit=120');
+    const data = await API.json(res);
+    if (!res?.ok) throw new Error('load failed');
+    const items = data.items || [];
+    const s = data.summary || {};
+    if (summary) {
+      summary.textContent = `${s.total_received || 0} total · ${items.length} shown · ${Object.keys(s.payload_formats || {}).join(', ') || 'no formats yet'}`;
+    }
+    if (!items.length) {
+      body.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:13px">No MQTT messages yet. Turn on the receiver above and power on WiFi units.</div>';
+      return;
+    }
+    const wasAtBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+    body.innerHTML = items.map(row => {
+      const t = row.at ? new Date(row.at).toLocaleTimeString() : '—';
+      const ip = row.client_ip || '—';
+      const iface = row.server_interface || '—';
+      const preview = (row.payload_preview || row.payload || '').replace(/</g, '&lt;');
+      return `<div class="mqtt-msg-row">
+        <div class="mqtt-msg-meta"><span class="mono">${t}</span> · <span class="mono">${ip}</span> · <span>${iface}</span> · <span class="mono">${row.node_key || '—'}</span></div>
+        <div class="mqtt-msg-topic mono">${row.topic || '—'}</div>
+        <div class="mqtt-msg-payload mono">${preview}</div>
+      </div>`;
+    }).join('');
+    if (_mqttMsgAutoScroll || wasAtBottom) {
+      body.scrollTop = 0;
+    }
+  } catch (e) {
+    body.innerHTML = '<div style="padding:20px;color:var(--red)">Failed to load MQTT traffic</div>';
+  }
+}
+
+function toggleMqttMsgAutoScroll(checked) {
+  _mqttMsgAutoScroll = !!checked;
+}
+
+window.openMqttMessagesModal = openMqttMessagesModal;
+window.closeMqttMessagesModal = closeMqttMessagesModal;
+window.refreshMqttMessagesModal = refreshMqttMessagesModal;
+window.toggleMqttMsgAutoScroll = toggleMqttMsgAutoScroll;
 
 window.loadRtlsReadiness = loadRtlsReadiness;
 window.renderReadinessPanel = renderReadinessPanel;

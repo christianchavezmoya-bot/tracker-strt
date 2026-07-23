@@ -99,12 +99,21 @@ class MqttBrokerApp(tk.Tk):
 
         log_frame = ttk.LabelFrame(paned, text="MQTT messages (live)")
         paned.add(log_frame, weight=3)
+        log_wrap = ttk.Frame(log_frame)
+        log_wrap.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
         cols_log = ("time", "client", "topic", "payload")
-        self.msg_tree = ttk.Treeview(log_frame, columns=cols_log, show="headings", height=12)
+        self.msg_tree = ttk.Treeview(log_wrap, columns=cols_log, show="headings", height=12)
         for c, w in zip(cols_log, (70, 100, 140, 520)):
             self.msg_tree.heading(c, text=c.upper())
             self.msg_tree.column(c, width=w)
-        self.msg_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        vsb = ttk.Scrollbar(log_wrap, orient=tk.VERTICAL, command=self.msg_tree.yview)
+        hsb = ttk.Scrollbar(log_wrap, orient=tk.HORIZONTAL, command=self.msg_tree.xview)
+        self.msg_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        self.msg_tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        log_wrap.grid_rowconfigure(0, weight=1)
+        log_wrap.grid_columnconfigure(0, weight=1)
 
         tag_frame = ttk.LabelFrame(paned, text="Parsed tags (from rssi/data, ble/rssi, etc.)")
         paned.add(tag_frame, weight=2)

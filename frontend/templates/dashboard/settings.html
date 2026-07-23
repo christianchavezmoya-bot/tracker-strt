@@ -94,6 +94,16 @@
 .fp-row-actions .btn { padding:6px 10px; font-size:11px; white-space:nowrap; }
 </style>
 <style>.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)}</style>
+<style>
+.mqtt-messages-modal { width:min(920px,94vw); max-height:85vh; background:var(--bg-card); border:1px solid var(--border); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; }
+.mqtt-messages-head { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--border); }
+.mqtt-messages-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 18px; border-bottom:1px solid var(--border); font-size:12px; color:var(--text-muted); }
+#mqttMessagesBody { flex:1; overflow-y:auto; overflow-x:hidden; max-height:min(60vh,520px); padding:8px 12px; background:#0a0e14; }
+.mqtt-msg-row { border-bottom:1px solid rgba(255,255,255,.06); padding:8px 6px; font-size:11px; }
+.mqtt-msg-meta { color:var(--text-muted); margin-bottom:4px; }
+.mqtt-msg-topic { color:var(--cyan); margin-bottom:2px; word-break:break-all; }
+.mqtt-msg-payload { color:var(--text-secondary); word-break:break-all; max-height:4.5em; overflow:hidden; }
+</style>
 {% endblock %}
 {% block content %}
 <div class="page-header">
@@ -557,9 +567,24 @@
     </div>
   </div>
 </div>
+
+<div class="modal-overlay" id="mqttMessagesModal" style="display:none" onclick="if(event.target===this)closeMqttMessagesModal()">
+  <div class="mqtt-messages-modal" onclick="event.stopPropagation()">
+    <div class="mqtt-messages-head">
+      <div style="font-size:15px;font-weight:700"><i class="fa-solid fa-tower-broadcast"></i> MQTT messages (live)</div>
+      <button type="button" class="modal-close" onclick="closeMqttMessagesModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="mqtt-messages-toolbar">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="refreshMqttMessagesModal(true)"><i class="fa-solid fa-rotate"></i> Refresh</button>
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="mqttMsgAutoScroll" checked onchange="toggleMqttMsgAutoScroll(this.checked)"> Stay at newest</label>
+      <span id="mqttMessagesSummary" style="margin-left:auto"></span>
+    </div>
+    <div id="mqttMessagesBody"></div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/rtls-setup.js?v=1"></script>
+<script src="/static/js/rtls-setup.js?v=3"></script>
 <script src="/static/js/floor-plan-coord-wizard.js?v=13"></script>
 <script>
 
