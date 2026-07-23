@@ -1,5 +1,5 @@
 /**
- * HOLO-RTLS — Anchors commission: scan, acknowledge, map pick, timeline.
+ * HOLO-RTLS - Anchors commission: scan, acknowledge, map pick, timeline.
  */
 'use strict';
 
@@ -10,15 +10,17 @@ let commissionScanCache = [];
 let commissionSelectedId = null;
 let commissionMap = null;
 let commissionPickMarker = null;
+let commissionMapImageLayer = null;
+let commissionMapBlobUrl = null;
 let commissionInited = false;
 
 function fmtNodeTime(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleString(undefined, {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
     });
-  } catch (_) { return '—'; }
+  } catch (_) { return '-'; }
 }
 
 function nodeTooltip(item) {
@@ -29,14 +31,14 @@ function nodeTooltip(item) {
   return [
     `ID: ${item.mac_address}`,
     strataLine,
-    item.node_ip && item.node_ip !== '—' ? `IP: ${item.node_ip}` : '',
+    item.node_ip && item.node_ip !== '-' ? `IP: ${item.node_ip}` : '',
     item.server_interface_label || item.server_interface ? `Interface: ${item.server_interface_label || item.server_interface}` : '',
     item.logical_count > 1 ? `Merged logical IDs: ${item.logical_count}` : '',
     item.last_topic ? `Topic: ${item.last_topic}` : '',
     item.payload_format ? `Format: ${item.payload_format}` : '',
     item.last_payload_at ? `Last payload: ${fmtNodeTime(item.last_payload_at)}` : (item.last_heard_at ? `Last heard: ${fmtNodeTime(item.last_payload_at || item.last_heard_at)}` : ''),
     item.last_node_reported_at ? `Node time: ${fmtNodeTime(item.last_node_reported_at)}` : '',
-    item.last_clock_skew_seconds != null ? `Clock skew: ${Number(item.last_clock_skew_seconds).toFixed(1)}s${item.clock_skew_warning ? ' WARNING' : ''}` : '',
+    item.last_clock_skew_seconds != null ? `Clock skew: ${Number(item.last_clock_skew_seconds).toFixed(1)}s${item.clock_skew_warning ? ' warning' : ''}` : '',
     item.placed_on_map ? 'Placed on map' : 'Not placed',
   ].filter(Boolean).join('\n');
 }
@@ -51,18 +53,21 @@ function statePill(state) {
     decommissioned: ['pill-red', 'Decommissioned'],
     manual: ['pill-gray', 'Manual'],
   };
-  const [cls, label] = map[state] || ['pill-gray', state || '—'];
+  const [cls, label] = map[state] || ['pill-gray', state || '-'];
   return `<span class="status-pill ${cls}"><span class="status-dot-sm"></span>${label}</span>`;
 }
 
 async function runCommissionScan() {
   const btn = document.getElementById('btnCommissionRefresh');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...'; }
   try {
     const res = await API.post('/nodes/scan/run', {});
     const data = await API.json(res);
     if (res && res.ok) {
       commissionScanCache = data.items || [];
+      if (commissionSelectedId && !commissionScanCache.find(item => item.node_id === commissionSelectedId)) {
+        closeCommissionConfig();
+      }
       renderCommissionTable();
       renderCommissionStats(data);
       if (commissionView === 'timeline') loadNodeTimelineChart();
@@ -79,13 +84,13 @@ function renderCommissionStats(data) {
   if (!el) return;
   const items = data.items || [];
   const online = items.filter(i => i.online).length;
-  el.textContent = `${items.length} anchors · ${online} online · scanned ${fmtNodeTime(data.scanned_at)}`;
+  el.textContent = `${items.length} anchors - ${online} online - scanned ${fmtNodeTime(data.scanned_at)}`;
   const hint = document.getElementById('commissionIpConflictHint');
   if (hint) {
     const conflicts = data.ip_conflicts || {};
     const keys = Object.keys(conflicts);
     hint.textContent = keys.length
-      ? `⚠ Same IP on multiple anchors: ${keys.map(ip => `${ip} (${conflicts[ip].length})`).join(', ')} — may be one physical unit or Wi‑Fi relay.`
+      ? `Warning: Same IP on multiple anchors: ${keys.map(ip => `${ip} (${conflicts[ip].length})`).join(', ')} - may be one physical unit or Wi-Fi relay.`
       : '';
   }
 }
@@ -96,14 +101,14 @@ function renderCommissionTable() {
   const stateFilter = document.getElementById('commissionStateFilter')?.value || 'all';
   const rows = stateFilter === 'all' ? commissionScanCache : commissionScanCache.filter(item => (item.commission_state || 'detected') === stateFilter);
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="table-empty">No anchors detected — turn on MQTT receiver and power on WiFi units.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="table-empty">No anchors detected - turn on MQTT receiver and power on WiFi units.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map(item => {
     const name = item.name || item.mac_address;
     const mergedSuffix = item.logical_count > 1 ? ` <span style="font-size:10px;color:var(--text-muted)">(${item.logical_count} IDs)</span>` : '';
-    const ip = item.node_ip || '—';
-    const iface = item.server_interface_label || item.server_interface || '—';
+    const ip = item.node_ip || '-';
+    const iface = item.server_interface_label || item.server_interface || '-';
     const ipCell = item.logical_count > 1
       ? `<span class="mono" style="color:var(--cyan)" title="Merged ${item.logical_count} logical IDs into one physical unit">${ip} [merged]</span>`
       : `<span class="mono">${ip}</span>`;
@@ -113,7 +118,7 @@ function renderCommissionTable() {
       <td class="mono" title="${title}">${ipCell}</td>
       <td title="${title}" style="font-size:11px">${iface}</td>
       <td title="${title}">${fmtNodeTime(item.last_payload_at || item.last_heard_at)}</td>
-      <td title="${title}">${item.last_clock_skew_seconds == null ? '<span style="color:var(--text-muted)">?</span>' : `<span style="color:${item.clock_skew_warning ? 'var(--yellow)' : 'var(--text-secondary)'}">${Number(item.last_clock_skew_seconds).toFixed(1)}s${item.clock_skew_warning ? ' ?' : ''}</span>`}</td>
+      <td title="${title}">${item.last_clock_skew_seconds == null ? '<span style="color:var(--text-muted)">?</span>' : `<span style="color:${item.clock_skew_warning ? 'var(--yellow)' : 'var(--text-secondary)'}">${Number(item.last_clock_skew_seconds).toFixed(1)}s${item.clock_skew_warning ? ' warning' : ''}</span>`}</td>
       <td>${statePill(item.commission_state)}</td>
       <td>${item.online ? '<span style="color:var(--green)">Online</span>' : '<span style="color:var(--text-muted)">Offline</span>'}</td>
       <td>
@@ -123,22 +128,35 @@ function renderCommissionTable() {
   }).join('');
 }
 
+function closeCommissionConfig() {
+  commissionSelectedId = null;
+  const panel = document.getElementById('commissionConfigPanel');
+  if (panel) panel.style.display = 'none';
+  renderCommissionTable();
+}
+
 function selectCommissionNode(id) {
   commissionSelectedId = id;
   renderCommissionTable();
   const item = commissionScanCache.find(n => n.node_id === id);
-  if (!item) return;
+  if (!item) {
+    closeCommissionConfig();
+    return;
+  }
   const panel = document.getElementById('commissionConfigPanel');
   if (!panel) return;
   panel.style.display = 'block';
   document.getElementById('commissionConfigTitle').textContent = item.name || item.mac_address;
   document.getElementById('commissionNodeName').value = item.name && !item.name.startsWith('STRATA-') ? item.name : '';
-  document.getElementById('commissionNodeIp').value = item.node_ip && item.node_ip !== '—' ? item.node_ip : '';
+  document.getElementById('commissionNodeIp').value = item.node_ip && item.node_ip !== '-' ? item.node_ip : '';
   document.getElementById('commissionNodeX').value = item.pos_x || 0;
   document.getElementById('commissionNodeY').value = item.pos_y || 0;
   document.getElementById('commissionNodeZ').value = item.pos_z || 0;
   document.getElementById('commissionMetaId').textContent = item.mac_address;
-  document.getElementById('commissionMetaStrata').textContent = item.strata_node_id || '—';
+  document.getElementById('commissionMetaStrata').textContent = item.strata_node_id || '-';
+  document.getElementById('commissionCoordPreview').textContent = (item.pos_x || item.pos_y)
+    ? `Coordinates: X=${Number(item.pos_x || 0).toFixed(2)}, Y=${Number(item.pos_y || 0).toFixed(2)}`
+    : 'Click map to set coordinates';
   document.getElementById('commissionAckBtn').style.display = item.mqtt_acknowledged ? 'none' : 'inline-flex';
   document.getElementById('commissionActivateBtn').style.display = 'inline-flex';
 }
@@ -152,9 +170,10 @@ async function acknowledgeCommissionNode() {
     node_ip: ip || undefined,
   });
   if (res && res.ok) {
-    showToast?.('Anchor acknowledged', 'success');
+    showToast?.('Anchor acknowledged. Pick its location on the map next.', 'success');
     await runCommissionScan();
     selectCommissionNode(commissionSelectedId);
+    await openCommissionMapPick();
   } else showToast?.('Acknowledge failed', 'error');
 }
 
@@ -173,6 +192,7 @@ async function activateCommissionNode() {
   if (res && res.ok) {
     showToast?.('Anchor saved and activated', 'success');
     await runCommissionScan();
+    closeCommissionConfig();
     if (window.refreshRtlsSetupUi) refreshRtlsSetupUi();
   } else showToast?.('Save failed', 'error');
 }
@@ -195,9 +215,8 @@ async function purgeCommissionNode() {
   if (!(await holoConfirm?.('Permanently delete this anchor?', { danger: true }))) return;
   const res = await API.delete(`/nodes/${commissionSelectedId}`);
   if (res && res.ok) {
-    showToast?.('Anchor purged', 'success');
-    commissionSelectedId = null;
-    document.getElementById('commissionConfigPanel').style.display = 'none';
+    showToast?.('Anchor purged. It should disappear now and only return if the server discovers it again from new MQTT traffic.', 'success');
+    closeCommissionConfig();
     await runCommissionScan();
   }
 }
@@ -257,7 +276,7 @@ function drawNodeTimelineChart(data) {
   if (!nodes.length) {
     ctx.fillStyle = '#64748b';
     ctx.font = '12px system-ui';
-    ctx.fillText('No timeline data yet — anchors will appear after MQTT traffic.', padL, padT + 30);
+    ctx.fillText('No timeline data yet - anchors will appear after MQTT traffic.', padL, padT + 30);
     return;
   }
 
@@ -269,7 +288,7 @@ function drawNodeTimelineChart(data) {
     ctx.fillText(label, 8, rowTop + rowH * 0.45);
     ctx.fillStyle = '#64748b';
     ctx.font = '10px monospace';
-    ctx.fillText(nd.node_ip || '—', 8, rowTop + rowH * 0.75);
+    ctx.fillText(nd.node_ip || '-', 8, rowTop + rowH * 0.75);
     const samples = nd.samples || [];
     let lastX = padL;
     samples.forEach(s => {
@@ -298,12 +317,55 @@ async function openCommissionMapPick() {
   setTimeout(initCommissionMapPicker, 100);
 }
 
+function revokeCommissionMapBlobUrl() {
+  if (!commissionMapBlobUrl) return;
+  try { URL.revokeObjectURL(commissionMapBlobUrl); } catch (_) {}
+  commissionMapBlobUrl = null;
+}
+
+async function resolveCommissionFloorPlanUrl(floorPlan) {
+  if (!floorPlan || !floorPlan.image_url) return null;
+  const staticSrc = floorPlan.image_url + (floorPlan.image_url.includes('?') ? '&' : '?') + 't=' + Date.now();
+  try {
+    await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = reject;
+      img.src = staticSrc;
+    });
+    return staticSrc;
+  } catch (_) {
+    const headers = {};
+    if (window.API && API._token) headers.Authorization = 'Bearer ' + API._token;
+    const res = await fetch(`${API.base}/settings/floor-plans/${floorPlan.id}/image?t=${Date.now()}`, { headers });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    revokeCommissionMapBlobUrl();
+    commissionMapBlobUrl = URL.createObjectURL(blob);
+    return commissionMapBlobUrl;
+  }
+}
+
+async function getCommissionFloorPlan() {
+  try {
+    const res = await API.get('/settings/floor-plans');
+    const data = await API.json(res);
+    const items = Array.isArray(data?.items) ? data.items : [];
+    return items.find(item => item.is_visible && item.image_url) || items.find(item => item.image_url) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function closeCommissionMapPick() {
   document.getElementById('commissionMapModal').style.display = 'none';
   if (commissionMap) {
     try { commissionMap.remove(); } catch (_) {}
     commissionMap = null;
   }
+  commissionMapImageLayer = null;
+  commissionPickMarker = null;
+  revokeCommissionMapBlobUrl();
 }
 
 async function initCommissionMapPicker() {
@@ -316,12 +378,24 @@ async function initCommissionMapPicker() {
     cal = await API.json(res);
   } catch (_) {}
   const b = cal?.bounds || { minX: 0, maxX: 50, minY: 0, maxY: 50 };
-  const spanX = Math.max(1, b.maxX - b.minX);
-  const spanY = Math.max(1, b.maxY - b.minY);
-  commissionMap = L.map(el, { crs: L.CRS.Simple, minZoom: -2, maxZoom: 4, zoomControl: true });
+  commissionMap = L.map(el, { crs: L.CRS.Simple, minZoom: -2, maxZoom: 4, zoomControl: true, attributionControl: true });
   const bounds = [[b.minY, b.minX], [b.maxY, b.maxX]];
-  commissionMap.fitBounds(bounds);
+  const floorPlan = await getCommissionFloorPlan();
+  const floorPlanUrl = await resolveCommissionFloorPlanUrl(floorPlan);
+  if (floorPlanUrl) {
+    commissionMapImageLayer = L.imageOverlay(floorPlanUrl, bounds, { opacity: 0.92, crossOrigin: true }).addTo(commissionMap);
+  } else {
+    L.rectangle(bounds, { color: '#00e5ff', weight: 1, fillOpacity: 0.06 }).addTo(commissionMap);
+  }
+  commissionMap.fitBounds(bounds, { padding: [16, 16], animate: false });
   el.classList.add('commission-pick-cursor');
+  const existingX = parseFloat(document.getElementById('commissionNodeX').value || '0');
+  const existingY = parseFloat(document.getElementById('commissionNodeY').value || '0');
+  if (existingX || existingY) {
+    commissionPickMarker = L.circleMarker([existingY, existingX], { radius: 8, color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 0.8 });
+    commissionPickMarker.addTo(commissionMap);
+    commissionMap.panTo([existingY, existingX], { animate: false });
+  }
   commissionMap.on('click', e => {
     const lat = e.latlng.lat;
     const lng = e.latlng.lng;
@@ -330,7 +404,9 @@ async function initCommissionMapPicker() {
     if (commissionPickMarker) commissionMap.removeLayer(commissionPickMarker);
     commissionPickMarker = L.circleMarker(e.latlng, { radius: 8, color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 0.8 });
     commissionPickMarker.addTo(commissionMap);
-    document.getElementById('commissionCoordPreview').textContent = `X=${lng.toFixed(1)}  Y=${lat.toFixed(1)}`;
+    document.getElementById('commissionCoordPreview').textContent = `Coordinates: X=${lng.toFixed(2)}, Y=${lat.toFixed(2)}`;
+    showToast?.('Anchor location selected. Save & activate to finish.', 'info');
+    closeCommissionMapPick();
   });
 }
 
@@ -353,5 +429,7 @@ window.purgeCommissionNode = purgeCommissionNode;
 window.setCommissionView = setCommissionView;
 window.openCommissionMapPick = openCommissionMapPick;
 window.closeCommissionMapPick = closeCommissionMapPick;
+window.closeCommissionConfig = closeCommissionConfig;
 window.loadNodeTimelineChart = loadNodeTimelineChart;
 window.initCommissionTab = initCommissionTab;
+

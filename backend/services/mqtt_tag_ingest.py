@@ -61,6 +61,15 @@ class MqttTagIngestService:
 
         readings = parse_mqtt_payload(payload, topic)
         parsed = len(readings) > 0
+        converted = [
+            {
+                "tag_mac": r.tag_mac,
+                "rssi": r.rssi,
+                "battery": r.battery,
+                "anchor_mac": r.anchor_mac,
+            }
+            for r in readings[:8]
+        ]
         received_at = datetime.now(timezone.utc)
         node_reported_at = _extract_node_reported_at(payload)
         clock_skew_seconds = _extract_clock_skew_seconds(payload, received_at=received_at)
@@ -89,35 +98,36 @@ class MqttTagIngestService:
                         node_key, detect_hints, client_id=client_id, payload=payload,
                         client_ip=client_ip,
                     )
-                    node_id = node.id
-                    try:
-                        from backend.services.time_sync_status import CLOCK_SKEW_WARN_KEY, _setting_value
-                        warn_threshold = float(_setting_value(CLOCK_SKEW_WARN_KEY, 10) or 10)
-                    except Exception:
-                        warn_threshold = 10.0
-                    if clock_skew_seconds is not None:
-                        clock_skew_warning = abs(clock_skew_seconds) >= warn_threshold
-                        meta = get_node_metadata(node)
-                        meta['last_clock_skew_seconds'] = clock_skew_seconds
-                        meta['clock_skew_warning'] = clock_skew_warning
-                        meta['clock_skew_warn_seconds'] = warn_threshold
-                        if node_reported_at:
-                            meta['last_node_reported_at'] = node_reported_at
-                        node.metadata_json = __import__('json').dumps(meta)
-                    rssi = _extract_strata_rssi(payload or "")
-                    ip = client_ip or get_ip_for_node(node_key)
-                    if ip or server_iface:
-                        note_node_ip(node_key, ip, server_interface=server_iface)
-                        update_node_connection_metadata(
-                            node, ip=ip, server_interface=server_iface,
-                            server_interface_label=iface_label,
-                        )
-                    log_node_presence(node, online=True, rssi=rssi, node_ip=ip)
-                    db.session.commit()
-                    mac = node_key.upper()
-                    with self._lock:
-                        self.per_node_counts[mac] += 1
-                        self.per_node_last_at[mac] = datetime.utcnow()
+                    if node is not None:
+                        node_id = node.id
+                        try:
+                            from backend.services.time_sync_status import CLOCK_SKEW_WARN_KEY, _setting_value
+                            warn_threshold = float(_setting_value(CLOCK_SKEW_WARN_KEY, 10) or 10)
+                        except Exception:
+                            warn_threshold = 10.0
+                        if clock_skew_seconds is not None:
+                            clock_skew_warning = abs(clock_skew_seconds) >= warn_threshold
+                            meta = get_node_metadata(node)
+                            meta['last_clock_skew_seconds'] = clock_skew_seconds
+                            meta['clock_skew_warning'] = clock_skew_warning
+                            meta['clock_skew_warn_seconds'] = warn_threshold
+                            if node_reported_at:
+                                meta['last_node_reported_at'] = node_reported_at
+                            node.metadata_json = __import__('json').dumps(meta)
+                        rssi = _extract_strata_rssi(payload or "")
+                        ip = client_ip or get_ip_for_node(node_key)
+                        if ip or server_iface:
+                            note_node_ip(node_key, ip, server_interface=server_iface)
+                            update_node_connection_metadata(
+                                node, ip=ip, server_interface=server_iface,
+                                server_interface_label=iface_label,
+                            )
+                        log_node_presence(node, online=True, rssi=rssi, node_ip=ip)
+                        db.session.commit()
+                        mac = node_key.upper()
+                        with self._lock:
+                            self.per_node_counts[mac] += 1
+                            self.per_node_last_at[mac] = datetime.utcnow()
                 except Exception:
                     logger.exception("Failed to register node from MQTT %s", node_key)
                     db.session.rollback()
@@ -145,6 +155,7 @@ class MqttTagIngestService:
             node_reported_at=node_reported_at,
             clock_skew_seconds=clock_skew_seconds,
             clock_skew_warning=clock_skew_warning,
+            converted=converted,
         )
 
         if not readings:

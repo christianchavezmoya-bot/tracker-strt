@@ -4,7 +4,8 @@ from __future__ import annotations
 import threading
 from collections import deque
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from typing import Any
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -24,6 +25,7 @@ class MqttTrafficEntry:
     node_reported_at: Optional[str] = None
     clock_skew_seconds: Optional[float] = None
     clock_skew_warning: bool = False
+    converted: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -57,9 +59,10 @@ class MqttTrafficLog:
         node_reported_at: str | None = None,
         clock_skew_seconds: float | None = None,
         clock_skew_warning: bool = False,
+        converted: list[dict[str, Any]] | None = None,
     ) -> MqttTrafficEntry:
         entry = MqttTrafficEntry(
-            at=datetime.utcnow(),
+            at=datetime.now(timezone.utc),
             client_id=client_id or "",
             topic=topic or "",
             payload=(payload or "")[:2000],
@@ -73,6 +76,7 @@ class MqttTrafficLog:
             node_reported_at=node_reported_at,
             clock_skew_seconds=clock_skew_seconds,
             clock_skew_warning=bool(clock_skew_warning),
+            converted=list(converted or []),
         )
         with self._lock:
             self.total_received += 1

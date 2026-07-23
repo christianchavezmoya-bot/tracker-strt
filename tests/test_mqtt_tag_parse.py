@@ -40,3 +40,13 @@ def test_parse_json_devices():
     assert len(readings) == 1
     assert readings[0].tag_mac == "AA:BB:CC:DD:EE:FF"
     assert readings[0].rssi == -68
+
+
+def test_parse_strata_array_payload():
+    payload = "[1,1750690877,30,273983315172900,1,828033288983,-95]"
+    readings = parse_mqtt_payload(payload, "strata/v1/bluetooth/1/273983315172900")
+    assert len(readings) == 1
+    r = readings[0]
+    assert r.anchor_mac == "STRATA:273983315172900"
+    assert r.tag_mac == "82:80:33:28:89:83"
+    assert r.rssi == -95

@@ -11,6 +11,7 @@ from backend.extensions import db
 from backend.models.tracker import NodeStatus, WifiNode
 from backend.services.anchor_sync import ensure_node_pair, touch_node_heartbeat
 from backend.services.node_utils import get_node_metadata
+from backend.services.node_rediscovery_suppression import should_suppress_node
 from backend.services.time_sync_status import CLOCK_SKEW_WARN_KEY, _setting_value
 
 logger = logging.getLogger(__name__)
@@ -131,7 +132,7 @@ def register_node_from_mqtt(
     client_id: str | None = None,
     payload: str | None = None,
     client_ip: str | None = None,
-) -> WifiNode:
+) -> WifiNode | None:
     """Create or update WifiNode from detected MQTT traffic; sync anchor row."""
     hints = hints or {}
     original_key = node_key.upper()
@@ -159,6 +160,10 @@ def register_node_from_mqtt(
 
     node = sess.query(WifiNode).filter_by(mac_address=key).first()
     meta = get_node_metadata(node) if node else {}
+
+    if should_suppress_node(node_key=key, node_ip=resolved_ip, session=sess):
+        logger.info("Suppressing MQTT rediscovery for %s (%s)", key, resolved_ip or "no-ip")
+        return node
 
     if client_id:
         from backend.services.mqtt_client_registry import link_node_key, get_ip_for_client

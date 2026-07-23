@@ -1,4 +1,4 @@
-"""Nodes API — Phase 2 stub."""
+"""Nodes API â€” Phase 2 stub."""
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.extensions import db
@@ -98,7 +98,7 @@ def create_node():
               description: Z coordinate (floor level)
             node_type:
               type: string
-              description: Node type — UWB_ANCHOR, WIFI_AP, GATEWAY, REPEATER
+              description: Node type â€” UWB_ANCHOR, WIFI_AP, GATEWAY, REPEATER
             section_name:
               type: string
               description: Section / zone name
@@ -178,7 +178,7 @@ def create_node():
 @nodes_bp.route("/refresh-positions", methods=["POST"])
 @jwt_required()
 def refresh_positions():
-    """Force trilateration after anchor changes — updates Live Map tags."""
+    """Force trilateration after anchor changes â€” updates Live Map tags."""
     from backend.services.anchor_sync import refresh_tag_positions, count_placed_nodes
     result = refresh_tag_positions(db.session)
     result["anchors_required"] = 3
@@ -189,7 +189,7 @@ def refresh_positions():
 @nodes_bp.route("/scan", methods=["GET"])
 @jwt_required()
 def scan_nodes_list():
-    """Anchor scan snapshot — name, IP, timestamp (for commission table)."""
+    """Anchor scan snapshot â€” name, IP, timestamp (for commission table)."""
     from backend.services.node_scan import scan_nodes
     return jsonify(scan_nodes(db.session))
 
@@ -220,7 +220,7 @@ def commission_queue_api():
 @nodes_bp.route("/presence/timeline", methods=["GET"])
 @jwt_required()
 def node_presence_timeline():
-    """Anchor health timeline (1 min – 24 h), like trackers page."""
+    """Anchor health timeline (1 min â€“ 24 h), like trackers page."""
     from backend.services.node_presence_timeline import get_node_presence_timeline
     minutes = request.args.get("minutes", 60, type=int)
     ids_raw = request.args.get("node_ids", "")
@@ -271,7 +271,7 @@ def activate_node(node_id):
 @jwt_required()
 @require_permission(Permission.MANAGE_NODE)
 def decommission_node(node_id):
-    """Mark anchor decommissioned — hidden from RTLS, kept in history."""
+    """Mark anchor decommissioned â€” hidden from RTLS, kept in history."""
     import json
     from backend.models.tracker import NodeStatus
 
@@ -522,6 +522,18 @@ def delete_node(node_id):
     AuditLog.log(action="node.delete", user_id=int(get_jwt_identity()),
                  entity_type="WifiNode", entity_id=node.id)
     try:
+        from backend.services.node_utils import get_node_metadata
+        from backend.services.node_rediscovery_suppression import suppress_node_rediscovery
+        meta = get_node_metadata(node)
+        suppress_node_rediscovery(
+            node_key=node.mac_address,
+            node_ip=meta.get("node_ip") or meta.get("physical_unit_ip"),
+            aliases=[a for a in (meta.get("merged_mac_addresses") or []) if a],
+            session=db.session,
+        )
+    except Exception:
+        pass
+    try:
         from backend.services.anchor_sync import delete_anchor_for_node
         delete_anchor_for_node(node.mac_address)
     except Exception:
@@ -529,3 +541,5 @@ def delete_node(node_id):
     db.session.delete(node)
     db.session.commit()
     return jsonify({"message": "Deleted"}), 200
+
+

@@ -147,3 +147,54 @@ def test_mqtt_traffic_api_includes_node_time_and_skew(client, auth_headers, app)
     match = next(i for i in items if i.get("topic") == STRATA_TOPIC)
     assert match.get("node_reported_at")
     assert match.get("clock_skew_seconds") is not None
+
+
+def test_purge_node_suppresses_immediate_rediscovery(client, admin_headers, app, db_session, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.models import Setting
+    from backend.services.mqtt_tag_ingest import init_mqtt_tag_ingest
+    from backend.services.node_rediscovery_suppression import SUPPRESSION_KEY
+
+    base = datetime(2026, 7, 23, 0, 0, 0, tzinfo=timezone.utc)
+
+    with app.app_context():
+        monkeypatch.setattr('backend.services.node_rediscovery_suppression._utc_now', lambda: base)
+        ingest = init_mqtt_tag_ingest(app=app)
+        ingest.handle_message('c1', STRATA_TOPIC, STRATA_PAYLOAD, '10.60.1.50')
+
+    node = db_session.query(WifiNode).filter_by(mac_address='STRATA:273983315172900').first()
+    assert node is not None
+
+    res = client.delete(f'/api/nodes/{node.id}', headers=admin_headers)
+    assert res.status_code == 200
+    assert db_session.query(WifiNode).filter_by(mac_address='STRATA:273983315172900').first() is None
+    assert db_session.query(Setting).filter_by(key=SUPPRESSION_KEY).first() is not None
+
+    with app.app_context():
+        monkeypatch.setattr('backend.services.node_rediscovery_suppression._utc_now', lambda: base + timedelta(seconds=30))
+        ingest = init_mqtt_tag_ingest(app=app)
+        ingest.handle_message('c1', STRATA_TOPIC, STRATA_PAYLOAD, '10.60.1.50')
+
+    assert db_session.query(WifiNode).filter_by(mac_address='STRATA:273983315172900').first() is None
+
+    with app.app_context():
+        monkeypatch.setattr('backend.services.node_rediscovery_suppression._utc_now', lambda: base + timedelta(seconds=180))
+        ingest = init_mqtt_tag_ingest(app=app)
+        ingest.handle_message('c1', STRATA_TOPIC, STRATA_PAYLOAD, '10.60.1.50')
+
+    assert db_session.query(WifiNode).filter_by(mac_address='STRATA:273983315172900').first() is not None
+
+
+def test_mqtt_traffic_api_includes_converted_fields(client, auth_headers, app):
+    with app.app_context():
+        ingest = init_mqtt_tag_ingest(app=app)
+        ingest.handle_message("c1", STRATA_TOPIC, STRATA_PAYLOAD, "10.60.1.52")
+
+    res = client.get("/api/nodes/mqtt-traffic?limit=10", headers=auth_headers)
+    assert res.status_code == 200
+    items = res.get_json()["items"]
+    match = next(i for i in items if i.get("topic") == STRATA_TOPIC)
+    assert match.get("parsed") is True
+    assert match.get("converted")
+    assert match["converted"][0]["tag_mac"] == "82:80:33:28:89:83"
+    assert match["converted"][0]["rssi"] == -95

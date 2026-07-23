@@ -123,7 +123,7 @@ function renderScanTypeChecks(selected) {
 async function loadTrackers() {
   const q = document.getElementById('qInput').value.trim();
   const ack = document.getElementById('filterAck').value;
-  const params = new URLSearchParams({ per_page: 200, include_decommissioned: 'true' });
+  const params = new URLSearchParams({ per_page: 200 });
   if (q) params.set('q', q);
   if (ack) params.set('ack_status', ack);
 
@@ -229,7 +229,9 @@ async function saveScanSettings() {
     scanIntervalSec = data.interval_sec;
     scheduleScan();
     closeScanModal();
-    showToast('Scan settings saved', 'success');
+    await runScan();
+    await loadTrackers();
+    showToast('Scan settings saved and tracker inventory refreshed', 'success');
   }
 }
 

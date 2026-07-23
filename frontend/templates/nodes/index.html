@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Anchors — HOLO-RTLS{% endblock %}
+{% block title %}Anchors - HOLO-RTLS{% endblock %}
 {% block breadcrumb %}<span>Anchors</span>{% endblock %}
 {% block topbar_actions %}
 <a class="btn btn-secondary btn-sm" href="/?mode=setup"><i class="fa-solid fa-map"></i> Place on map</a>
@@ -116,22 +116,22 @@
     <div class="hw-summary-grid">
       <div class="hw-summary-card hw-total">
         <div class="hw-summary-icon"><i class="fa-solid fa-anchor"></i></div>
-        <div class="hw-summary-num" id="statTotal">—</div>
+        <div class="hw-summary-num" id="statTotal">-</div>
         <div class="hw-summary-label">Total Nodes</div>
       </div>
       <div class="hw-summary-card hw-connected">
         <div class="hw-summary-icon"><i class="fa-solid fa-link"></i></div>
-        <div class="hw-summary-num" id="statActive">—</div>
+        <div class="hw-summary-num" id="statActive">-</div>
         <div class="hw-summary-label">Active</div>
       </div>
       <div class="hw-summary-card hw-disconnected">
         <div class="hw-summary-icon"><i class="fa-solid fa-wifi"></i></div>
-        <div class="hw-summary-num" id="statCalibrating">—</div>
+        <div class="hw-summary-num" id="statCalibrating">-</div>
         <div class="hw-summary-label">Calibrating</div>
       </div>
       <div class="hw-summary-card hw-error">
         <div class="hw-summary-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
-        <div class="hw-summary-num" id="statOffline">—</div>
+        <div class="hw-summary-num" id="statOffline">-</div>
         <div class="hw-summary-label">Offline</div>
       </div>
     </div>
@@ -141,7 +141,7 @@
     <!-- WiFi unit setup card -->
     <div class="info-banner" style="flex-direction:column;align-items:stretch">
       <div id="wifiSetupCard" style="width:100%">
-        <div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading WiFi unit settings…</div>
+        <div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading WiFi unit settings...</div>
       </div>
     </div>
 
@@ -155,7 +155,7 @@
     <div id="nodesCommissionView">
       <div class="info-banner" style="margin-bottom:12px">
         <i class="fa-solid fa-circle-info"></i>
-        <div class="info-banner-text">Scan detects anchors from live MQTT traffic. Minimum columns: <strong>Name</strong> and <strong>IP</strong>. Hover a row for full details. Acknowledge → name → pick map location → Save &amp; activate.</div>
+        <div class="info-banner-text">Scan detects anchors from live MQTT traffic. Minimum columns: <strong>Name</strong> and <strong>IP</strong>. Hover a row for full details. Acknowledge -> name -> pick map location -> Save &amp; activate.</div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px">
         <div class="view-toggle-commission" role="tablist">
@@ -202,7 +202,7 @@
                   </tr>
                 </thead>
                 <tbody id="commissionScanBody">
-                  <tr><td colspan="8" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Scanning…</td></tr>
+                  <tr><td colspan="8" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -224,22 +224,22 @@
               <canvas id="commissionTimelineCanvas" height="320" style="display:block;width:100%;min-width:720px"></canvas>
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:8px;display:flex;gap:16px">
-              <span><span style="color:#6bff47">—</span> RSSI signal</span>
+              <span><span style="color:#6bff47">-</span> RSSI signal</span>
               <span><span style="color:#ff4444">|</span> Offline gap</span>
             </div>
           </div>
         </div>
         <div id="commissionConfigPanel" class="hw-config-table-wrap" style="display:none;padding:14px">
-          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--cyan)" id="commissionConfigTitle">Configure anchor</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px"><div style="font-size:13px;font-weight:700;color:var(--cyan)" id="commissionConfigTitle">Configure anchor</div><button type="button" class="btn btn-ghost btn-sm" onclick="closeCommissionConfig()" aria-label="Close anchor panel"><i class="fa-solid fa-xmark"></i></button></div>
           <div style="font-size:10px;color:var(--text-muted);margin-bottom:10px;font-family:monospace">
             <div id="commissionMetaId"></div>
-            <div>STRATA: <span id="commissionMetaStrata">—</span></div>
+            <div>STRATA: <span id="commissionMetaStrata">-</span></div>
           </div>
           <label class="form-label">Name <span class="form-required">*</span></label>
           <input class="form-input" id="commissionNodeName" style="margin-bottom:10px;width:100%;box-sizing:border-box" placeholder="e.g. North Gate">
           <label class="form-label">IP address</label>
           <input class="form-input mono" id="commissionNodeIp" style="margin-bottom:10px;width:100%;box-sizing:border-box" placeholder="10.60.1.x">
-          <div class="form-label">Position (m)</div>
+          <div class="form-label">Coordinates</div>
           <div class="form-row" style="margin-bottom:8px">
             <input class="form-input" type="number" step="0.1" id="commissionNodeX" placeholder="X">
             <input class="form-input" type="number" step="0.1" id="commissionNodeY" placeholder="Y">
@@ -250,6 +250,7 @@
           <div style="display:flex;flex-direction:column;gap:6px">
             <button type="button" class="btn btn-secondary btn-sm" id="commissionAckBtn" onclick="acknowledgeCommissionNode()"><i class="fa-solid fa-check"></i> Acknowledge</button>
             <button type="button" class="btn btn-primary btn-sm" id="commissionActivateBtn" onclick="activateCommissionNode()"><i class="fa-solid fa-floppy-disk"></i> Save &amp; activate</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="closeCommissionConfig()">Cancel / Close</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="inactiveCommissionNode()">Set inactive</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="decommissionCommissionNode()">Decommission</button>
             <button type="button" class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="purgeCommissionNode()"><i class="fa-solid fa-trash"></i> Purge</button>
@@ -284,9 +285,9 @@
     <div class="info-banner">
       <i class="fa-solid fa-info-circle"></i>
       <div class="info-banner-text">
-        Nodes are <strong>fixed reference points</strong> for tag positioning. Power on WiFi units — they appear under
+        Nodes are <strong>fixed reference points</strong> for tag positioning. Power on WiFi units - they appear under
         <strong>Discovered</strong>. Place at least <strong>3 anchors</strong> on the map, then tags show on Live Map.
-        <a href="/?mode=setup">Open Map Setup →</a>
+        <a href="/?mode=setup">Open Map Setup -></a>
       </div>
     </div>
 
@@ -323,7 +324,7 @@
       <div id="diagHealthPanel">
       <div class="info-banner" style="margin-bottom:16px">
         <i class="fa-solid fa-server"></i>
-        <div class="info-banner-text" id="diagBrokerSummary">Loading broker status…</div>
+        <div class="info-banner-text" id="diagBrokerSummary">Loading broker status...</div>
       </div>
       <div class="hw-config-table-wrap">
         <table class="hw-config-table">
@@ -339,7 +340,7 @@
             </tr>
           </thead>
           <tbody id="diagnosticsTable">
-            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics…</td></tr>
+            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics...</td></tr>
           </tbody>
         </table>
       </div>
@@ -370,11 +371,12 @@
                 <th>Server interface</th>
                 <th>Clock</th>
                 <th>Parsed</th>
+                <th>Converted</th>
                 <th>Payload</th>
               </tr>
             </thead>
             <tbody id="mqttTrafficTable">
-              <tr><td colspan="8" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>
+              <tr><td colspan="8" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic...</td></tr>
             </tbody>
           </table>
         </div>
@@ -399,7 +401,7 @@
   </div>
 </div>
 
-<!-- ── Add / Edit Node Modal ──────────────────────────────────────── -->
+<!-- Add / Edit Node Modal ------------------------------------------------ -->
 <div class="modal-overlay" id="nodeModal" style="display:none" onclick="if(event.target===this)closeNodeModal()">
   <div class="hw-modal" onclick="event.stopPropagation()">
     <div class="modal-header">
@@ -425,7 +427,7 @@
       <div class="form-label" style="margin-bottom:8px">
         <i class="fa-solid fa-crosshairs"></i> Position (meters)
         <span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px">
-          Survey coordinates — calibrate with map reference points
+          Survey coordinates - calibrate with map reference points
         </span>
       </div>
       <div class="form-row">
@@ -447,14 +449,14 @@
     <div class="form-group">
       <label class="form-label">Node Type</label>
       <select class="form-input" id="nodeType">
-        <option value="1">Standard — Regular positioning anchor</option>
-        <option value="2">Check-In — Worker enters zone here</option>
-        <option value="3">Check-Out — Worker exits zone here</option>
+        <option value="1">Standard - Regular positioning anchor</option>
+        <option value="2">Check-In - Worker enters zone here</option>
+        <option value="3">Check-Out - Worker exits zone here</option>
       </select>
     </div>
     <div class="form-group">
       <label class="form-label">Coverage radius (m)</label>
-      <input class="form-input" type="number" step="0.5" min="1" id="nodeCoverage" placeholder="e.g. 12 — used by map coverage layer">
+      <input class="form-input" type="number" step="0.5" min="1" id="nodeCoverage" placeholder="e.g. 12 - used by map coverage layer">
       <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Optional. Stored in node metadata for confidence coverage rings.</div>
     </div>
 
@@ -482,18 +484,19 @@
       <button type="button" class="modal-close" onclick="closeCommissionMapPick()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div id="commissionMap2d"></div>
-    <div style="padding:10px 14px;font-size:11px;color:var(--text-muted)">Crosshair mode — click the map where this anchor is installed.</div>
+    <div style="padding:10px 14px;font-size:11px;color:var(--text-muted)">Crosshair mode - click the map where this anchor is installed.</div>
   </div>
 </div>
 
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/rtls-setup.js?v=3"></script>
+<script src="/static/js/rtls-setup.js?v=6"></script>
 <script src="/static/vendor/leaflet/leaflet.js"></script>
-<script src="/static/js/nodes-commission.js?v=3"></script>
-<script>
+<script src="/static/js/nodes-commission.js?v=4"></script>
 
+<script>
 'use strict';
+
 let nodes = [];
 let allNodes = [];
 let editingNodeId = null;
@@ -504,14 +507,63 @@ let diagSubView = 'health';
 let trafficAutoTimer = null;
 let trafficCache = [];
 
+function parseIsoMaybeUtc(value) {
+  if (!value) return null;
+  try {
+    const raw = String(value);
+    return new Date(/z$/i.test(raw) ? raw : `${raw}Z`);
+  } catch (_) {
+    return null;
+  }
+}
+
+function fmtUtcDateTime(value) {
+  const d = parseIsoMaybeUtc(value);
+  if (!d || Number.isNaN(d.getTime())) return value || '-';
+  return d.toLocaleString(undefined, {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }) + ' UTC';
+}
+
+function fmtUtcTime(value) {
+  const d = parseIsoMaybeUtc(value);
+  if (!d || Number.isNaN(d.getTime())) return value || '-';
+  return d.toLocaleTimeString(undefined, {
+    timeZone: 'UTC',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }) + ' UTC';
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
-  if (!API.isLoggedIn()) { window.location.href = '/login'; return; }
+  if (!API.isLoggedIn()) {
+    window.location.href = '/login';
+    return;
+  }
   await loadUserInfo();
-  await Promise.all([loadAllNodes(), loadNodes(), loadWifiSetupCard('wifiSetupCard')]);
+  const startupTasks = await Promise.allSettled([
+    loadAllNodes(),
+    loadNodes(),
+    loadWifiSetupCard('wifiSetupCard'),
+  ]);
+  startupTasks.forEach((result) => {
+    if (result.status === 'rejected') {
+      console.warn('Nodes page startup task failed', result.reason);
+    }
+  });
   try {
     await loadRtlsReadiness();
     renderReadinessPanel('rtlsReadinessPanelCompact', { compact: true });
-  } catch (e) {}
+  } catch (_) {}
   renderNodes();
   renderSummary();
   setNodesView('commission');
@@ -521,8 +573,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function setNodesView(view) {
   nodesView = view;
-  document.querySelectorAll('.node-tab[data-view]').forEach(t => {
-    t.classList.toggle('active', t.dataset.view === view);
+  document.querySelectorAll('.node-tab[data-view]').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.view === view);
   });
   const listEl = document.getElementById('nodesListView');
   const diagEl = document.getElementById('nodesDiagnosticsView');
@@ -530,24 +582,28 @@ function setNodesView(view) {
   if (listEl) listEl.style.display = view === 'list' ? 'block' : 'none';
   if (diagEl) diagEl.style.display = view === 'diagnostics' ? 'block' : 'none';
   if (commEl) commEl.style.display = view === 'commission' ? 'block' : 'none';
+
   if (view === 'diagnostics') {
     loadDiagnosticsView();
-    if (diagSubView === 'traffic') loadMqttTraffic(false);
-  } else if (view === 'commission') {
-    if (typeof initCommissionTab === 'function') initCommissionTab();
+    if (diagSubView === 'traffic') {
+      loadMqttTraffic(false);
+      toggleTrafficAutoRefresh();
+    }
   } else {
     stopTrafficAutoRefresh();
-    if (typeof commissionScanTimer !== 'undefined' && commissionScanTimer) {
-      clearInterval(commissionScanTimer);
-    }
   }
-  if (view !== 'diagnostics') stopTrafficAutoRefresh();
+
+  if (view === 'commission' && typeof initCommissionTab === 'function') {
+    initCommissionTab();
+  } else if (view !== 'commission' && typeof commissionScanTimer !== 'undefined' && commissionScanTimer) {
+    clearInterval(commissionScanTimer);
+  }
 }
 
 function setDiagSubView(sub) {
   diagSubView = sub;
-  document.querySelectorAll('.node-tab[data-diag]').forEach(t => {
-    t.classList.toggle('active', t.dataset.diag === sub);
+  document.querySelectorAll('.node-tab[data-diag]').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.diag === sub);
   });
   const health = document.getElementById('diagHealthPanel');
   const traffic = document.getElementById('diagTrafficPanel');
@@ -581,7 +637,7 @@ async function loadMqttTraffic(showSpinner) {
   const summaryEl = document.getElementById('trafficSummary');
   if (!tbody) return;
   if (showSpinner) {
-    tbody.innerHTML = '<tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic…</td></tr>';
+              <tr><td colspan="8" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic...</td></tr>
   }
   try {
     const res = await API.get('/nodes/mqtt-traffic?limit=80');
@@ -589,37 +645,43 @@ async function loadMqttTraffic(showSpinner) {
     if (!res || !res.ok) throw new Error('load failed');
     const s = data.summary || {};
     if (summaryEl) {
-      summaryEl.textContent = `${s.total_received || 0} total · ${s.recent_unparsed || 0} unparsed in buffer · formats: ${Object.keys(s.payload_formats || {}).join(', ') || '—'}`;
+      summaryEl.textContent = `${s.total_received || 0} total | ${s.recent_unparsed || 0} unparsed in buffer | formats: ${Object.keys(s.payload_formats || {}).join(', ') || '-'}`;
     }
     const items = data.items || [];
+    trafficCache = items;
     if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No MQTT messages yet — turn on broker in Settings and power on WiFi units.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="table-empty">No MQTT messages yet - turn on broker in Settings and power on WiFi units.</td></tr>';
       return;
     }
-    trafficCache = items;
     tbody.innerHTML = items.map((row, idx) => {
-      const t = row.at ? new Date(row.at).toLocaleTimeString() : '—';
+      const t = fmtUtcTime(row.at);
       const parsed = row.parsed
-        ? `<span style="color:var(--green)">Yes (${row.parse_count})</span>`
-        : `<span style="color:var(--yellow)">No</span>`;
+        ? `<span style="color:var(--green)">Yes (${row.parse_count || 0})</span>`
+        : '<span style="color:var(--yellow)">No</span>';
       const nodeLabel = row.node_key
         ? `<span class="mono">${row.node_key}</span>${row.node_id ? '' : ' <span style="color:var(--yellow);font-size:10px">new</span>'}`
-        : '<span style="color:var(--text-muted)">—</span>';
-      const ip = row.client_ip || '—';
-      const iface = row.server_interface || '—';
+        : '<span style="color:var(--text-muted)">-</span>';
+      const ip = row.client_ip || '-';
+      const iface = row.server_interface || '-';
       const preview = (row.payload_preview || row.payload || '').replace(/</g, '&lt;');
+      const converted = Array.isArray(row.converted) && row.converted.length
+        ? row.converted.map((c) => `${c.tag_mac} RSSI ${c.rssi}${c.battery != null ? ` Bat ${c.battery}` : ''}`).join(' | ')
+        : '-';
+      const skew = row.clock_skew_seconds == null ? '-' : `${Number(row.clock_skew_seconds).toFixed(1)}s`;
       return `<tr style="cursor:pointer" onclick="showTrafficDetail(${idx})">
         <td class="mono" style="white-space:nowrap">${t}</td>
-        <td class="mono" style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${row.topic || ''}">${row.topic || '—'}</td>
+        <td class="mono" style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${row.topic || ''}">${row.topic || '-'}</td>
         <td>${nodeLabel}</td>
         <td class="mono" title="${ip}">${ip}</td>
         <td style="font-size:11px" title="${iface}">${iface}</td>
+        <td class="mono">${skew}</td>
         <td>${parsed}</td>
-        <td class="mono" style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis" title="${preview}">${preview}</td>
+        <td class="mono" style="font-size:11px;max-width:260px;overflow:hidden;text-overflow:ellipsis" title="${converted}">${converted}</td>
+        <td class="mono" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis" title="${preview}">${preview}</td>
       </tr>`;
     }).join('');
-  } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="8" class="table-empty" style="color:var(--red)">Failed to load MQTT traffic</td></tr>';
+  } catch (_) {
+    tbody.innerHTML = '<tr><td colspan="9" class="table-empty" style="color:var(--red)">Failed to load MQTT traffic</td></tr>';
   }
 }
 
@@ -630,20 +692,32 @@ function showTrafficDetail(idx) {
   const body = document.getElementById('diagDetailBody');
   const title = document.getElementById('diagDetailTitle');
   if (!modal || !body) return;
-  if (title) title.textContent = 'Raw MQTT message';
+  if (title) title.textContent = 'MQTT message details';
+  const convertedHtml = Array.isArray(row.converted) && row.converted.length
+    ? row.converted.map((c) => `<div class="mono">Tag ${c.tag_mac} | RSSI ${c.rssi}${c.battery != null ? ` | Battery ${c.battery}` : ''}${c.anchor_mac ? ` | Anchor ${c.anchor_mac}` : ''}</div>`).join('')
+    : '<span style="color:var(--text-muted)">No converted fields</span>';
   body.innerHTML = `
     <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:12px">
-      <tr><td style="padding:6px 0;color:var(--text-muted)">Time</td><td>${row.at || '—'}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--text-muted)">Topic</td><td class="mono" style="word-break:break-all">${row.topic || '—'}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--text-muted)">Client</td><td class="mono">${row.client_id || '—'}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--text-muted)">Client IP</td><td class="mono">${row.client_ip || '—'}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--text-muted)">Server interface</td><td class="mono">${row.server_interface || '—'}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--text-muted)">Node key</td><td class="mono">${row.node_key || '—'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Time</td><td>${fmtUtcDateTime(row.at)}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Topic</td><td class="mono" style="word-break:break-all">${row.topic || '-'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Client</td><td class="mono">${row.client_id || '-'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Client IP</td><td class="mono">${row.client_ip || '-'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Server interface</td><td class="mono">${row.server_interface || '-'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Node key</td><td class="mono">${row.node_key || '-'}</td></tr>
       <tr><td style="padding:6px 0;color:var(--text-muted)">Format</td><td>${row.payload_format || 'unknown'}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--text-muted)">Parsed tags</td><td>${row.parsed ? 'Yes (' + (row.parse_count || 0) + ')' : 'No — parser not configured for this format yet'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted)">Parsed tags</td><td>${row.parsed ? `Yes (${row.parse_count || 0})` : 'No - parser not configured for this format yet'}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text-muted);vertical-align:top">Converted</td><td>${convertedHtml}</td></tr>
     </table>
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Full payload</div>
-    <pre style="background:rgba(0,0,0,.35);padding:10px;border-radius:8px;font-size:11px;overflow:auto;max-height:200px;color:var(--cyan);margin:0">${(row.payload || '').replace(/</g, '&lt;')}</pre>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Raw payload</div>
+        <pre style="background:rgba(0,0,0,.35);padding:10px;border-radius:8px;font-size:11px;overflow:auto;max-height:220px;color:var(--cyan);margin:0">${(row.payload || '').replace(/</g, '&lt;')}</pre>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Converted fields</div>
+        <div style="background:rgba(255,255,255,.03);padding:10px;border-radius:8px;font-size:11px;overflow:auto;max-height:220px">${convertedHtml}</div>
+      </div>
+    </div>
     ${row.node_id ? `<div style="margin-top:12px"><button class="btn btn-secondary btn-sm" onclick="openDiagDetail(${row.node_id})"><i class="fa-solid fa-anchor"></i> Node details</button></div>` : ''}`;
   modal.style.display = 'flex';
 }
@@ -654,6 +728,9 @@ async function acknowledgeNode(nodeId, name) {
   if (res && res.ok) {
     showToast?.('Node acknowledged', 'success');
     await loadAllNodes();
+    await loadNodes();
+    renderNodes();
+    renderSummary();
     loadDiagnosticsView();
   } else {
     showToast?.('Failed: ' + (data?.error || ''), 'error');
@@ -675,28 +752,31 @@ async function updateNodeListConflictHint() {
   try {
     const res = await API.get('/nodes/scan');
     const data = await API.json(res);
-    if (!res?.ok) return;
+    if (!res || !res.ok) return;
     const conflicts = data.ip_conflicts || {};
     const keys = Object.keys(conflicts);
     el.textContent = keys.length
-      ? `⚠ Duplicate IPs: ${keys.map(ip => `${ip} (${conflicts[ip].length} nodes)`).join(', ')}`
+      ? `Warning: Duplicate IPs: ${keys.map((ip) => `${ip} (${conflicts[ip].length} nodes)`).join(', ')}`
       : '';
   } catch (_) {}
 }
 
 function setNodeFilter(filter) {
   nodeFilter = filter;
-  document.querySelectorAll('#nodesListView .node-tab[data-filter]').forEach(t => {
-    t.classList.toggle('active', t.dataset.filter === filter);
+  document.querySelectorAll('#nodesListView .node-tab[data-filter]').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.filter === filter);
   });
-  loadNodes().then(() => { renderNodes(); renderSummary(); });
+  loadNodes().then(() => {
+    renderNodes();
+    renderSummary();
+  });
 }
 
 async function loadDiagnosticsView() {
   const tbody = document.getElementById('diagnosticsTable');
   const brokerEl = document.getElementById('diagBrokerSummary');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics…</td></tr>';
+            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics...</td></tr>
   try {
     const res = await API.get('/nodes/diagnostics');
     const data = await API.json(res);
@@ -705,37 +785,33 @@ async function loadDiagnosticsView() {
     const b = data.broker || {};
     const s = data.summary || {};
     if (brokerEl) {
-      const runLabel = b.running ? '🟢 Broker running' : (b.enabled ? '⚠️ Broker enabled but not running' : '⚪ Broker off');
-      const portHint = b.enabled
-        ? (b.port_reachable ? ' · Port reachable' : ' · Port not reachable from server')
-        : '';
-      brokerEl.innerHTML = `<strong>${runLabel}</strong>${portHint} · Port ${b.port || 1883} · `
-        + `${s.online || 0} online · ${s.mqtt_traffic_total || 0} MQTT msgs · `
-        + `<span class="mono">${b.broker_url || ''}</span>`
-        + (s.mqtt_traffic_unparsed ? ` · <span style="color:var(--yellow)">${s.mqtt_traffic_unparsed} unparsed in buffer</span>` : '');
+      const runLabel = b.running ? 'Broker running' : (b.enabled ? 'Broker enabled but not running' : 'Broker off');
+      const portHint = b.enabled ? (b.port_reachable ? ' | Port reachable' : ' | Port not reachable from server') : '';
+      brokerEl.innerHTML = `<strong>${runLabel}</strong>${portHint} | Port ${b.port || 1883} | ${s.online || 0} online | ${s.mqtt_traffic_total || 0} MQTT msgs | <span class="mono">${b.broker_url || ''}</span>`
+        + (s.mqtt_traffic_unparsed ? ` | <span style="color:var(--yellow)">${s.mqtt_traffic_unparsed} unparsed in buffer</span>` : '');
     }
     if (!diagnosticsCache.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No nodes yet — power on WiFi units or add a node manually.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No nodes yet - power on WiFi units or add a node manually.</td></tr>';
       return;
     }
-    tbody.innerHTML = diagnosticsCache.map(d => {
+    tbody.innerHTML = diagnosticsCache.map((d) => {
       const pill = connectivityPill(d.connectivity);
       const heard = d.last_heard_at ? timeAgo(d.last_heard_at) : 'Never';
       const det = d.mqtt_auto_detected
         ? (d.mqtt_acknowledged ? '<span style="color:var(--green);font-size:11px">Acknowledged</span>' : '<span style="color:var(--yellow);font-size:11px">Auto-detected</span>')
         : '<span style="color:var(--text-muted);font-size:11px">Manual</span>';
-      const fmt = d.payload_format && d.payload_format !== 'unknown' ? d.payload_format : '—';
+      const fmt = d.payload_format && d.payload_format !== 'unknown' ? d.payload_format : '-';
       return `<tr style="cursor:pointer" onclick="openDiagDetail(${d.node_id})">
         <td><strong>${d.name || d.mac_address}</strong><div class="mono" style="font-size:11px;color:var(--text-muted)">${d.mac_address}</div></td>
         <td><span class="status-pill ${pill.cls}"><span class="status-dot-sm"></span>${pill.label}</span></td>
         <td>${det}</td>
         <td>${heard}</td>
-        <td class="mono">${d.messages_total ?? 0}</td>
+        <td class="mono">${d.messages_total || 0}</td>
         <td class="mono" style="font-size:11px">${fmt}</td>
         <td><button class="action-btn" title="Details" onclick="event.stopPropagation();openDiagDetail(${d.node_id})"><i class="fa-solid fa-chart-simple"></i></button></td>
       </tr>`;
     }).join('');
-  } catch (e) {
+  } catch (_) {
     tbody.innerHTML = '<tr><td colspan="7" class="table-empty" style="color:var(--red)">Failed to load diagnostics</td></tr>';
   }
 }
@@ -752,7 +828,7 @@ async function openDiagDetail(nodeId) {
   const body = document.getElementById('diagDetailBody');
   const title = document.getElementById('diagDetailTitle');
   if (!modal || !body) return;
-  body.innerHTML = '<div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading…</div>';
+  body.innerHTML = '<div class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading...</div>';
   modal.style.display = 'flex';
   try {
     const [dRes, sRes, tRes] = await Promise.all([
@@ -765,8 +841,8 @@ async function openDiagDetail(nodeId) {
     const tData = await API.json(tRes);
     const d = dData.diagnostics || {};
     const st = sData.stats || {};
-    const trafficRows = (tData.items || []).map(r => `
-      <tr><td class="mono" style="font-size:10px;padding:4px 0">${r.at ? new Date(r.at).toLocaleTimeString() : '—'}</td>
+    const trafficRows = (tData.items || []).map((r) => `
+      <tr><td class="mono" style="font-size:10px;padding:4px 0">${fmtUtcTime(r.at)}</td>
       <td class="mono" style="font-size:10px;word-break:break-all;padding:4px 0 4px 8px">${(r.payload_preview || '').replace(/</g, '&lt;')}</td></tr>`).join('');
     if (title) title.textContent = d.name || d.mac_address || 'Node diagnostics';
     const pill = connectivityPill(d.connectivity);
@@ -778,20 +854,19 @@ async function openDiagDetail(nodeId) {
         ${d.placed_on_map ? '<span style="margin-left:8px;color:var(--green);font-size:12px"><i class="fa-solid fa-map-pin"></i> Placed on map</span>' : '<span style="margin-left:8px;color:var(--yellow);font-size:12px">Not placed on map</span>'}
         ${ackBtn}</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse">
-        <tr><td style="padding:6px 0;color:var(--text-muted)">ID / MAC</td><td class="mono">${d.mac_address || '—'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">ID / MAC</td><td class="mono">${d.mac_address || '-'}</td></tr>
         ${d.strata_node_id ? `<tr><td style="padding:6px 0;color:var(--text-muted)">STRATA node ID</td><td class="mono">${d.strata_node_id}</td></tr>` : ''}
         <tr><td style="padding:6px 0;color:var(--text-muted)">Payload format</td><td>${d.payload_format || 'unknown'}</td></tr>
         <tr><td style="padding:6px 0;color:var(--text-muted)">Last heard</td><td>${d.last_heard_at ? timeAgo(d.last_heard_at) : 'Never'}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">MQTT messages</td><td>${d.messages_total ?? 0}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">Tags parsed (1h)</td><td>${d.tags_seen_last_hour ?? 0}${(d.messages_total > 0 && !d.tags_seen_last_hour) ? ' <span style="color:var(--yellow);font-size:11px">(raw only — parser pending)</span>' : ''}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">Detections (24h)</td><td>${st.detection_count ?? 0}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted);vertical-align:top">Last payload</td><td class="mono" style="word-break:break-all;color:var(--cyan)">${d.last_payload || '—'}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--text-muted)">Last topic</td><td class="mono" style="word-break:break-all">${d.last_topic || '—'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">MQTT messages</td><td>${d.messages_total || 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Tags parsed (1h)</td><td>${d.tags_seen_last_hour || 0}${(d.messages_total > 0 && !d.tags_seen_last_hour) ? ' <span style="color:var(--yellow);font-size:11px">(raw only - parser pending)</span>' : ''}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Detections (24h)</td><td>${st.detection_count || 0}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted);vertical-align:top">Last payload</td><td class="mono" style="word-break:break-all;color:var(--cyan)">${d.last_payload || '-'}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--text-muted)">Last topic</td><td class="mono" style="word-break:break-all">${d.last_topic || '-'}</td></tr>
       </table>
-      ${trafficRows ? `<div style="margin-top:14px;font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Recent raw MQTT (this node)</div>
-        <table style="width:100%;border-collapse:collapse">${trafficRows}</table>` : ''}
-      <div style="margin-top:12px;font-size:11px;color:var(--text-muted)">Broker: ${d.broker?.running ? 'Running' : 'Off'}</div>`;
-  } catch (e) {
+      ${trafficRows ? `<div style="margin-top:14px;font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Recent raw MQTT (this node, UTC)</div><table style="width:100%;border-collapse:collapse">${trafficRows}</table>` : ''}
+      <div style="margin-top:12px;font-size:11px;color:var(--text-muted)">Broker: ${d.broker?.running ? 'Running' : 'Off'} | Times shown in UTC for MQTT diagnostics</div>`;
+  } catch (_) {
     body.innerHTML = '<div style="color:var(--red)">Could not load node details</div>';
   }
 }
@@ -804,10 +879,14 @@ function closeDiagDetail() {
 async function loadUserInfo() {
   const res = await API.get('/auth/me');
   const data = await API.json(res);
-  if (!res || !res.ok) { window.location.href = '/login'; return; }
+  if (!res || !res.ok) {
+    window.location.href = '/login';
+    return;
+  }
   const u = data.user;
-  /* shell */;
-  if (u.role === 'ADMIN') document.getElementById('adminNav')?.style && (document.getElementById('adminNav').style.display = 'block');
+  if (u.role === 'ADMIN' && document.getElementById('adminNav')) {
+    document.getElementById('adminNav').style.display = 'block';
+  }
 }
 
 function mapScanNode(item) {
@@ -843,7 +922,7 @@ function mapScanNode(item) {
 
 function applyNodeFilter(items) {
   if (!nodeFilter || nodeFilter === 'all') return items;
-  return items.filter(item => (item.commission_state || 'detected') === nodeFilter);
+  return items.filter((item) => (item.commission_state || 'detected') === nodeFilter);
 }
 
 async function loadAllNodes() {
@@ -861,13 +940,14 @@ async function loadNodes() {
 function renderSummary() {
   const src = allNodes.length ? allNodes : nodes;
   document.getElementById('statTotal').textContent = src.length;
-  document.getElementById('statActive').textContent = src.filter(n => n.commission_state === 'active').length;
-  document.getElementById('statCalibrating').textContent = src.filter(n => n.commission_state === 'detected' || n.commission_state === 'acknowledged').length;
-  document.getElementById('statOffline').textContent = src.filter(n => n.commission_state === 'offline').length;
+  document.getElementById('statActive').textContent = src.filter((n) => n.commission_state === 'active').length;
+  document.getElementById('statCalibrating').textContent = src.filter((n) => n.commission_state === 'detected' || n.commission_state === 'acknowledged').length;
+  document.getElementById('statOffline').textContent = src.filter((n) => n.commission_state === 'offline').length;
 }
 
 function renderNodes() {
   const tbody = document.getElementById('nodesTable');
+  if (!tbody) return;
   if (!nodes.length) {
     tbody.innerHTML = `<tr><td colspan="11" class="table-empty">
       <div style="margin-bottom:8px"><i class="fa-solid fa-anchor" style="font-size:28px;color:var(--text-muted)"></i></div>
@@ -876,11 +956,11 @@ function renderNodes() {
     </td></tr>`;
     return;
   }
-  tbody.innerHTML = nodes.map(n => {
+  tbody.innerHTML = nodes.map((n) => {
     const pos = n.position || {};
     const meta = n.metadata || {};
-    const nodeIp = meta.node_ip || '—';
-    const iface = meta.server_interface_label || meta.server_interface || '—';
+    const nodeIp = meta.node_ip || '-';
+    const iface = meta.server_interface_label || meta.server_interface || '-';
     const strataIds = n.logical_strata_ids || meta.merged_strata_ids || [];
     const ipCell = n.logical_count > 1 || n.merged_by_ip
       ? `<span class="mono" style="color:var(--cyan)" title="Merged ${n.logical_count || strataIds.length} logical IDs">${nodeIp} [merged]</span>`
@@ -891,10 +971,10 @@ function renderNodes() {
     const statusClass = statusClassFor(n.status);
     const tip = [
       n.mac_address,
-      nodeIp !== '—' ? `IP: ${nodeIp}` : '',
-      iface !== '—' ? `Server interface: ${iface}` : '',
-      strataIds.length > 1 ? `STRATA IDs (${strataIds.length}): ${strataIds.map(id => String(id).slice(-6)).join(', ')}` : (meta.strata_node_id ? `STRATA: ${meta.strata_node_id}` : ''),
-    ].filter(Boolean).join(' · ');
+      nodeIp !== '-' ? `IP: ${nodeIp}` : '',
+      iface !== '-' ? `Server interface: ${iface}` : '',
+      strataIds.length > 1 ? `STRATA IDs (${strataIds.length}): ${strataIds.map((id) => String(id).slice(-6)).join(', ')}` : (meta.strata_node_id ? `STRATA: ${meta.strata_node_id}` : ''),
+    ].filter(Boolean).join(' | ');
     const nameSuffix = (n.logical_count || strataIds.length) > 1
       ? ` <span style="font-size:10px;color:var(--text-muted)">(${(n.logical_count || strataIds.length)} IDs)</span>`
       : '';
@@ -902,10 +982,10 @@ function renderNodes() {
       <td>
         <div class="node-name-cell" title="${tip}">
           <i class="fa-solid ${typeIcon}" style="color:var(--magenta);font-size:14px"></i>
-          <span style="font-weight:600">${n.assigned_name || '—'}</span>${nameSuffix}
+          <span style="font-weight:600">${n.assigned_name || '-'}</span>${nameSuffix}
         </div>
       </td>
-      <td class="mono" title="${tip}">${n.mac_address || '—'}</td>
+      <td class="mono" title="${tip}">${n.mac_address || '-'}</td>
       <td class="mono" title="${tip}">${ipCell}</td>
       <td style="font-size:11px" title="${tip}">${iface}</td>
       <td class="mono pos-cell">
@@ -914,7 +994,7 @@ function renderNodes() {
         <span class="pos-label">Z</span><span class="pos-val">${fmt(pos.z)}</span>
       </td>
       <td>
-        <span class="node-type-badge type-${(n.node_type||'').toLowerCase()}">
+        <span class="node-type-badge type-${(n.node_type || '').toLowerCase()}">
           ${n.node_type === 'CHECK_IN' ? '<i class="fa-solid fa-right-to-bracket"></i>' : ''}
           ${n.node_type === 'CHECK_OUT' ? '<i class="fa-solid fa-right-from-bracket"></i>' : ''}
           ${n.node_type === 'STANDARD' ? '<i class="fa-solid fa-anchor"></i>' : ''}
@@ -924,7 +1004,7 @@ function renderNodes() {
       <td>${typeof statePill === 'function' ? statePill(n.commission_state || 'detected') : `<span class="status-pill ${statusClass}"><span class="status-dot-sm"></span>${n.status || 'Unknown'}</span>`}</td>
       <td class="mono">${firstSeen ? timeAgo(firstSeen) : '<span style="color:var(--text-muted)">Never</span>'}</td>
       <td class="mono">${lastPayload ? timeAgo(lastPayload) : '<span style="color:var(--text-muted)">Never</span>'}</td>
-      <td>${meta.last_clock_skew_seconds == null ? '<span style="color:var(--text-muted)">?</span>' : `<span style="color:${meta.clock_skew_warning ? 'var(--yellow)' : 'var(--text-secondary)'}">${Number(meta.last_clock_skew_seconds).toFixed(1)}s${meta.clock_skew_warning ? ' ?' : ''}</span>`}</td>
+      <td>${meta.last_clock_skew_seconds == null ? '<span style="color:var(--text-muted)">-</span>' : `<span style="color:${meta.clock_skew_warning ? 'var(--yellow)' : 'var(--text-secondary)'}">${Number(meta.last_clock_skew_seconds).toFixed(1)}s${meta.clock_skew_warning ? ' warning' : ''}</span>`}</td>
       <td>
         <div class="action-btns">
           <button class="action-btn" onclick="editNode(${n.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
@@ -935,7 +1015,9 @@ function renderNodes() {
   }).join('');
 }
 
-function fmt(v) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00'; }
+function fmt(v) {
+  return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00';
+}
 
 function statusClassFor(s) {
   if (s === 'ACTIVE') return 'pill-green';
@@ -966,34 +1048,34 @@ function closeNodeModal() {
 
 async function editNode(id) {
   editingNodeId = id;
-  const n = nodes.find(x => x.id === id);
+  const n = nodes.find((x) => x.id === id);
   if (!n) return;
   document.getElementById('nodeModalTitle').textContent = `Edit: ${n.assigned_name || n.mac_address}`;
   document.getElementById('nodeName').value = n.assigned_name || '';
   document.getElementById('nodeMac').value = n.mac_address || '';
   document.getElementById('nodeIp').value = n.node_ip || (n.metadata && n.metadata.node_ip) || '';
   const pos = n.position || {};
-  document.getElementById('nodeX').value = pos.x ?? 0;
-  document.getElementById('nodeY').value = pos.y ?? 0;
-  document.getElementById('nodeZ').value = pos.z ?? 0;
-  document.getElementById('nodeType').value =
-    n.node_type === 'CHECK_IN' ? '2' : n.node_type === 'CHECK_OUT' ? '3' : '1';
+  document.getElementById('nodeX').value = pos.x || 0;
+  document.getElementById('nodeY').value = pos.y || 0;
+  document.getElementById('nodeZ').value = pos.z || 0;
+  document.getElementById('nodeType').value = n.node_type === 'CHECK_IN' ? '2' : n.node_type === 'CHECK_OUT' ? '3' : '1';
   const cov = (n.metadata && (n.metadata.coverage_radius_m || n.metadata.range_m)) || '';
   document.getElementById('nodeCoverage').value = cov;
   document.getElementById('calibrationGroup').style.display = 'block';
   const calEl = document.getElementById('calibrationStatus');
-  calEl.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--green)"></i>
-    <span>Position: (${fmt(pos.x)}, ${fmt(pos.y)}, ${fmt(pos.z)}) — calibrated</span>`;
+  calEl.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--green)"></i><span>Position: (${fmt(pos.x)}, ${fmt(pos.y)}, ${fmt(pos.z)}) - calibrated</span>`;
   document.getElementById('nodeModal').style.display = 'flex';
 }
 
 async function saveNode() {
   const name = document.getElementById('nodeName').value.trim();
   const mac = document.getElementById('nodeMac').value.trim().toUpperCase();
-  if (!mac) { showToast('MAC address is required', 'error'); return; }
-  // Basic MAC validation
+  if (!mac) {
+    showToast?.('MAC address is required', 'error');
+    return;
+  }
   if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(mac)) {
-    showToast('Invalid MAC address format. Use AA:BB:CC:DD:EE:FF', 'error');
+    showToast?.('Invalid MAC address format. Use AA:BB:CC:DD:EE:FF', 'error');
     return;
   }
   const body = {
@@ -1002,7 +1084,7 @@ async function saveNode() {
     pos_x: parseFloat(document.getElementById('nodeX').value) || 0,
     pos_y: parseFloat(document.getElementById('nodeY').value) || 0,
     pos_z: parseFloat(document.getElementById('nodeZ').value) || 0,
-    node_type: parseInt(document.getElementById('nodeType').value),
+    node_type: parseInt(document.getElementById('nodeType').value, 10),
   };
   const cov = document.getElementById('nodeCoverage').value;
   const nodeIp = document.getElementById('nodeIp').value.trim();
@@ -1010,22 +1092,17 @@ async function saveNode() {
   if (cov) metadata.coverage_radius_m = parseFloat(cov);
   if (nodeIp) metadata.node_ip = nodeIp;
   if (Object.keys(metadata).length) body.metadata = metadata;
-  let res;
-  if (editingNodeId) {
-    res = await API.patch(`/nodes/${editingNodeId}`, body);
-  } else {
-    res = await API.post('/nodes', body);
-  }
+  const res = editingNodeId ? await API.patch(`/nodes/${editingNodeId}`, body) : await API.post('/nodes', body);
   if (res && res.ok) {
     await loadAllNodes();
     await loadNodes();
     renderNodes();
     renderSummary();
     closeNodeModal();
-    showToast(editingNodeId ? 'Node updated' : 'Node added');
+    showToast?.(editingNodeId ? 'Node updated' : 'Node added', 'success');
   } else {
     const data = await API.json(res);
-    showToast('Failed: ' + (data.error || res.statusText), 'error');
+    showToast?.('Failed: ' + ((data && data.error) || res.statusText), 'error');
   }
 }
 
@@ -1037,28 +1114,37 @@ async function deleteNode(id) {
     await loadNodes();
     renderNodes();
     renderSummary();
-    showToast('Node deleted', 'yellow');
+    showToast?.('Node deleted', 'yellow');
   }
 }
 
 function timeAgo(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
+  if (!iso) return '-';
+  const d = parseIsoMaybeUtc(iso) || new Date(iso);
+  if (!d || Number.isNaN(d.getTime())) return String(iso);
   const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return Math.floor(diff) + 's ago';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 60) return `${Math.floor(diff)}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return d.toLocaleDateString();
 }
 
-
-document.addEventListener('click', e => {
+document.addEventListener('click', (e) => {
   if (!e.target.closest('.user-menu')) document.getElementById('userDropdown')?.classList.remove('open');
 });
-function toggleUserMenu() { document.getElementById('userDropdown').classList.toggle('open'); }
-function logout() { API.clearTokens(); window.location.href = '/login'; }
 
-if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}
-if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}
+function toggleUserMenu() {
+  document.getElementById('userDropdown')?.classList.toggle('open');
+}
+
+function logout() {
+  API.clearTokens();
+  window.location.href = '/login';
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/static/sw.js?v=8').catch(() => {}));
+}
 </script>
+
 {% endblock %}

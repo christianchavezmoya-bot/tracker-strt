@@ -30,6 +30,11 @@ SCAN_TYPES = {
         "model": "MOKO H7",
         "keywords": ("moko", "mkbn", "mkbnh7", "mkbnh7"),
     },
+    "BXP_NORDIC": {
+        "label": "BXP Nordic / BeaconX",
+        "model": "BXP Nordic",
+        "keywords": ("bxp", "nordic", "beaconx"),
+    },
     "IBEACON": {
         "label": "iBeacon",
         "model": "iBeacon Tag",
@@ -81,6 +86,13 @@ FEATURES_BY_SCAN_TYPE: dict[str, list[dict]] = {
         {"key": "sos", "label": "SOS button alert"},
         {"key": "temperature", "label": "Temperature (Eddystone TLM)"},
     ],
+    "BXP_NORDIC": [
+        {"key": "positioning", "label": "Indoor positioning (RSSI)"},
+        {"key": "proximity", "label": "Proximity alerts"},
+        {"key": "restricted_zone", "label": "No-go / restricted zones"},
+        {"key": "low_battery", "label": "Low battery alert"},
+        {"key": "no_signal", "label": "No signal / offline alert"},
+    ],
     "IBEACON": [
         {"key": "positioning", "label": "Indoor positioning (RSSI)"},
         {"key": "proximity", "label": "Proximity alerts"},
@@ -122,7 +134,7 @@ FEATURES_BY_SCAN_TYPE: dict[str, list[dict]] = {
     ],
 }
 
-DEFAULT_SCAN_TYPES = ["MOKO_H7", "IBEACON", "EDDYSTONE"]
+DEFAULT_SCAN_TYPES = ["MOKO_H7", "BXP_NORDIC", "IBEACON", "EDDYSTONE"]
 DEFAULT_SCAN_INTERVAL_SEC = 60
 PRESENCE_RETENTION_HOURS = 25
 
@@ -203,6 +215,8 @@ def classify_detection(mac: str, adv_name: str = "", mfg_hint: str = "",
     name = (adv_name or "").lower()
     if any(k in name for k in SCAN_TYPES["MOKO_H7"]["keywords"]):
         return "MOKO_H7"
+    if any(k in name for k in SCAN_TYPES["BXP_NORDIC"]["keywords"]):
+        return "BXP_NORDIC"
     if has_ibeacon:
         return "IBEACON"
     if has_eddystone:
@@ -337,6 +351,23 @@ def _try_bleak_scan(duration: int = 8) -> dict[str, DiscoveredDevice]:
     return found
 
 
+def _prune_unacknowledged_inventory(*, allowed: set[str], seen_hardware_ids: set[str], stale_cutoff_ts: float) -> int:
+    """Keep the unacknowledged inventory aligned to the current scan selection only."""
+    removed = 0
+    q = Tracker.query.filter(Tracker.ack_status == int(TrackerAckStatus.UNACKNOWLEDGED)).all()
+    for t in q:
+        scan_type = (t.scan_type or "").upper()
+        hardware_id = (t.hardware_id or "").upper()
+        if scan_type and scan_type not in allowed:
+            db.session.delete(t)
+            removed += 1
+            continue
+        if hardware_id not in seen_hardware_ids and (t.last_report_time or 0) < stale_cutoff_ts:
+            db.session.delete(t)
+            removed += 1
+    return removed
+
+
 def run_discovery() -> dict:
     """Discover tags matching configured scan types; upsert unacknowledged trackers."""
     cfg = get_scan_config()
@@ -413,12 +444,20 @@ def run_discovery() -> dict:
             created += 1
 
     seen_ids = set()
+    seen_hardware_ids = set()
     for mac, dev in merged.items():
         if dev.scan_type not in allowed:
             continue
+        seen_hardware_ids.add((mac or '').upper())
         t = Tracker.query.filter_by(hardware_id=mac).first()
         if t:
             seen_ids.add(t.id)
+
+    removed_unack = _prune_unacknowledged_inventory(
+        allowed=allowed,
+        seen_hardware_ids=seen_hardware_ids,
+        stale_cutoff_ts=cutoff,
+    )
 
     # Mark acknowledged active tags offline if not seen this scan
     for t in Tracker.query.filter(
@@ -440,26 +479,23 @@ def run_discovery() -> dict:
         "updated": updated,
         "skipped": skipped,
         "discovered": len(merged),
+        "removed": removed_unack,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def purge_trackers(tracker_ids: list[int]) -> int:
-    """Reset tags to unacknowledged — clears profile fields."""
+    """Delete selected tracker rows from inventory.
+
+    If a physical tag is still broadcasting, the next discovery scan will recreate it
+    as a fresh unacknowledged tracker.
+    """
     count = 0
     for tid in tracker_ids:
         t = Tracker.query.get(tid)
         if not t:
             continue
-        t.ack_status = int(TrackerAckStatus.UNACKNOWLEDGED)
-        t.asset_state = int(AssetState.OFFLINE)
-        t.nickname = t.first_name = t.surname = t.username = None
-        t.position_id = t.org_section_id = None
-        t.date_of_birth = t.phone = None
-        t.assigned_name = None
-        t.features_json = json.dumps({
-            f["key"]: True for f in FEATURES_BY_SCAN_TYPE.get(t.scan_type or "UNKNOWN_BLE", [])
-        })
+        db.session.delete(t)
         count += 1
     db.session.commit()
     return count

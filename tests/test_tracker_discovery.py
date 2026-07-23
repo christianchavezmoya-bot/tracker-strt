@@ -16,6 +16,7 @@ def test_scan_types_catalog(client, auth_headers):
     data = res.get_json()
     ids = {t["id"] for t in data["scan_types"]}
     assert "MOKO_H7" in ids
+    assert "BXP_NORDIC" in ids
     assert "EDDYSTONE" in ids
 
 
@@ -121,5 +122,50 @@ def test_purge_tracker(client, auth_headers, db_session):
     assert res.get_json()["purged"] == 1
 
     t2 = Tracker.query.get(t.id)
-    assert t2.ack_status == int(TrackerAckStatus.UNACKNOWLEDGED)
-    assert t2.nickname is None
+    assert t2 is None
+
+
+def test_classify_detection_bxp_nordic_name():
+    from backend.services.tracker_discovery import classify_detection
+
+    assert classify_detection("E8:A7:3F:01:53:5C", adv_name="BXP-Nordic") == "BXP_NORDIC"
+
+
+def test_run_discovery_prunes_unacknowledged_non_matching_but_keeps_active(db_session, monkeypatch):
+    from backend.models import Tracker, TrackerAckStatus, AssetState
+    from backend.models.settings import Setting
+    from backend.services.tracker_discovery import run_discovery
+
+    stale_unack = Tracker(
+        hardware_id="AA:BB:CC:DD:EE:01",
+        scan_type="EDDYSTONE",
+        ack_status=int(TrackerAckStatus.UNACKNOWLEDGED),
+        asset_state=int(AssetState.OFFLINE),
+        last_report_time=1,
+    )
+    active_keep = Tracker(
+        hardware_id="AA:BB:CC:DD:EE:02",
+        scan_type="EDDYSTONE",
+        ack_status=int(TrackerAckStatus.ACTIVE),
+        asset_state=int(AssetState.ACTIVE),
+        last_report_time=1,
+    )
+    db_session.add_all([
+        stale_unack,
+        active_keep,
+        Setting(key="tracker_scan_types", value='["BXP_NORDIC"]'),
+        Setting(key="tracker_scan_interval_sec", value='60'),
+    ])
+    db_session.commit()
+
+    monkeypatch.setattr('backend.services.tracker_discovery._aggregate_from_detection_events', lambda since: {})
+    monkeypatch.setattr('backend.services.tracker_discovery._try_bleak_scan', lambda duration=0: {})
+
+    result = run_discovery()
+    assert result['removed'] >= 1
+
+    from backend.models import Tracker as TrackerModel
+    assert TrackerModel.query.filter_by(hardware_id="AA:BB:CC:DD:EE:01").first() is None
+    kept = TrackerModel.query.filter_by(hardware_id="AA:BB:CC:DD:EE:02").first()
+    assert kept is not None
+    assert kept.ack_status == int(TrackerAckStatus.ACTIVE)

@@ -297,14 +297,30 @@ async function refreshMqttMessagesModal(showSpinner) {
     }
     const wasAtBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
     body.innerHTML = items.map(row => {
-      const t = row.at ? new Date(row.at).toLocaleTimeString() : '—';
-      const ip = row.client_ip || '—';
-      const iface = row.server_interface || '—';
+      const t = row.at ? new Date(row.at).toLocaleTimeString() : '-';
+      const ip = row.client_ip || '-';
+      const iface = row.server_interface || '-';
+      const nodeKey = row.node_key || '-';
       const preview = (row.payload_preview || row.payload || '').replace(/</g, '&lt;');
+      const converted = Array.isArray(row.converted) ? row.converted : [];
+      const parsedSummary = converted.length
+        ? converted.map((c, idx) => {
+            const parts = [
+              `Tag ${c.tag_mac || '-'}`,
+              c.anchor_mac ? `Anchor ${c.anchor_mac}` : (row.node_key ? `Anchor ${row.node_key}` : null),
+              c.rssi != null ? `RSSI ${c.rssi}` : null,
+              c.battery != null ? `Battery ${c.battery}` : null,
+            ].filter(Boolean);
+            return `<div class="mono" style="color:var(--cyan);font-size:11px;margin-top:${idx === 0 ? '6px' : '2px'}">${parts.join(' | ')}</div>`;
+          }).join('')
+        : (row.parsed
+          ? `<div class="mono" style="color:var(--cyan);font-size:11px;margin-top:6px">Parsed ${row.parse_count || 0} tag(s)</div>`
+          : '');
       return `<div class="mqtt-msg-row">
-        <div class="mqtt-msg-meta"><span class="mono">${t}</span> · <span class="mono">${ip}</span> · <span>${iface}</span> · <span class="mono">${row.node_key || '—'}</span></div>
-        <div class="mqtt-msg-topic mono">${row.topic || '—'}</div>
+        <div class="mqtt-msg-meta"><span class="mono">${t}</span> | <span class="mono">${ip}</span> | <span>${iface}</span> | <span class="mono">${nodeKey}</span></div>
+        <div class="mqtt-msg-topic mono">${row.topic || '-'}</div>
         <div class="mqtt-msg-payload mono">${preview}</div>
+        ${parsedSummary}
       </div>`;
     }).join('');
     if (_mqttMsgAutoScroll || wasAtBottom) {

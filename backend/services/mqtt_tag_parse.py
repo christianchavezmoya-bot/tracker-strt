@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+_STRATA_TOPIC_RE = re.compile(r"^strata/v\d+/bluetooth(?:/[^/]+)*?/(?P<node_id>\d+)\s*$", re.I)
+
 
 @dataclass
 class MqttTagReading:
@@ -89,6 +91,9 @@ def _parse_json_payload(data: Any, *, topic: str, raw: str) -> list[MqttTagReadi
     readings: list[MqttTagReading] = []
 
     if isinstance(data, list):
+        strata = _parse_strata_array(data, topic=topic, raw=raw)
+        if strata:
+            return strata
         for item in data:
             readings.extend(_parse_json_object(item, topic=topic, raw=raw))
         return readings
@@ -105,6 +110,38 @@ def _parse_json_payload(data: Any, *, topic: str, raw: str) -> list[MqttTagReadi
             return readings
         readings.extend(_parse_json_object(data, topic=topic, raw=raw))
     return readings
+
+
+def _parse_strata_array(data: list[Any], *, topic: str, raw: str) -> list[MqttTagReading]:
+    if len(data) < 7:
+        return []
+    try:
+        node_id = str(int(data[3]))
+        tag_id = str(int(data[5]))
+        rssi = float(data[6])
+    except (TypeError, ValueError):
+        return []
+
+    tag_mac = _norm_decimal_mac(tag_id)
+    if not tag_mac:
+        return []
+
+    anchor_key = f"STRATA:{node_id}"
+    return [
+        MqttTagReading(
+            tag_mac=tag_mac,
+            rssi=rssi,
+            battery=None,
+            anchor_mac=anchor_key,
+            topic=topic,
+            raw=raw,
+            extra={
+                "strata_node_id": node_id,
+                "tag_id_raw": tag_id,
+                "node_reported_at": data[1],
+            },
+        )
+    ]
 
 
 def _parse_json_object(
@@ -141,6 +178,13 @@ def _parse_json_object(
     ]
 
 
+def _norm_decimal_mac(value: str) -> str:
+    value = re.sub(r"\D", "", value or "")
+    if len(value) != 12:
+        return ""
+    return ":".join(value[i:i+2] for i in range(0, 12, 2))
+
+
 def _norm_mac(mac: str) -> str:
     mac = (mac or "").strip().upper()
     if not mac:
@@ -149,4 +193,7 @@ def _norm_mac(mac: str) -> str:
         return mac.replace("-", ":")
     if len(mac) == 12 and re.fullmatch(r"[0-9A-F]{12}", mac):
         return ":".join(mac[i : i + 2] for i in range(0, 12, 2))
+    decimal_mac = _norm_decimal_mac(mac)
+    if decimal_mac:
+        return decimal_mac
     return mac
