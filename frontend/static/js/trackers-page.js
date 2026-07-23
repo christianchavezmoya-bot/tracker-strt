@@ -153,8 +153,8 @@ async function loadTrackers() {
     const name = [t.first_name, t.surname].filter(Boolean).join(' ') || '—';
     const lastTx = fmtLastSeen(t);
     return `<tr data-id="${t.id}">
-      <td><input type="checkbox" class="row-check" data-id="${t.id}" ${checked}></td>
-      <td class="mono">${esc(t.hardware_id)}</td>
+      <td class="sticky-select"><input type="checkbox" class="row-check" data-id="${t.id}" ${checked}></td>
+      <td class="mono sticky-tag-id">${esc(t.hardware_id)}</td>
       <td>${esc(t.device_model || '—')}</td>
       <td><span class="chip">${esc(displayStatus(t))}</span></td>
       <td class="mono" title="${esc(t.last_seen_at || '')}">${esc(lastTx)}</td>

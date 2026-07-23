@@ -14,7 +14,7 @@ from backend.extensions import db
 from backend.models import Tracker, WifiNode, TrackerAckStatus, AssetState, TagType, DeviceCategory
 from backend.models.detection import DetectionEvent, SignalType
 from backend.models.settings import Setting
-from backend.models.positioning import TrackerPresenceLog
+from backend.models.positioning import PositionSnapshot, TrackerPresenceLog, TrackingHistory
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +150,13 @@ def _log_presence(tracker_id: int, online: bool, rssi: float | None = None) -> N
 def _prune_presence_logs() -> None:
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=PRESENCE_RETENTION_HOURS)
     TrackerPresenceLog.query.filter(TrackerPresenceLog.timestamp < cutoff).delete(synchronize_session=False)
+
+
+def _delete_tracker_related_rows(tracker_id: int) -> None:
+    """Delete dependent rows before removing a tracker row."""
+    TrackerPresenceLog.query.filter_by(tracker_id=tracker_id).delete(synchronize_session=False)
+    TrackingHistory.query.filter_by(tracker_id=tracker_id).delete(synchronize_session=False)
+    PositionSnapshot.query.filter_by(tracker_id=tracker_id).delete(synchronize_session=False)
 
 
 @dataclass
@@ -359,10 +366,12 @@ def _prune_unacknowledged_inventory(*, allowed: set[str], seen_hardware_ids: set
         scan_type = (t.scan_type or "").upper()
         hardware_id = (t.hardware_id or "").upper()
         if scan_type and scan_type not in allowed:
+            _delete_tracker_related_rows(t.id)
             db.session.delete(t)
             removed += 1
             continue
         if hardware_id not in seen_hardware_ids and (t.last_report_time or 0) < stale_cutoff_ts:
+            _delete_tracker_related_rows(t.id)
             db.session.delete(t)
             removed += 1
     return removed
@@ -495,6 +504,7 @@ def purge_trackers(tracker_ids: list[int]) -> int:
         t = Tracker.query.get(tid)
         if not t:
             continue
+        _delete_tracker_related_rows(t.id)
         db.session.delete(t)
         count += 1
     db.session.commit()
@@ -520,6 +530,8 @@ def acknowledge_tracker(tracker_id: int, body: dict) -> Optional[Tracker]:
     if "category" in body:
         t.category = int(body["category"])
     t.ack_status = int(TrackerAckStatus.ACTIVE)
-    t.asset_state = int(AssetState.ACTIVE) if t.last_report_time else int(AssetState.OFFLINE)
+    # Acknowledged tags should become active immediately even if they have not
+    # reported in the current session yet.
+    t.asset_state = int(AssetState.ACTIVE)
     db.session.commit()
     return t

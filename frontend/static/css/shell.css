@@ -82,6 +82,72 @@ html, body.shell-page {
   font-size: 15px;
 }
 
+.topbar-left, .topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.backend-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.backend-health-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.backend-health-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.backend-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 0 4px rgba(255, 214, 10, 0.12);
+}
+.backend-health-online {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.08);
+}
+.backend-health-online .backend-health-dot {
+  background: #34d399;
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.12);
+}
+.backend-health-offline {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.08);
+}
+.backend-health-offline .backend-health-dot {
+  background: #f87171;
+  box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.12);
+}
+.backend-health-pending {
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.backend-health-pending .backend-health-dot {
+  animation: backendPulse 1.25s ease-in-out infinite;
+}
+@keyframes backendPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.8); opacity: 0.6; }
+}
+
 .shell-main {
   max-width: 1280px;
   margin: 0 auto;
@@ -285,4 +351,22 @@ html, body.shell-page {
   .stat-strip { grid-template-columns: 1fr 1fr; }
   .page-header { flex-direction: column; }
   .field-row { grid-template-columns: 1fr; }
+  .shell-topbar, body.shell-page .topbar {
+    height: auto;
+    min-height: var(--topbar-h);
+    padding: 10px 16px;
+    flex-wrap: wrap;
+  }
+  .topbar-left, .topbar-right {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .backend-health {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .backend-health-meta {
+    font-size: 10px;
+  }
 }

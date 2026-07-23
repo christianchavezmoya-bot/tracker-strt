@@ -637,7 +637,7 @@ async function loadMqttTraffic(showSpinner) {
   const summaryEl = document.getElementById('trafficSummary');
   if (!tbody) return;
   if (showSpinner) {
-              <tr><td colspan="8" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic...</td></tr>
+    tbody.innerHTML = '<tr><td colspan="9" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading traffic...</td></tr>';
   }
   try {
     const res = await API.get('/nodes/mqtt-traffic?limit=80');
@@ -776,7 +776,7 @@ async function loadDiagnosticsView() {
   const tbody = document.getElementById('diagnosticsTable');
   const brokerEl = document.getElementById('diagBrokerSummary');
   if (!tbody) return;
-            <tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics...</td></tr>
+  tbody.innerHTML = '<tr><td colspan="7" class="table-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading diagnostics...</td></tr>';
   try {
     const res = await API.get('/nodes/diagnostics');
     const data = await API.json(res);

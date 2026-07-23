@@ -252,6 +252,94 @@ window.holoConfirm = function holoConfirm(message, options = {}) {
 };
 
 // ── Utility: time ago ────────────────────────────────────────────────────────
+window.HoloBackendDebug = (function () {
+  let timer = null;
+  let lastState = 'pending';
+
+  function els() {
+    return {
+      host: document.getElementById('backendHealthBadge'),
+      btn: document.getElementById('backendHealthBtn'),
+      label: document.getElementById('backendHealthLabel'),
+      meta: document.getElementById('backendHealthMeta'),
+    };
+  }
+
+  function setState(state, label, meta, title) {
+    const { host, label: labelEl, meta: metaEl, btn } = els();
+    if (!host || !labelEl || !metaEl) return;
+    host.classList.remove('backend-health-online', 'backend-health-offline', 'backend-health-pending');
+    host.classList.add(`backend-health-${state}`);
+    labelEl.textContent = label;
+    metaEl.textContent = meta;
+    if (btn) btn.title = title || 'Check backend status now';
+    lastState = state;
+  }
+
+  function stamp() {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  async function probe() {
+    setState('pending', 'Backend: checking', 'Contacting /health', 'Checking backend status');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const started = performance.now();
+    try {
+      const res = await fetch('/health?_=' + Date.now(), {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+      });
+      const elapsed = Math.round(performance.now() - started);
+      let ok = res.ok;
+      let detail = `HTTP ${res.status}`;
+      try {
+        const data = await res.clone().json();
+        if (typeof data?.ok === 'boolean') ok = ok && data.ok;
+        if (data?.error) detail = String(data.error);
+      } catch (_) {}
+      if (ok) {
+        setState('online', 'Backend: online', `${elapsed} ms ? checked ${stamp()}`, `Backend responded in ${elapsed} ms`);
+      } else {
+        setState('offline', 'Backend: issue', `${detail} ? checked ${stamp()}`, `Backend unhealthy: ${detail}`);
+      }
+    } catch (err) {
+      const reason = err && err.name === 'AbortError' ? 'timeout' : 'unreachable';
+      setState('offline', 'Backend: offline', `${reason} ? checked ${stamp()}`, `Backend ${reason}`);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  function start() {
+    const { btn, host } = els();
+    if (!host) return;
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', probe);
+    }
+    probe();
+    if (timer) clearInterval(timer);
+    timer = setInterval(probe, 15000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) probe();
+    }, { passive: true });
+  }
+
+  function stop() {
+    if (timer) clearInterval(timer);
+    timer = null;
+  }
+
+  return { start, stop, probe, getState: () => lastState };
+})();
+
+document.addEventListener('DOMContentLoaded', function () {
+  if (window.HoloBackendDebug) window.HoloBackendDebug.start();
+});
+
 function timeAgo(isoString) {
   if (!isoString) return '—';
   const diff = (Date.now() - new Date(isoString).getTime()) / 1000;

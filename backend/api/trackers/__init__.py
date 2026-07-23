@@ -132,8 +132,7 @@ def delete_tracker(tracker_id):
     if hard:
         AuditLog.log(action="tracker.delete", user_id=int(get_jwt_identity()),
                      entity_type="Tracker", entity_id=tracker.id)
-        db.session.delete(tracker)
-        db.session.commit()
+        purge_trackers([tracker.id])
         return jsonify({"message": "Permanently deleted"}), 200
     tracker.asset_state = int(AssetState.DECOMMISSIONED)
     db.session.commit()

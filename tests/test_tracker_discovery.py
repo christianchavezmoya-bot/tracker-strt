@@ -38,7 +38,7 @@ def test_org_positions_list(client, auth_headers):
 
 
 def test_acknowledge_tracker(client, auth_headers, db_session):
-    from backend.models import Tracker, TrackerAckStatus
+    from backend.models import AssetState, Tracker, TrackerAckStatus
 
     t = Tracker(hardware_id="AA:BB:CC:DD:EE:99", device_model="MOKO H7", scan_type="MOKO_H7",
                 ack_status=int(TrackerAckStatus.UNACKNOWLEDGED))
@@ -53,7 +53,12 @@ def test_acknowledge_tracker(client, auth_headers, db_session):
     assert res.status_code == 200
     data = res.get_json()["tracker"]
     assert data["ack_status"] == "ACTIVE"
+    assert data["asset_state"] == "ACTIVE"
     assert data["nickname"] == "Alpha"
+
+    db_session.refresh(t)
+    assert t.ack_status == int(TrackerAckStatus.ACTIVE)
+    assert t.asset_state == int(AssetState.ACTIVE)
 
 
 def test_tracker_last_seen_at_in_list(client, auth_headers, db_session):
@@ -108,13 +113,23 @@ def test_presence_timeline(client, auth_headers, db_session):
 
 
 def test_purge_tracker(client, auth_headers, db_session):
+    from datetime import datetime, timezone
+
     from backend.models import Tracker, TrackerAckStatus
+    from backend.models.positioning import TrackerPresenceLog
 
     t = Tracker(
         hardware_id="AA:BB:CC:DD:EE:88", nickname="Test", first_name="A",
         ack_status=int(TrackerAckStatus.ACTIVE),
     )
     db_session.add(t)
+    db_session.flush()
+    db_session.add(TrackerPresenceLog(
+        tracker_id=t.id,
+        timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
+        online=True,
+        rssi=-70.0,
+    ))
     db_session.commit()
 
     res = client.post("/api/trackers/bulk/purge", headers=auth_headers, json={"ids": [t.id]})
@@ -123,6 +138,7 @@ def test_purge_tracker(client, auth_headers, db_session):
 
     t2 = Tracker.query.get(t.id)
     assert t2 is None
+    assert TrackerPresenceLog.query.filter_by(tracker_id=t.id).count() == 0
 
 
 def test_classify_detection_bxp_nordic_name():
@@ -158,6 +174,17 @@ def test_run_discovery_prunes_unacknowledged_non_matching_but_keeps_active(db_se
     ])
     db_session.commit()
 
+    from datetime import datetime, timezone
+    from backend.models.positioning import TrackerPresenceLog
+
+    db_session.add(TrackerPresenceLog(
+        tracker_id=stale_unack.id,
+        timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
+        online=False,
+        rssi=-88.0,
+    ))
+    db_session.commit()
+
     monkeypatch.setattr('backend.services.tracker_discovery._aggregate_from_detection_events', lambda since: {})
     monkeypatch.setattr('backend.services.tracker_discovery._try_bleak_scan', lambda duration=0: {})
 
@@ -166,6 +193,7 @@ def test_run_discovery_prunes_unacknowledged_non_matching_but_keeps_active(db_se
 
     from backend.models import Tracker as TrackerModel
     assert TrackerModel.query.filter_by(hardware_id="AA:BB:CC:DD:EE:01").first() is None
+    assert TrackerPresenceLog.query.filter_by(tracker_id=stale_unack.id).count() == 0
     kept = TrackerModel.query.filter_by(hardware_id="AA:BB:CC:DD:EE:02").first()
     assert kept is not None
     assert kept.ack_status == int(TrackerAckStatus.ACTIVE)

@@ -180,14 +180,14 @@ class MqttTagIngestService:
             self._ingest_grouped(grouped)
 
     def _ingest_grouped(self, grouped: dict[str, list]) -> None:
-        from backend.models.tracker import WifiNode
-        from backend.services.node_utils import is_node_active_for_mqtt
+        from backend.services.node_utils import get_node_metadata
 
         pos_svc = WifiPositioningService(db.session)
         for anchor_mac, batch in grouped.items():
             try:
                 node, _anchor = ensure_node_pair(anchor_mac)
-                if not is_node_active_for_mqtt(node):
+                meta = get_node_metadata(node)
+                if meta.get("decommissioned") or meta.get("operational_state") == "inactive":
                     logger.debug("Ignoring MQTT detections from non-active node %s", anchor_mac)
                     touch_node_heartbeat(anchor_mac)
                     continue
@@ -248,3 +248,4 @@ def reset_mqtt_tag_ingest() -> None:
     """Clear singleton (test isolation)."""
     global _ingest
     _ingest = None
+

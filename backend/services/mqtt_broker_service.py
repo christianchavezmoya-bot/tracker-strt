@@ -57,9 +57,12 @@ class MqttBrokerService:
 
         def _handler(client_id: str, topic: str, payload: str, client_ip: str | None = None) -> None:
             self.message_count += 1
-            self.log("IN", "MQTT", f"{client_id} ({client_ip or '?'}) → {topic}: {payload[:200]}")
+            self.log("IN", "MQTT", f"{client_id} ({client_ip or '?'}) ??? {topic}: {payload[:200]}")
             if self.on_message:
-                self.on_message(client_id, topic, payload, client_ip)
+                try:
+                    self.on_message(client_id, topic, payload, client_ip)
+                except TypeError:
+                    self.on_message(client_id, topic, payload)
 
         register_message_handler(_handler)
         bind_addr = f"{self.bind}:{self.port}"

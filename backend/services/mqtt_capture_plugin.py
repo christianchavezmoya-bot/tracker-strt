@@ -31,7 +31,7 @@ def _session_client_ip(context: BrokerContext, client_id: str) -> str | None:
 
 
 class MessageCapturePlugin(BasePlugin[BrokerContext]):
-    """Broker plugin — forwards every PUBLISH to registered handlers."""
+    """Broker plugin - forwards every inbound PUBLISH to registered handlers."""
 
     async def on_broker_client_connected(self, client_id: str, client_session=None) -> None:
         try:
@@ -60,7 +60,6 @@ class MessageCapturePlugin(BasePlugin[BrokerContext]):
             try:
                 handler(cid, topic, payload, client_ip)
             except TypeError:
-                # Back-compat for 3-arg handlers in tests
                 try:
                     handler(cid, topic, payload)  # type: ignore[misc]
                 except Exception:

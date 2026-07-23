@@ -11,6 +11,15 @@
 .table-panel { overflow-x:auto; }
 .data-table { min-width:1400px; font-size:12px; }
 .data-table th, .data-table td { white-space:nowrap; padding:8px 10px; }
+.data-table th { position:sticky; top:0; z-index:4; background:var(--bg-elev-2, #171b22); }
+.sticky-select,
+.sticky-tag-id { position:sticky; background:var(--bg-elev-1, #11161d); }
+.data-table th.sticky-select,
+.data-table th.sticky-tag-id { background:var(--bg-elev-2, #171b22); }
+.sticky-select { left:0; z-index:5; width:44px; min-width:44px; }
+.sticky-tag-id { left:44px; z-index:5; }
+.data-table tbody tr:hover .sticky-select,
+.data-table tbody tr:hover .sticky-tag-id { background:rgba(255,255,255,.04); }
 .beacon-col { max-width:180px; overflow:hidden; text-overflow:ellipsis; }
 .muted { color:var(--text-muted); }
 .scan-type-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; max-height:240px; overflow-y:auto; margin:12px 0; }
@@ -81,8 +90,8 @@
     <table class="data-table" id="trackersTable">
       <thead>
         <tr>
-          <th><input type="checkbox" id="selectAll" title="Select all"></th>
-          <th>Tag ID</th>
+          <th class="sticky-select"><input type="checkbox" id="selectAll" title="Select all"></th>
+          <th class="sticky-tag-id">Tag ID</th>
           <th>Model</th>
           <th>Status</th>
           <th>Last transmitted</th>

@@ -20,6 +20,13 @@
     <div class="breadcrumb">{% block breadcrumb %}{% endblock %}</div>
   </div>
   <div class="topbar-right">
+    <div id="backendHealthBadge" class="backend-health backend-health-pending" role="status" aria-live="polite">
+      <button type="button" class="backend-health-btn" id="backendHealthBtn" title="Check backend status now">
+        <span class="backend-health-dot" aria-hidden="true"></span>
+        <span id="backendHealthLabel">Backend: checking</span>
+      </button>
+      <span class="backend-health-meta" id="backendHealthMeta">Waiting for first probe</span>
+    </div>
     {% block topbar_actions %}{% endblock %}
   </div>
 </header>
