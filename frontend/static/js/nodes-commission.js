@@ -22,9 +22,13 @@ function fmtNodeTime(iso) {
 }
 
 function nodeTooltip(item) {
+  const strataIds = item.logical_strata_ids || item.merged_strata_ids || [];
+  const strataLine = strataIds.length > 1
+    ? `STRATA IDs (${strataIds.length}): ${strataIds.map(id => String(id).slice(-6)).join(', ')}`
+    : (item.strata_node_id ? `STRATA: ${item.strata_node_id}` : '');
   return [
     `ID: ${item.mac_address}`,
-    item.strata_node_id ? `STRATA: ${item.strata_node_id}` : '',
+    strataLine,
     item.node_ip && item.node_ip !== '—' ? `IP: ${item.node_ip}` : '',
     item.server_interface_label || item.server_interface ? `Interface: ${item.server_interface_label || item.server_interface}` : '',
     item.logical_count > 1 ? `Merged logical IDs: ${item.logical_count}` : '',
@@ -97,6 +101,7 @@ function renderCommissionTable() {
   }
   tbody.innerHTML = rows.map(item => {
     const name = item.name || item.mac_address;
+    const mergedSuffix = item.logical_count > 1 ? ` <span style="font-size:10px;color:var(--text-muted)">(${item.logical_count} IDs)</span>` : '';
     const ip = item.node_ip || '—';
     const iface = item.server_interface_label || item.server_interface || '—';
     const ipCell = item.logical_count > 1
@@ -104,7 +109,7 @@ function renderCommissionTable() {
       : `<span class="mono">${ip}</span>`;
     const title = nodeTooltip(item).replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
     return `<tr class="${commissionSelectedId === item.node_id ? 'row-selected' : ''}" onclick="selectCommissionNode(${item.node_id})">
-      <td title="${title}"><strong>${name}</strong></td>
+      <td title="${title}"><strong>${name}</strong>${mergedSuffix}</td>
       <td class="mono" title="${title}">${ipCell}</td>
       <td title="${title}" style="font-size:11px">${iface}</td>
       <td title="${title}">${fmtNodeTime(item.last_payload_at || item.last_heard_at)}</td>

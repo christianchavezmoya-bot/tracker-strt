@@ -105,7 +105,7 @@
           Anchors / Nodes
         </h1>
         <p class="page-subtitle">Fixed-position reference points for positioning. Place at known survey coordinates.</p>
-        <p style="font-size:10px;color:var(--text-muted);margin:4px 0 0" id="nodesUiVersion">UI: commission-scan-v3</p>
+        <p style="font-size:10px;color:var(--text-muted);margin:4px 0 0" id="nodesUiVersion">UI: commission-scan-v4-ip-merge</p>
       </div>
       <button class="btn btn-primary" onclick="openNodeModal()">
         <i class="fa-solid fa-plus"></i> Add Node
@@ -820,11 +820,15 @@ function mapScanNode(item) {
     online: !!item.online,
     node_type: item.node_type || 'STANDARD',
     position: { x: item.pos_x, y: item.pos_y, z: item.pos_z },
+    logical_count: item.logical_count || 1,
+    logical_strata_ids: item.logical_strata_ids || item.merged_strata_ids || [],
+    merged_by_ip: !!item.merged_by_ip,
     metadata: {
       node_ip: item.node_ip,
       server_interface: item.server_interface,
       server_interface_label: item.server_interface_label,
       strata_node_id: item.strata_node_id,
+      merged_strata_ids: item.merged_strata_ids || item.logical_strata_ids || [],
       first_discovered_at: item.first_discovered_at,
       last_payload_at: item.last_payload_at,
       last_seen_at: item.last_timestamp,
@@ -877,6 +881,10 @@ function renderNodes() {
     const meta = n.metadata || {};
     const nodeIp = meta.node_ip || '—';
     const iface = meta.server_interface_label || meta.server_interface || '—';
+    const strataIds = n.logical_strata_ids || meta.merged_strata_ids || [];
+    const ipCell = n.logical_count > 1 || n.merged_by_ip
+      ? `<span class="mono" style="color:var(--cyan)" title="Merged ${n.logical_count || strataIds.length} logical IDs">${nodeIp} [merged]</span>`
+      : `<span class="mono">${nodeIp}</span>`;
     const firstSeen = meta.first_discovered_at || n.created_at || null;
     const lastPayload = meta.last_payload_at || meta.last_seen_at || n.last_heartbeat || null;
     const typeIcon = { STANDARD: 'fa-anchor', CHECK_IN: 'fa-right-to-bracket', CHECK_OUT: 'fa-right-from-bracket' }[n.node_type] || 'fa-anchor';
@@ -885,17 +893,20 @@ function renderNodes() {
       n.mac_address,
       nodeIp !== '—' ? `IP: ${nodeIp}` : '',
       iface !== '—' ? `Server interface: ${iface}` : '',
-      meta.strata_node_id ? `STRATA: ${meta.strata_node_id}` : '',
+      strataIds.length > 1 ? `STRATA IDs (${strataIds.length}): ${strataIds.map(id => String(id).slice(-6)).join(', ')}` : (meta.strata_node_id ? `STRATA: ${meta.strata_node_id}` : ''),
     ].filter(Boolean).join(' · ');
+    const nameSuffix = (n.logical_count || strataIds.length) > 1
+      ? ` <span style="font-size:10px;color:var(--text-muted)">(${(n.logical_count || strataIds.length)} IDs)</span>`
+      : '';
     return `<tr>
       <td>
         <div class="node-name-cell" title="${tip}">
           <i class="fa-solid ${typeIcon}" style="color:var(--magenta);font-size:14px"></i>
-          <span style="font-weight:600">${n.assigned_name || '—'}</span>
+          <span style="font-weight:600">${n.assigned_name || '—'}</span>${nameSuffix}
         </div>
       </td>
       <td class="mono" title="${tip}">${n.mac_address || '—'}</td>
-      <td class="mono" title="${tip}">${nodeIp}</td>
+      <td class="mono" title="${tip}">${ipCell}</td>
       <td style="font-size:11px" title="${tip}">${iface}</td>
       <td class="mono pos-cell">
         <span class="pos-label">X</span><span class="pos-val">${fmt(pos.x)}</span>

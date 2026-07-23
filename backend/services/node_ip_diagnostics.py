@@ -9,8 +9,10 @@ def build_ip_conflict_map(items: list[dict]) -> dict[str, list[str]]:
     """Map IP → node keys when multiple anchors share the same client IP."""
     by_ip: dict[str, list[str]] = {}
     for item in items:
+        if item.get("merged_by_ip") or (item.get("logical_count") or 1) > 1:
+            continue
         ip = item.get("node_ip") or item.get("client_ip")
-        if not ip or ip == "—":
+        if not ip or ip in ("—", "--"):
             continue
         by_ip.setdefault(ip, []).append(item.get("mac_address") or str(item.get("node_id")))
     return {ip: keys for ip, keys in by_ip.items() if len(keys) > 1}

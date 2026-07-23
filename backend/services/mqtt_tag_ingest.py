@@ -87,6 +87,7 @@ class MqttTagIngestService:
                     )
                     node = register_node_from_mqtt(
                         node_key, detect_hints, client_id=client_id, payload=payload,
+                        client_ip=client_ip,
                     )
                     node_id = node.id
                     try:

@@ -71,11 +71,18 @@ def _merge_items(items: list[dict]) -> list[dict]:
     for group in grouped.values():
         if len(group) == 1:
             item = dict(group[0])
+            strata_ids = [str(s) for s in (item.get("merged_strata_ids") or [])]
+            canonical_strata = item.get("strata_node_id") or (strata_ids[0] if strata_ids else None)
+            if canonical_strata and str(canonical_strata) not in strata_ids:
+                strata_ids.insert(0, str(canonical_strata))
+            macs = item.get("merged_mac_addresses") or []
+            if item.get("mac_address") and item.get("mac_address") not in macs:
+                macs = [item.get("mac_address"), *macs]
             item["logical_node_ids"] = [item.get("node_id")]
-            item["logical_mac_addresses"] = [item.get("mac_address")]
-            item["logical_strata_ids"] = [item.get("strata_node_id")] if item.get("strata_node_id") else []
-            item["logical_count"] = 1
-            item["merged_by_ip"] = False
+            item["logical_mac_addresses"] = macs or [item.get("mac_address")]
+            item["logical_strata_ids"] = strata_ids
+            item["logical_count"] = max(1, len(set(strata_ids)))
+            item["merged_by_ip"] = len(set(strata_ids)) > 1 or len(macs) > 1
             merged.append(item)
             continue
 
@@ -147,8 +154,20 @@ def _merge_items(items: list[dict]) -> list[dict]:
 def scan_nodes(session=None) -> dict:
     """Build scan snapshot for commission table (name + IP required columns)."""
     sess = session or db.session
+    from backend.services.node_anchor_merge import consolidate_duplicate_ip_nodes
+
+    consolidate_duplicate_ip_nodes(sess)
     nodes = sess.query(WifiNode).order_by(WifiNode.last_heartbeat.desc().nullslast(), WifiNode.id.desc()).all()
-    nodes = [n for n in nodes if (get_node_metadata(n).get("mqtt_auto_detected") or get_node_metadata(n).get("mqtt_acknowledged") or get_node_metadata(n).get("last_payload_at") or get_node_metadata(n).get("first_discovered_at"))]
+    nodes = [
+        n for n in nodes
+        if not get_node_metadata(n).get("merged_into")
+        and (
+            get_node_metadata(n).get("mqtt_auto_detected")
+            or get_node_metadata(n).get("mqtt_acknowledged")
+            or get_node_metadata(n).get("last_payload_at")
+            or get_node_metadata(n).get("first_discovered_at")
+        )
+    ]
     traffic = get_mqtt_traffic_log().summary()
     items = []
     for n in nodes:
@@ -156,6 +175,10 @@ def scan_nodes(session=None) -> dict:
         ip = _node_ip(n)
         iface = _server_interface(n)
         iface_label = meta.get("server_interface_label") or (interface_label(ip, iface) if iface else None)
+        merged_strata = [str(s) for s in (meta.get("merged_strata_ids") or [])]
+        canonical_strata = meta.get("canonical_strata_id") or meta.get("strata_node_id")
+        if canonical_strata and str(canonical_strata) not in merged_strata:
+            merged_strata.insert(0, str(canonical_strata))
         items.append({
             "node_id": n.id,
             "name": n.assigned_name or f"STRATA-{str(meta.get('strata_node_id', ''))[-6:]}" or n.mac_address,
@@ -165,6 +188,8 @@ def scan_nodes(session=None) -> dict:
             "server_interface_label": iface_label or "--",
             "mac_address": n.mac_address,
             "strata_node_id": meta.get("strata_node_id"),
+            "merged_strata_ids": merged_strata,
+            "merged_mac_addresses": meta.get("merged_mac_addresses") or [],
             "first_discovered_at": meta.get("first_discovered_at") or (n.created_at.isoformat() if n.created_at else None),
             "last_payload_at": meta.get("last_payload_at") or meta.get("last_seen_at") or (n.last_heartbeat.isoformat() if n.last_heartbeat else None),
             "last_heard_at": n.last_heartbeat.isoformat() if n.last_heartbeat else None,

@@ -130,21 +130,44 @@ def register_node_from_mqtt(
     *,
     client_id: str | None = None,
     payload: str | None = None,
+    client_ip: str | None = None,
 ) -> WifiNode:
     """Create or update WifiNode from detected MQTT traffic; sync anchor row."""
     hints = hints or {}
-    key = node_key.upper()
+    original_key = node_key.upper()
+    key = original_key
     sess = db.session
+
+    resolved_ip = client_ip
+    if client_id:
+        from backend.services.mqtt_client_registry import link_node_key, get_ip_for_client
+        link_node_key(original_key, client_id, client_ip=client_ip)
+        if not resolved_ip:
+            resolved_ip = get_ip_for_client(client_id)
+
+    from backend.services.node_anchor_merge import (
+        record_strata_alias,
+        resolve_canonical_node_key,
+    )
+
+    key, canonical = resolve_canonical_node_key(
+        key, client_ip=resolved_ip, session=sess,
+    )
+    if canonical and key != original_key:
+        record_strata_alias(canonical, original_key, hints.get("strata_node_id"))
+        link_node_key(original_key, client_id or "", client_ip=resolved_ip)
+
     node = sess.query(WifiNode).filter_by(mac_address=key).first()
     meta = get_node_metadata(node) if node else {}
 
     if client_id:
         from backend.services.mqtt_client_registry import link_node_key, get_ip_for_client
-        link_node_key(key, client_id)
+        link_node_key(key, client_id, client_ip=resolved_ip or client_ip)
         meta["last_client_id"] = client_id
-        ip = get_ip_for_client(client_id)
+        ip = resolved_ip or get_ip_for_client(client_id)
         if ip:
             meta["node_ip"] = ip
+            meta["physical_unit_ip"] = ip
 
     now_utc = datetime.now(timezone.utc)
     now_iso = now_utc.isoformat()
@@ -180,7 +203,11 @@ def register_node_from_mqtt(
             "messages_total": int(meta.get("messages_total") or 0),
         })
         if strata_id:
-            meta["strata_node_id"] = strata_id
+            meta.setdefault("canonical_strata_id", meta.get("canonical_strata_id") or strata_id)
+            if original_key == key:
+                meta["strata_node_id"] = meta.get("canonical_strata_id")
+        if resolved_ip:
+            meta["physical_unit_ip"] = resolved_ip
         node = WifiNode(
             mac_address=key,
             assigned_name=default_name,
@@ -196,9 +223,16 @@ def register_node_from_mqtt(
         if fmt and fmt != "unknown":
             meta["payload_format"] = fmt
         if strata_id:
-            meta["strata_node_id"] = strata_id
+            meta.setdefault("canonical_strata_id", meta.get("canonical_strata_id") or strata_id)
+            if original_key == key:
+                meta["strata_node_id"] = meta.get("canonical_strata_id")
+        if resolved_ip:
+            meta["physical_unit_ip"] = resolved_ip
         meta.setdefault("mqtt_auto_detected", True)
         node.metadata_json = json.dumps(meta)
+
+    if original_key != key:
+        record_strata_alias(node, original_key, hints.get("strata_node_id"))
 
     ensure_node_pair(key)
     touch_node_heartbeat(key)
