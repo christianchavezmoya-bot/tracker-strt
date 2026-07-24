@@ -45,6 +45,12 @@ SETTING_DEFAULTS: dict[str, dict] = {
         "scope": SettingScope.BUSINESS,
         "label": "Regional map zoom",
     },
+    "positioning_application_profile": {
+        "value": "open_space",
+        "value_type": "select",
+        "scope": SettingScope.BUSINESS,
+        "label": "Positioning application profile",
+    },
     "display_timezone": {
         "value": "UTC",
         "value_type": "string",

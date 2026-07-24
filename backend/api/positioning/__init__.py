@@ -9,6 +9,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.extensions import db
 from backend.models.positioning import TrackingHistory, PositionSnapshot
 from backend.services.history_service import get_history_service
+from backend.services.positioning_profile import get_positioning_profile
 
 positioning_bp = Blueprint("positioning", __name__, url_prefix="/api/positioning")
 
@@ -25,6 +26,7 @@ def positioning_sources():
     anchors = WifiNode.query.count()
     hw = HardwareConfig.query.all()
     hw_connected = sum(1 for c in hw if int(getattr(c, "status", 0) or 0) == int(ConnectionStatus.CONNECTED))
+    profile = get_positioning_profile(db.session)
     return jsonify({
         "location_core": True,
         "live_snapshots": live,
@@ -32,6 +34,9 @@ def positioning_sources():
         "anchors": anchors,
         "hardware_configs": len(hw),
         "hardware_connected": hw_connected,
+        "positioning_profile": profile,
+        "min_anchors_required": profile.get("min_anchors", 3),
+        "positioning_mode": profile.get("positioning_mode"),
         "sources": [
             {"id": "ingestion", "label": "Hardware bridge / ingestion loop", "primary": True},
             {"id": "scanner", "label": "Wi‑Fi/BLE scanner → Trackers", "primary": True},

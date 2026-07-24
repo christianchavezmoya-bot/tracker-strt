@@ -11,6 +11,34 @@ def test_rtls_readiness_needs_anchors(app, db_session):
     assert len(r["checklist"]) >= 4
 
 
+def test_rtls_readiness_tunnel_profile_requires_two_anchors(app, db_session):
+    from backend.models import Setting
+
+    db_session.add(Setting(key="positioning_application_profile", value="tunnel", value_type="select"))
+    for i, mac in enumerate(["AA:00:00:00:10:01", "AA:00:00:00:10:02"]):
+        db_session.add(
+            WifiNode(
+                mac_address=mac,
+                assigned_name=f"T{i}",
+                pos_x=float(i + 1),
+                pos_y=float(i + 2),
+                status=int(NodeStatus.ACTIVE),
+                metadata_json='{"placed_on_map": true}',
+            )
+        )
+    db_session.commit()
+
+    r = compute_readiness(db_session)
+    assert r["anchors_required"] == 2
+    assert r["anchors_needed"] == 0
+    assert r["positioning_profile"]["id"] == "tunnel"
+
+    WifiNode.query.filter(WifiNode.mac_address.in_(["AA:00:00:00:10:01", "AA:00:00:00:10:02"])).delete(synchronize_session=False)
+    from backend.models import Setting as SettingModel
+    SettingModel.query.filter_by(key="positioning_application_profile").delete(synchronize_session=False)
+    db_session.commit()
+
+
 def test_rtls_readiness_with_placed_anchors(app, db_session):
     for i, mac in enumerate(["AA:00:00:00:00:01", "AA:00:00:00:00:02", "AA:00:00:00:00:03"]):
         db_session.add(

@@ -19,6 +19,7 @@ from backend.models.detection import (
     FloorPlan, SignalType, DeviceType, AnchorStatus,
 )
 from backend.models.positioning import PositionSnapshot, TrackingHistory
+from backend.services.positioning_profile import get_positioning_profile
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,9 @@ class PositionFix:
     method: str = "lsm"
     anchors_used: int = 0
     raw_rssi: dict = field(default_factory=dict)   # anchor_id → rssi
+    quality_state: str = "exact"
+    profile_id: str = "open_space"
+    confidence_score: float = 1.0
 
 
 # ── Distance estimation ───────────────────────────────────────────────────────
@@ -154,6 +158,28 @@ def solve_iterative(anchors: list[AnchorReading],
             break
 
     return x, y, z
+
+
+def solve_two_anchor_linear(anchors: list[AnchorReading]) -> tuple[float, float, float, float]:
+    """Estimate a point constrained to the line between two anchors."""
+    pair = sorted(anchors, key=lambda a: a.rssi, reverse=True)[:2]
+    a1, a2 = pair[0], pair[1]
+    d1 = rssi_to_distance(a1.rssi, a1.tx_power, a1.path_loss_exp)
+    d2 = rssi_to_distance(a2.rssi, a2.tx_power, a2.path_loss_exp)
+    dx = a2.real_x - a1.real_x
+    dy = a2.real_y - a1.real_y
+    dz = a2.real_z - a1.real_z
+    span = math.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+    if span < 0.01:
+        return a1.real_x, a1.real_y, a1.real_z, max(d1, d2)
+    projected = (d1 ** 2 - d2 ** 2 + span ** 2) / (2 * span)
+    projected = max(0.0, min(span, projected))
+    t = projected / span
+    x = a1.real_x + dx * t
+    y = a1.real_y + dy * t
+    z = a1.real_z + dz * t
+    residual = (abs(projected - d1) + abs((span - projected) - d2)) / 2.0
+    return x, y, z, residual
 
 
 def estimate_accuracy(anchors: list[AnchorReading], x: float, y: float) -> float:
@@ -264,13 +290,18 @@ class WifiPositioningService:
 
     def compute_all_positions(self, floor_plan_id: int = None) -> list[PositionFix]:
         """
-        Full trilateration pass: group fresh detections by MAC,
+        Full positioning pass: group fresh detections by MAC,
         solve for each device, apply Kalman smoothing, persist.
         Returns list of PositionFix objects.
         """
         anchors = self._get_active_anchors(floor_plan_id)
-        if len(anchors) < MIN_ANCHORS_FOR_FIX:
-            logger.debug(f"Not enough anchors ({len(anchors)}) for positioning")
+        profile = get_positioning_profile(self.db)
+        min_anchors = int(profile.get("min_anchors") or MIN_ANCHORS_FOR_FIX)
+        if len(anchors) < min_anchors:
+            logger.debug(
+                "Not enough anchors (%s) for profile %s requiring %s",
+                len(anchors), profile.get("id"), min_anchors,
+            )
             return []
 
         # Group detections by MAC across anchors.
@@ -286,10 +317,10 @@ class WifiPositioningService:
 
         fixes = []
         for mac, events in mac_detections.items():
-            if len(events) < MIN_ANCHORS_FOR_FIX:
+            if len(events) < 2:
                 continue
 
-            fix = self._trilaterate_mac(mac, events, anchors)
+            fix = self._trilaterate_mac(mac, events, anchors, profile)
             if fix:
                 fixes.append(fix)
 
@@ -337,9 +368,10 @@ class WifiPositioningService:
 
     def _trilaterate_mac(self, mac: str,
                           events: list[DetectionEvent],
-                          anchors: list[WifiAnchor]) -> Optional[PositionFix]:
+                          anchors: list[WifiAnchor],
+                          profile: dict) -> Optional[PositionFix]:
         """
-        Trilaterate a single MAC from ≥3 detection events.
+        Locate a single MAC using the active business application profile.
         """
         anchor_map = {a.id: a for a in anchors}
 
@@ -367,7 +399,7 @@ class WifiPositioningService:
             ))
             rssi_vals.append(ev.rssi)
 
-        if len(readings) < MIN_ANCHORS_FOR_FIX:
+        if len(readings) < 2:
             return None
 
         # Remove gross outliers (RSSI more than RSSI_OUTLIER_THRESHOLD from median)
@@ -377,38 +409,66 @@ class WifiPositioningService:
                 r for r in readings
                 if abs(r.rssi - median_rssi) <= RSSI_OUTLIER_THRESHOLD
             ]
-        if len(readings) < MIN_ANCHORS_FOR_FIX:
-            return None
-
-        # Solve
-        x, y, z = solve_lsm(readings)
-        accuracy = estimate_accuracy(readings, x, y)
-
-        # Centroid as anchor for Kalman initialization
-        cx = sum(r.real_x for r in readings) / len(readings)
-        cy = sum(r.real_y for r in readings) / len(readings)
-
-        # Kalman smooth per device (seeded near first fix to avoid startup jump)
-        kx, ky = self._get_kalman(mac, init_x=cx, init_y=cy)
-        x_k = kx.update(x)
-        y_k = ky.update(y)
-
-        # Confidence check — if LSM result is far from centroid, fall back
-        dist_from_centroid = math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-        if dist_from_centroid > 30.0:
-            logger.debug(f"Trilateration implausible for {mac}: ({x:.1f},{y:.1f}) vs centroid ({cx:.1f},{cy:.1f})")
+        if len(readings) < 2:
             return None
 
         raw_rssi = {r.anchor_id: r.rssi for r in readings}
-        return PositionFix(
-            x=round(x_k, 3), y=round(y_k, 3), z=round(z, 3),
-            accuracy=round(accuracy, 2),
-            source="TRILATERATION",
-            mac_address=mac,
-            method="lsm",
-            anchors_used=len(readings),
-            raw_rssi=raw_rssi,
-        )
+        profile_id = str(profile.get("id") or "open_space")
+        allows_linear = bool(profile.get("allows_two_anchor_linear"))
+
+        if len(readings) >= 3:
+            x, y, z = solve_lsm(readings)
+            accuracy = estimate_accuracy(readings, x, y)
+
+            cx = sum(r.real_x for r in readings) / len(readings)
+            cy = sum(r.real_y for r in readings) / len(readings)
+            kx, ky = self._get_kalman(mac, init_x=cx, init_y=cy)
+            x_k = kx.update(x)
+            y_k = ky.update(y)
+
+            dist_from_centroid = math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+            if dist_from_centroid > 30.0:
+                logger.debug(f"Trilateration implausible for {mac}: ({x:.1f},{y:.1f}) vs centroid ({cx:.1f},{cy:.1f})")
+                return None
+
+            confidence = max(0.35, min(0.98, 1.0 - (accuracy / 25.0)))
+            return PositionFix(
+                x=round(x_k, 3), y=round(y_k, 3), z=round(z, 3),
+                accuracy=round(accuracy, 2),
+                source="TRILATERATION",
+                mac_address=mac,
+                method="lsm",
+                anchors_used=len(readings),
+                raw_rssi=raw_rssi,
+                quality_state="exact" if profile_id == "open_space" else "approximate",
+                profile_id=profile_id,
+                confidence_score=round(confidence, 2),
+            )
+
+        if allows_linear and len(readings) >= 2:
+            top_two = sorted(readings, key=lambda r: r.rssi, reverse=True)[:2]
+            x, y, z, residual = solve_two_anchor_linear(top_two)
+            cx = sum(r.real_x for r in top_two) / len(top_two)
+            cy = sum(r.real_y for r in top_two) / len(top_two)
+            kx, ky = self._get_kalman(mac, init_x=cx, init_y=cy)
+            x_k = kx.update(x)
+            y_k = ky.update(y)
+            accuracy = max(2.0, residual + 1.5)
+            confidence = max(0.2, min(0.8, 0.78 - (accuracy / 30.0)))
+            return PositionFix(
+                x=round(x_k, 3), y=round(y_k, 3), z=round(z, 3),
+                accuracy=round(accuracy, 2),
+                source="LINEAR_TUNNEL",
+                mac_address=mac,
+                method="two_anchor_linear",
+                anchors_used=len(top_two),
+                raw_rssi={r.anchor_id: r.rssi for r in top_two},
+                quality_state="approximate",
+                profile_id=profile_id,
+                confidence_score=round(confidence, 2),
+            )
+
+        return None
 
     def _get_kalman(self, mac: str, init_x: float = 0.0, init_y: float = 0.0):
         """Return (or create) per-device Kalman filters, seeded near the first fix."""

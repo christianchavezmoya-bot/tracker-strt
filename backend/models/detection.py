@@ -205,6 +205,7 @@ class TrackedDevice(db.Model):
             return "UNKNOWN"
 
     def to_dict(self):
+        source = self.pos_source or ""
         return {
             "id": self.id,
             "mac_address": self.mac_address,
@@ -214,6 +215,8 @@ class TrackedDevice(db.Model):
                         if self.pos_x is not None else None,
             "pos_accuracy": self.pos_accuracy,
             "pos_source": self.pos_source,
+            "positioning_mode": "linear" if source == "LINEAR_TUNNEL" else "free_2d",
+            "quality_state": "approximate" if source == "LINEAR_TUNNEL" else ("exact" if source == "TRILATERATION" else "unknown"),
             "first_seen": self.first_seen.isoformat() if self.first_seen else None,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "is_active": self.is_active,

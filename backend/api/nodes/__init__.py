@@ -52,6 +52,8 @@ def list_nodes():
     items = q.order_by(WifiNode.id.desc()).all()
 
     filter_tab = (request.args.get("filter") or "all").lower()
+    if filter_tab == "discovered":
+        filter_tab = "detected"
     if filter_tab != "all":
         from backend.services.node_utils import node_category
         items = [n for n in items if node_category(n) == filter_tab]

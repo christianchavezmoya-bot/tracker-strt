@@ -4,6 +4,7 @@ from __future__ import annotations
 from backend.models.tracker import WifiNode
 from backend.services.node_utils import is_node_placed
 from backend.services.mqtt_broker_manager import broker_status_summary
+from backend.services.positioning_profile import get_positioning_profile
 
 MIN_ANCHORS_FOR_TAGS = 3
 
@@ -13,10 +14,12 @@ def compute_readiness(db_session) -> dict:
     placed = [n for n in nodes if is_node_placed(n)]
     discovered = [n for n in nodes if not is_node_placed(n)]
     broker = broker_status_summary()
+    profile = get_positioning_profile(db_session)
 
-    anchors_needed = max(0, MIN_ANCHORS_FOR_TAGS - len(placed))
+    anchors_required = int(profile.get("min_anchors") or MIN_ANCHORS_FOR_TAGS)
+    anchors_needed = max(0, anchors_required - len(placed))
     broker_ok = bool(broker.get("enabled") and broker.get("running"))
-    tags_visible = broker_ok and len(placed) >= MIN_ANCHORS_FOR_TAGS
+    tags_visible = broker_ok and len(placed) >= anchors_required
 
     checklist = [
         {
@@ -37,11 +40,11 @@ def compute_readiness(db_session) -> dict:
         },
         {
             "id": "anchors_placed",
-            "label": f"{len(placed)} of {MIN_ANCHORS_FOR_TAGS} anchors placed on map",
-            "ok": len(placed) >= MIN_ANCHORS_FOR_TAGS,
+            "label": f"{len(placed)} of {anchors_required} anchors placed on map",
+            "ok": len(placed) >= anchors_required,
             "hint": f"Place {anchors_needed} more anchor(s) using Map Setup"
             if anchors_needed
-            else "Enough anchors for tag positioning",
+            else f"Enough anchors for {profile.get('label', 'active').lower()} positioning",
         },
         {
             "id": "tags_live",
@@ -58,7 +61,8 @@ def compute_readiness(db_session) -> dict:
         "ready": tags_visible,
         "progress_pct": int(round(100 * done / max(len(checklist), 1))),
         "anchors_placed": len(placed),
-        "anchors_required": MIN_ANCHORS_FOR_TAGS,
+        "anchors_required": anchors_required,
+        "positioning_profile": profile,
         "anchors_needed": anchors_needed,
         "nodes_total": len(nodes),
         "nodes_discovered": len(discovered),

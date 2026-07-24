@@ -160,6 +160,8 @@
         <div style="padding:16px">
           <p class="page-subtitle" style="margin-bottom:12px">Live Map Setup mode is the primary commissioning surface for anchors, zones, and floor plans.</p>
           <div id="locCoreStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px"></div>
+          <div id="locCoreProfileHelp" style="font-size:12px;color:var(--text-muted);margin-bottom:12px"></div>
+          <div id="locationCoreSettings" style="margin-bottom:14px"></div>
           <div id="locCoreSources" style="font-size:13px;color:var(--text-secondary);line-height:1.7"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
             <a class="btn btn-primary" href="/"><i class="fa-solid fa-map"></i> Live Map</a>
@@ -775,25 +777,35 @@ async function sendTestEmail() {
 async function loadLocationCore() {
   const stats = document.getElementById('locCoreStats');
   const srcEl = document.getElementById('locCoreSources');
+  const helpEl = document.getElementById('locCoreProfileHelp');
+  const settingsEl = document.getElementById('locationCoreSettings');
   if (!stats) return;
-  stats.innerHTML = '<div style="color:var(--text-muted)">Loading…</div>';
+  stats.innerHTML = '<div style="color:var(--text-muted)">Loading...</div>';
+  if (settingsEl) {
+    settingsEl.innerHTML = renderSettingRow(settings.positioning_application_profile, 'positioning_application_profile');
+  }
   try {
     const res = await API.get('/positioning/sources');
     const data = await API.json(res);
     if (!res || !res.ok) { stats.textContent = 'Failed to load'; return; }
+    const profile = data.positioning_profile || {};
     const chips = [
       ['Live snapshots', data.live_snapshots],
       ['Trackers', data.trackers],
       ['Anchors', data.anchors],
+      ['Min anchors', data.min_anchors_required],
       ['HW connected', `${data.hardware_connected}/${data.hardware_configs}`],
     ];
     stats.innerHTML = chips.map(([l,v]) =>
       `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px">
-        <div style="font-size:20px;font-weight:700;font-family:var(--font-mono)">${v ?? '—'}</div>
+        <div style="font-size:20px;font-weight:700;font-family:var(--font-mono)">${v ?? '-'}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${l}</div>
       </div>`).join('');
+    if (helpEl) {
+      helpEl.innerHTML = `<strong>Active profile:</strong> ${escapeHtml(profile.label || 'Open space')} | <strong>Mode:</strong> ${escapeHtml(profile.positioning_mode || 'free_2d')}<br>${escapeHtml(profile.description || '')}`;
+    }
     srcEl.innerHTML = (data.sources || []).map(s =>
-      `<div>${s.deprecated ? '⚠' : '✓'} <strong>${s.label}</strong>${s.primary ? ' · primary' : ''}${s.deprecated ? ' · deprecated' : ''}</div>`
+      `<div>${s.deprecated ? '[Deprecated]' : '[OK]'} <strong>${s.label}</strong>${s.primary ? ' | primary' : ''}${s.deprecated ? ' | deprecated' : ''}</div>`
     ).join('');
   } catch (e) {
     stats.textContent = 'Network error';
@@ -1045,6 +1057,7 @@ const DEFAULT_SETTINGS = {
   site_lng: { label: 'Site longitude', scope: 'BUSINESS', type: 'float', description: 'Regional map centre (decimal degrees). Default: Australia.' },
   site_zoom: { label: 'Regional map zoom', scope: 'BUSINESS', type: 'int', description: 'OpenStreetMap zoom when mine grid is not calibrated (4–6 for country)' },
   site_address: { label: 'Site Address', scope: 'BUSINESS', type: 'text', description: 'Full address of the facility' },
+  positioning_application_profile: { label: 'Positioning application profile', scope: 'BUSINESS', type: 'select', options: ['open_space', 'tunnel', 'adaptive'], description: 'Choose the business application mode: open space requires 3 anchors for free-space fixing, tunnel allows 2-anchor linear tracking, adaptive uses the best available mode.', default: 'open_space', value_type: 'select' },
   operator_name: { label: 'Operator Name', scope: 'BUSINESS', type: 'text', description: 'Name of the mining operator company' },
   emergency_contact: { label: 'Emergency Contact Name', scope: 'BUSINESS', type: 'text', description: 'Primary emergency contact person' },
   emergency_number: { label: 'Emergency Number', scope: 'BUSINESS', type: 'text', description: 'Emergency services / site safety number' },

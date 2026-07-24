@@ -65,6 +65,8 @@ def node_category(node: WifiNode, offline_seconds: float = 120.0) -> str:
         return "acknowledged"
     if meta.get("mqtt_auto_detected"):
         return "detected"
+    if not is_node_placed(node) and node.status == int(NodeStatus.CALIBRATING):
+        return "detected"
     return "manual"
 
 

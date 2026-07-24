@@ -82,6 +82,8 @@ def test_positioning_sources(client, auth_headers):
     data = res.get_json() or {}
     assert data.get("location_core") is True
     assert "sources" in data
+    assert data.get("positioning_profile", {}).get("id") in {"open_space", "tunnel", "adaptive"}
+    assert data.get("min_anchors_required") in (2, 3)
     assert any(s.get("id") == "uwb_demo" and s.get("deprecated") for s in data["sources"])
 
 

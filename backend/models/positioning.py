@@ -69,6 +69,7 @@ class PositionSnapshot(db.Model):
     last_seen_hardware = db.Column(db.DateTime, nullable=True)  # when hardware last reported
 
     def to_dict(self):
+        source = self.source or ""
         return {
             "tracker_id": self.tracker_id,
             "x": round(self.x, 3),
@@ -79,6 +80,8 @@ class PositionSnapshot(db.Model):
             "vy": round(self.vy, 3) if self.vy else None,
             "speed": round(self.speed, 3) if self.speed else None,
             "source": self.source,
+            "positioning_mode": "linear" if source == "LINEAR_TUNNEL" else "free_2d",
+            "quality_state": "approximate" if source == "LINEAR_TUNNEL" else ("exact" if source == "TRILATERATION" else "unknown"),
             "hardware_id": self.hardware_id,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "last_seen_hardware": self.last_seen_hardware.isoformat() if self.last_seen_hardware else None,
