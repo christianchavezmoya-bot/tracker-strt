@@ -147,6 +147,38 @@ def test_classify_detection_bxp_nordic_name():
     assert classify_detection("E8:A7:3F:01:53:5C", adv_name="BXP-Nordic") == "BXP_NORDIC"
 
 
+def test_run_discovery_keeps_recent_acknowledged_tracker_active_when_not_seen(db_session, monkeypatch):
+    import time
+
+    from backend.models import AssetState, Tracker, TrackerAckStatus
+    from backend.models.settings import Setting
+    from backend.services.tracker_discovery import run_discovery
+
+    tracker = Tracker(
+        hardware_id="AA:BB:CC:DD:EE:55",
+        scan_type="EDDYSTONE",
+        ack_status=int(TrackerAckStatus.ACTIVE),
+        asset_state=int(AssetState.ACTIVE),
+        last_report_time=time.time(),
+    )
+    db_session.add_all([
+        tracker,
+        Setting(key="tracker_scan_types", value='["EDDYSTONE"]'),
+        Setting(key="tracker_scan_interval_sec", value='60'),
+        Setting(key="no_signal_timeout", value='120'),
+    ])
+    db_session.commit()
+
+    monkeypatch.setattr('backend.services.tracker_discovery._aggregate_from_detection_events', lambda since: {})
+    monkeypatch.setattr('backend.services.tracker_discovery._try_bleak_scan', lambda duration=0: {})
+
+    result = run_discovery()
+    assert result['updated'] == 0
+
+    db_session.refresh(tracker)
+    assert tracker.asset_state == int(AssetState.ACTIVE)
+
+
 def test_run_discovery_prunes_unacknowledged_non_matching_but_keeps_active(db_session, monkeypatch):
     from backend.models import Tracker, TrackerAckStatus, AssetState
     from backend.models.settings import Setting
@@ -197,3 +229,4 @@ def test_run_discovery_prunes_unacknowledged_non_matching_but_keeps_active(db_se
     kept = TrackerModel.query.filter_by(hardware_id="AA:BB:CC:DD:EE:02").first()
     assert kept is not None
     assert kept.ack_status == int(TrackerAckStatus.ACTIVE)
+    assert kept.asset_state == int(AssetState.OFFLINE)

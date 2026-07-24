@@ -72,7 +72,7 @@ def ingest_detections():
 
 def _sync_scanner_fixes_to_core(fixes):
     """Upsert Tracker rows + broadcast SSE so Command Center sees scanner devices."""
-    from backend.models import Tracker
+    from backend.models import AssetState, Tracker, TrackerAckStatus
     from backend.models.tracker import TagType, DeviceCategory
     from backend.services.ingestion_loop import get_ingestion_loop
     from backend.services.history_service import get_history_service
@@ -99,6 +99,8 @@ def _sync_scanner_fixes_to_core(fixes):
         acc = float(getattr(fix, "accuracy", 0) or 0)
         tracker.pos_x, tracker.pos_y, tracker.pos_z = x, y, z
         tracker.last_report_time = datetime.utcnow().timestamp()
+        if tracker.ack_status == int(TrackerAckStatus.ACTIVE):
+            tracker.asset_state = int(AssetState.ACTIVE)
 
         if history:
             try:

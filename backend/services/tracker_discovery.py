@@ -159,6 +159,18 @@ def _delete_tracker_related_rows(tracker_id: int) -> None:
     PositionSnapshot.query.filter_by(tracker_id=tracker_id).delete(synchronize_session=False)
 
 
+def _refresh_acknowledged_tracker_states(*, cutoff: float) -> None:
+    """Drive tracker online/offline from freshness, not a single scan pass."""
+    for tracker in Tracker.query.filter(
+        Tracker.ack_status == int(TrackerAckStatus.ACTIVE)
+    ).all():
+        was_offline = tracker.asset_state == int(AssetState.OFFLINE)
+        is_fresh = bool(tracker.last_report_time and tracker.last_report_time >= cutoff)
+        tracker.asset_state = int(AssetState.ACTIVE if is_fresh else AssetState.OFFLINE)
+        if not is_fresh and not was_offline:
+            _log_presence(tracker.id, False, tracker.last_rssi)
+
+
 @dataclass
 class DiscoveredDevice:
     hardware_id: str
@@ -452,15 +464,11 @@ def run_discovery() -> dict:
             _log_presence(tracker.id, True, dev.rssi)
             created += 1
 
-    seen_ids = set()
-    seen_hardware_ids = set()
-    for mac, dev in merged.items():
-        if dev.scan_type not in allowed:
-            continue
-        seen_hardware_ids.add((mac or '').upper())
-        t = Tracker.query.filter_by(hardware_id=mac).first()
-        if t:
-            seen_ids.add(t.id)
+    seen_hardware_ids = {
+        (mac or '').upper()
+        for mac, dev in merged.items()
+        if dev.scan_type in allowed
+    }
 
     removed_unack = _prune_unacknowledged_inventory(
         allowed=allowed,
@@ -468,19 +476,7 @@ def run_discovery() -> dict:
         stale_cutoff_ts=cutoff,
     )
 
-    # Mark acknowledged active tags offline if not seen this scan
-    for t in Tracker.query.filter(
-        Tracker.ack_status == int(TrackerAckStatus.ACTIVE)
-    ).all():
-        if t.id in seen_ids:
-            t.asset_state = int(AssetState.ACTIVE)
-        elif t.last_report_time and t.last_report_time < cutoff:
-            t.asset_state = int(AssetState.OFFLINE)
-            _log_presence(t.id, False, t.last_rssi)
-        elif t.id not in seen_ids:
-            t.asset_state = int(AssetState.OFFLINE)
-            _log_presence(t.id, False, t.last_rssi)
-
+    _refresh_acknowledged_tracker_states(cutoff=cutoff)
     _prune_presence_logs()
     db.session.commit()
     return {

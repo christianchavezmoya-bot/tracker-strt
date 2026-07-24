@@ -115,13 +115,15 @@ class HistoryService:
 
         # Keep Tracker row in sync for list UIs and map bootstrap
         try:
-            from backend.models import Tracker
+            from backend.models import AssetState, Tracker, TrackerAckStatus
             tracker = self._db.query(Tracker).get(tracker_id)
             if tracker:
                 tracker.pos_x = x
                 tracker.pos_y = y
                 tracker.pos_z = z
                 tracker.last_report_time = now.timestamp()
+                if tracker.ack_status == int(TrackerAckStatus.ACTIVE):
+                    tracker.asset_state = int(AssetState.ACTIVE)
         except Exception:
             pass
 
